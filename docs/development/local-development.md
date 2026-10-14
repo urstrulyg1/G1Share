@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 22 or a supported LTS compatible with the pinned Electron toolchain.
+- Node.js 22 or a supported LTS compatible with the desktop toolchain.
 - npm.
 - Go 1.22 or newer for the health service.
 - A supported desktop development environment for Electron.
@@ -17,7 +17,7 @@ The shell creates a local device identifier and supports copy-ID and local diagn
 
 ## Signaling health service
 
-From services/signaling, run go test ./... and go run ..
+From services/signaling, run go test ./... and go run .
 
 By default the service binds to 127.0.0.1:8787. Check /healthz and /readyz with curl. Set OPENDESK_SIGNALING_ADDR to override the local listen address. Do not expose this health-only service publicly.
 
