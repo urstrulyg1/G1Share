@@ -1,0 +1,4 @@
+{
+  "compilerOptions":{"target":"ES2022","useDefineForClassFields":true,"module":"ESNext","moduleResolution":"Bundler","strict":true,"skipLibCheck":true,"esModuleInterop":true,"allowImportingTsExtensions":true,"resolveJsonModule":true,"isolatedModules":true,"noEmit":true,"jsx":"react-jsx","types":["node","vitest/globals"]},
+  "include":["electron.vite.config.ts","src/main/**/*.ts","src/preload/**/*.ts","src/renderer/src/**/*.ts","src/renderer/src/**/*.tsx","src/shared/**/*.ts"]
+}

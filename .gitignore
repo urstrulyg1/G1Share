@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
