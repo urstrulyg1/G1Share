@@ -874,6 +874,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle('window:minimize', event => {
     assertTrustedIPC(event)
     if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    if (process.platform === 'darwin' && mainWindow.isFullScreen()) {
+      mainWindow.once('leave-full-screen', () => {
+        mainWindow?.minimize()
+      })
+      mainWindow.setFullScreen(false)
+      return
+    }
     mainWindow.minimize()
   })
   ipcMain.handle('window:toggle-maximize', (event, options?: unknown) => {

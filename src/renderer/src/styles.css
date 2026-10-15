@@ -1011,6 +1011,9 @@ html:not([data-visual-validation="true"]) .benefit-card {
   padding-left: 18px;
   gap: 16px;
 }
+.window-header.header-mac .window-brand {
+  margin-right: auto;
+}
 .mac-traffic-lights {
   display: flex;
   align-items: center;
