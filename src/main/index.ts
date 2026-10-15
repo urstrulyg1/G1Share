@@ -35,7 +35,7 @@ import { readBoundedResponse } from './http-response'
 import { IncomingFileStore } from './incoming-file-store'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
-const PROJECT_URL = 'https://github.com/urstrulyg1/G1Share'
+const PROJECT_URL = 'https://github.com/urstrulyg1/G1Viewer'
 const MAX_SIGNALING_BODY = 512 * 1024
 const MAX_SIGNALING_RESPONSE = 1024 * 1024
 const MAX_CLIPBOARD_TEXT = 64 * 1024
