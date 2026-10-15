@@ -565,3 +565,10 @@ button, input, select{touch-action:manipulation}
 @media (prefers-reduced-motion: reduce) {
   .app-shell *, .app-shell *::before, .app-shell *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Reference-aligned scenic hero asset: the artwork already contains the monitor and laptop. */
+.dashboard-hero .hero-art { display: none; }
+.dashboard-hero { background-position: center 48%; }
+@media (min-width: 1321px) and (min-height: 821px) {
+  .dashboard-hero { min-height: 0; }
+}
