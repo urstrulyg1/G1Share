@@ -1,18 +1,28 @@
-/* Visual-only Electron bridge. This is never included in the packaged application. */
+/* Visual-only fixture bridge. Never included in the packaged application. */
 (() => {
-  const unavailableDevice = {
-    deviceId: null,
-    deviceName: 'Visual validation',
-    appVersion: 'Visual test',
+  document.documentElement.dataset.visualValidation = 'true'
+  const device = {
+    deviceId: '482 916 307',
+    deviceName: 'OpenDesk Desktop',
+    appVersion: '1.0.0',
     platform: 'linux',
     architecture: 'x64',
-    identityReady: false,
-    identityMessage: 'Visual validation runs without an OS credential store.',
-    secureStorageBackend: 'unavailable'
+    identityReady: true,
+    identityMessage: 'Visual fixture identity; not a real cryptographic device identity.',
+    secureStorageBackend: 'visual fixture'
+  }
+  const localSummary = {
+    id: device.deviceId,
+    name: device.deviceName,
+    publicKey: 'VISUAL_FIXTURE_ONLY',
+    platform: device.platform,
+    appVersion: device.appVersion,
+    online: true,
+    lastSeenAt: new Date().toISOString()
   }
   window.openDesk = {
-    getDeviceInfo: async () => unavailableDevice,
-    getSignalingUrl: async () => '',
+    getDeviceInfo: async () => device,
+    getSignalingUrl: async () => 'https://visual-validation.invalid',
     getCapabilities: async () => ({
       screenCapture: false,
       remoteInput: false,
@@ -25,11 +35,19 @@
     listTrustedDevices: async () => [],
     getWindowMaximized: async () => false,
     onWindowMaximizedChange: () => () => {},
-    copyText: async () => { throw new Error('Clipboard is disabled in visual-only validation.') },
-    renameLocalDevice: async () => { throw new Error('Device identity is unavailable in visual-only validation.') },
-    getSignalingUrl: async () => '',
+    copyText: async () => {},
+    renameLocalDevice: async () => { throw new Error('Device renaming is disabled in visual-only validation.') },
     setSignalingUrl: async () => { throw new Error('Signaling is disabled in visual-only validation.') },
-    signalingRequest: async () => { throw new Error('Signaling is disabled in visual-only validation.') },
+    signalingRequest: async request => {
+      if (request.path === '/api/v1/devices/register') return { ...localSummary, id: request.body?.id || localSummary.id, name: request.body?.name || localSummary.name }
+      if (request.path === '/api/v1/devices/heartbeat') return {}
+      if (request.path.startsWith('/api/v1/events')) {
+        const after = Number(new URLSearchParams(request.path.split('?')[1] || '').get('after') || 0)
+        return { cursor: after, events: [], overflow: false }
+      }
+      if (request.path === '/api/v1/ice') return { iceServers: [] }
+      throw new Error('This action is disabled in the visual-only harness.')
+    },
     decideSession: async () => { throw new Error('Sessions are disabled in visual-only validation.') },
     verifyPeerSignal: async () => false,
     trustPeer: async () => false,
