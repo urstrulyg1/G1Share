@@ -75,12 +75,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: Linux AppImage/deb
+          - platform: Linux AppImage/deb (x64)
             os: ubuntu-latest
-          - platform: Windows NSIS
+            build_cmd: npm run dist:linux
+            artifact: opendesk-linux
+            artifact_glob: |
+              release/*.AppImage
+              release/*.deb
+              release/*.blockmap
+          - platform: Windows NSIS .exe (x64, arm64)
             os: windows-latest
-          - platform: macOS DMG
+            build_cmd: npm run dist:win
+            artifact: opendesk-windows
+            artifact_glob: |
+              release/*.exe
+              release/*.blockmap
+          - platform: macOS DMG (x64, arm64)
             os: macos-latest
+            build_cmd: npm run dist:mac
+            artifact: opendesk-macos
+            artifact_glob: |
+              release/*.dmg
+              release/*.blockmap
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -90,13 +106,18 @@ jobs:
           cache: npm
       - name: Install desktop dependencies
         run: npm ci
-      - name: Build unsigned installer targets
-        run: npm run dist
+      - name: Build unsigned installer targets (${{ matrix.platform }})
+        run: ${{ matrix.build_cmd }}
+      - name: Verify generated package artifacts
+        shell: bash
+        run: |
+          echo "=== Generated distribution packages in release/ ==="
+          ls -la release/
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: opendesk-${{ matrix.os }}
-          path: release/*
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_glob }}
           if-no-files-found: error
           retention-days: 14
 
