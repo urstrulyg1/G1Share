@@ -153,7 +153,7 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Home' && <>
-        <section className="dashboard-hero">
+        <section className="dashboard-hero clickable-tile" role="button" tabIndex={0} aria-label="Focus the remote device ID field" onClick={() => document.getElementById('remote-id')?.focus()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('remote-id')?.focus() } }}>
           <div className="hero-copy">
             <div className="eyebrow"><Sparkles size={13}/> FREE · PRIVATE · ACCOUNT-FREE</div>
             <h1>Access your devices.<br/>From anywhere.</h1>
@@ -165,16 +165,16 @@ export default function App() {
 
         <section className="dashboard-main-grid">
           <div className="dashboard-primary">
-            <section className="dashboard-panel access-panel">
+            <section className="dashboard-panel access-panel clickable-tile" role="button" tabIndex={0} aria-label="Copy this device ID" onClick={() => void copyId()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void copyId() } }}>
               <div className="dashboard-panel-title"><div className="dashboard-icon"><Radio size={20}/></div><div><h2>Allow remote access</h2><p>Share this device ID with someone you trust.</p></div></div>
-              <div className="device-id-display"><code>{openDesk.device?.deviceId || 'Loading device identity…'}</code><button className="icon-button" aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device}><Copy size={17}/></button></div>
+              <div className="device-id-display"><code>{openDesk.device?.deviceId || 'Loading device identity…'}</code><button className="icon-button" aria-label="Copy device ID" onClick={event => { event.stopPropagation(); void copyId() }} disabled={!openDesk.device}><Copy size={17}/></button></div>
               <div className="access-state"><i className={openDesk.device?.identityReady ? 'state-dot-ready' : 'state-dot-waiting'}/><span>{openDesk.device?.identityReady ? 'Device identity ready' : openDesk.device?.identityMessage || 'Preparing secure device identity'}</span><span className="access-platform">{platform}</span></div>
               <p className="dashboard-note"><LockKeyhole size={13}/> Device ID is not a password. Incoming sessions require local approval.</p>
             </section>
 
-            <section className="dashboard-panel connect-panel">
+            <section className="dashboard-panel connect-panel clickable-tile" role="button" tabIndex={0} aria-label="Focus the device connection field" onClick={() => document.getElementById('remote-id')?.focus()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); document.getElementById('remote-id')?.focus() } }}>
               <div className="dashboard-panel-title"><div className="dashboard-icon"><Signal size={20}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown on the remote computer.</p></div></div>
-              <form onSubmit={event => { event.preventDefault(); void connect() }}>
+              <form onClick={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); void connect() }}>
                 <label className="sr-only" htmlFor="remote-id">Remote device ID</label>
                 <div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Enter remote device ID"/></div>
                 <button className="primary dashboard-connect-button" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={16}/></button>
@@ -184,24 +184,24 @@ export default function App() {
           </div>
 
           <aside className="dashboard-side">
-            <section className="dashboard-panel recent-devices-panel">
-              <div className="dashboard-section-heading"><h2>Known devices</h2><button className="text-action" onClick={() => setPage('Devices')}>View all <ArrowRight size={13}/></button></div>
-              {openDesk.knownDevices.length ? <div className="dashboard-device-list">{openDesk.knownDevices.slice(0,5).map(device => <article className="dashboard-device-row" key={device.id}><div className="dashboard-device-icon">{device.platform.toLowerCase().includes('mac') || device.platform === 'darwin' ? <Laptop size={18}/> : <Monitor size={18}/>}</div><div className="dashboard-device-copy"><strong>{device.name}</strong><small>{device.platform} · {device.online ? 'Online at last lookup' : 'Last status may be stale'}</small></div><button className="device-row-connect" aria-label={'Request access to ' + device.name} onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}><ArrowRight size={15}/></button></article>)}</div> : <EmptyInline icon={Monitor} title="No known devices yet" description="Enter a device ID to request access. Devices will appear here when actually discovered or saved."/>}
+            <section className="dashboard-panel recent-devices-panel clickable-tile" role="button" tabIndex={0} aria-label="Open known devices" onClick={() => setPage('Devices')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Devices') } }}>
+              <div className="dashboard-section-heading"><h2>Known devices</h2><button className="text-action" onClick={event => { event.stopPropagation(); setPage('Devices') }}>View all <ArrowRight size={13}/></button></div>
+              {openDesk.knownDevices.length ? <div className="dashboard-device-list">{openDesk.knownDevices.slice(0,5).map(device => <article className="dashboard-device-row clickable-row" role="button" tabIndex={0} aria-label={'Request access to ' + device.name} key={device.id} onClick={event => { event.stopPropagation(); void connect(device.id) }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); void connect(device.id) } }}><div className="dashboard-device-icon">{device.platform.toLowerCase().includes('mac') || device.platform === 'darwin' ? <Laptop size={18}/> : <Monitor size={18}/>}</div><div className="dashboard-device-copy"><strong>{device.name}</strong><small>{device.platform} · {device.online ? 'Online at last lookup' : 'Last status may be stale'}</small></div><button className="device-row-connect" aria-label={'Request access to ' + device.name} onClick={event => { event.stopPropagation(); void connect(device.id) }} disabled={busy || openDesk.serviceState !== 'online'}><ArrowRight size={15}/></button></article>)}</div> : <EmptyInline icon={Monitor} title="No known devices yet" description="Enter a device ID to request access. Devices will appear here when actually discovered or saved."/>}
             </section>
-            <section className="dashboard-panel network-panel">
+            <section className="dashboard-panel network-panel clickable-tile" role="button" tabIndex={0} aria-label="Open connection diagnostics" onClick={() => setPage('Diagnostics')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Diagnostics') } }}>
               <div className="dashboard-section-heading"><h2>Connection status</h2><span className={'connection-state-dot ' + (openDesk.serviceState === 'online' ? 'is-online' : '')}/></div>
               <div className="network-status-copy"><strong>{statusLabel}</strong><p>{openDesk.serviceError || (openDesk.serviceState === 'online' ? 'Signaling service is reachable.' : 'Check your signaling endpoint and network connection in Settings.')}</p></div>
               <div className="network-endpoint"><span>Signaling endpoint</span><code>{openDesk.signalingUrl || 'Not configured'}</code></div>
-              <button className="subtle network-settings-button" onClick={() => setPage('Settings')}><Settings size={13}/> Connection settings</button>
+              <button className="subtle network-settings-button" onClick={event => { event.stopPropagation(); setPage('Settings') }}><Settings size={13}/> Connection settings</button>
             </section>
           </aside>
         </section>
 
         <section className="dashboard-benefits">
-          <article className="benefit-card"><div className="benefit-icon benefit-speed"><Activity size={22}/></div><div><strong>Built for responsiveness</strong><p>WebRTC media transport with connection-quality diagnostics.</p></div></article>
-          <article className="benefit-card"><div className="benefit-icon benefit-secure"><ShieldCheck size={22}/></div><div><strong>Consent comes first</strong><p>Remote access requires approval and scoped session permissions.</p></div></article>
-          <article className="benefit-card"><div className="benefit-icon benefit-platform"><Monitor size={22}/></div><div><strong>Cross-platform foundation</strong><p>Platform capabilities are reported honestly by each installation.</p></div></article>
-          <article className="benefit-card"><div className="benefit-icon benefit-free"><LockKeyhole size={22}/></div><div><strong>Free and account-free</strong><p>No user login required. Configure your own signaling infrastructure.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open performance diagnostics" onClick={() => setPage('Diagnostics')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Diagnostics') } }}><div className="benefit-icon benefit-speed"><Activity size={22}/></div><div><strong>Built for responsiveness</strong><p>WebRTC media transport with connection-quality diagnostics.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open security settings" onClick={() => setPage('Settings')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Settings') } }}><div className="benefit-icon benefit-secure"><ShieldCheck size={22}/></div><div><strong>Consent comes first</strong><p>Remote access requires approval and scoped session permissions.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open platform diagnostics" onClick={() => setPage('Diagnostics')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Diagnostics') } }}><div className="benefit-icon benefit-platform"><Monitor size={22}/></div><div><strong>Cross-platform foundation</strong><p>Platform capabilities are reported honestly by each installation.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open connection settings" onClick={() => setPage('Settings')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Settings') } }}><div className="benefit-icon benefit-free"><LockKeyhole size={22}/></div><div><strong>Free and account-free</strong><p>No user login required. Configure your own signaling infrastructure.</p></div></article>
         </section>
       </>}
       {!openDesk.activeSession && page === 'Devices' && <>
