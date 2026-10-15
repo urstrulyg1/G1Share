@@ -38,8 +38,11 @@ function initialState(overrides: Record<string, unknown> = {}) {
     signalingUrl: '', signalingClient: null,
     requestSession: vi.fn(), approveSession: vi.fn(), rejectSession: vi.fn(), finishSession: vi.fn(),
     refreshTrustedDevices: vi.fn().mockResolvedValue(undefined), refreshKnownDevices: vi.fn().mockResolvedValue(undefined),
-    refreshCapabilities: vi.fn().mockResolvedValue(undefined), forgetTrustedDevice: vi.fn(), renameLocalDevice: vi.fn(),
-    resetDeviceIdentity: vi.fn(), setServerURL: vi.fn(), updateConnectionState: vi.fn(),
+    refreshCapabilities: vi.fn().mockResolvedValue(undefined), forgetTrustedDevice: vi.fn().mockResolvedValue(true),
+    renameLocalDevice: vi.fn().mockResolvedValue({ name: 'Renamed' }),
+    renameRecentDevice: vi.fn().mockResolvedValue(undefined), removeRecentDevice: vi.fn().mockResolvedValue(undefined),
+    resetDeviceIdentity: vi.fn().mockResolvedValue({ ...local, deviceId: '99998888-77776666-55554444-33332222', identityReady: true }),
+    setServerURL: vi.fn().mockImplementation(async (url: string) => url), updateConnectionState: vi.fn(),
     ...overrides
   }
   return runtime
@@ -185,6 +188,202 @@ describe('account-free application UI', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Restore window' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Close window' }))
     await waitFor(() => expect(bridge.closeWindow).toHaveBeenCalledOnce())
+  })
+
+  it('navigates to every view via sidebar, header controls, and in-view links', async () => {
+    initialState()
+    render(<App />)
+
+    // Header settings gear
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }))
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
+
+    // Header brand logo returns to Home
+    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    expect(screen.getByRole('heading', { name: 'Access Your Devices Anywhere' })).toBeTruthy()
+
+    // Header status pill opens Diagnostics
+    fireEvent.click(screen.getByRole('button', { name: /System status/ }))
+    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
+
+    // Return to Home
+    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+
+    // Sidebar navigation
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect to a Device' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Devices' }))
+    expect(screen.getByRole('heading', { name: 'Devices' })).toBeTruthy()
+
+    // Heading action button to Recent sessions
+    fireEvent.click(screen.getByRole('button', { name: /Recent sessions/ }))
+    expect(screen.getByRole('heading', { name: 'Recent sessions' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Active Session' }))
+    expect(screen.getByRole('heading', { name: 'No active session' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'File Transfer' }))
+    expect(screen.getByRole('heading', { name: 'File Transfer' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Go to connection/ }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect to a Device' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clipboard' }))
+    expect(screen.getByRole('heading', { name: 'Clipboard' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Go to connection/ }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect to a Device' })).toBeTruthy()
+  })
+
+  it('activates all Home dashboard benefit cards, network details link, and See All action', async () => {
+    initialState()
+    render(<App />)
+
+    // Ultra Fast -> Diagnostics
+    fireEvent.click(screen.getByRole('button', { name: 'Open performance details' }))
+    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+
+    // Secure -> Settings
+    fireEvent.click(screen.getByRole('button', { name: 'Open security information' }))
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+
+    // Cross Platform -> Diagnostics
+    fireEvent.click(screen.getByRole('button', { name: 'Open supported platform information' }))
+    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+
+    // Completely Free -> External project link
+    fireEvent.click(screen.getByRole('button', { name: 'Open the OpenDesk source project' }))
+    await waitFor(() => expect(bridge.openProjectPage).toHaveBeenCalledOnce())
+
+    // Network details link -> Diagnostics
+    fireEvent.click(screen.getByRole('button', { name: /Network details/ }))
+    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+
+    // See All -> Devices
+    fireEvent.click(screen.getByRole('button', { name: /See All/ }))
+    expect(screen.getByRole('heading', { name: 'Devices' })).toBeTruthy()
+  })
+
+  it('supports context menu actions on recent devices: view details, copy ID, rename, and remove', async () => {
+    initialState({ knownDevices: [peer], serviceState: 'online', serviceError: '' })
+    render(<App />)
+
+    // Three-dot menu: Copy Device ID
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${peer.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Device ID' }))
+    await waitFor(() => expect(bridge.copyText).toHaveBeenCalledWith(peer.id))
+    expect(screen.getByText(/Device ID copied/)).toBeTruthy()
+
+    // Three-dot menu: View details modal
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${peer.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
+    expect(screen.getByRole('dialog', { name: peer.name })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: peer.name })).toBeNull())
+
+    // Three-dot menu: Rename device
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${peer.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }))
+    expect(screen.getByRole('heading', { name: 'Rename Device' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('New device name'), { target: { value: 'Studio Rig' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(runtime.renameRecentDevice).toHaveBeenCalledWith(peer.id, 'Studio Rig'))
+    expect(screen.getByText(/Device renamed to “Studio Rig”/)).toBeTruthy()
+
+    // Three-dot menu: Remove device (with confirmation dialog)
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${peer.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    expect(screen.getByRole('heading', { name: 'Remove Recent Device' })).toBeTruthy()
+    // Test cancel
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Remove Recent Device' })).toBeNull())
+    expect(runtime.removeRecentDevice).not.toHaveBeenCalled()
+    // Test confirm remove
+    fireEvent.click(screen.getByRole('button', { name: `More actions for ${peer.name}` }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove device' }))
+    await waitFor(() => expect(runtime.removeRecentDevice).toHaveBeenCalledWith(peer.id))
+    expect(screen.getByText(/Removed “Remote workstation” from recent devices/)).toBeTruthy()
+  })
+
+  it('supports trusted device removal confirmation and success notice', async () => {
+    initialState({
+      trustedDevices: [{ id: peer.id, name: peer.name, fingerprint: 'SHA256:mockfingerprint', trustedAt: new Date().toISOString() }],
+      serviceState: 'online', serviceError: ''
+    })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Devices' }))
+    expect(screen.getByText(peer.name)).toBeTruthy()
+
+    // Click Forget -> shows confirmation modal
+    fireEvent.click(screen.getByRole('button', { name: 'Forget' }))
+    expect(screen.getByRole('heading', { name: 'Forget Trusted Fingerprint' })).toBeTruthy()
+
+    // Cancel preserves trust
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Forget Trusted Fingerprint' })).toBeNull())
+    expect(runtime.forgetTrustedDevice).not.toHaveBeenCalled()
+
+    // Confirm forget removes trust
+    fireEvent.click(screen.getByRole('button', { name: 'Forget' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Forget' }))
+    await waitFor(() => expect(runtime.forgetTrustedDevice).toHaveBeenCalledWith(peer.id))
+    expect(screen.getByText(/Removed trusted fingerprint for “Remote workstation”/)).toBeTruthy()
+  })
+
+  it('supports Settings theme changes, signaling server update, device name update, and identity revocation', async () => {
+    initialState({ serviceState: 'online', serviceError: '' })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    // Theme toggle
+    fireEvent.click(screen.getByRole('button', { name: 'Light' }))
+    expect(localStorage.getItem('opendesk.theme')).toBe('light')
+    fireEvent.click(screen.getByRole('button', { name: 'Dark' }))
+    expect(localStorage.getItem('opendesk.theme')).toBe('dark')
+
+    // Signaling server form
+    fireEvent.change(screen.getByLabelText('Signaling server origin'), { target: { value: 'https://new.signaling.test' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save & reconnect' }))
+    await waitFor(() => expect(runtime.setServerURL).toHaveBeenCalledWith('https://new.signaling.test'))
+    expect(screen.getByText(/Signaling server saved/)).toBeTruthy()
+
+    // Device name form
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Primary Machine' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(runtime.renameLocalDevice).toHaveBeenCalledWith('Primary Machine'))
+    expect(screen.getByText(/Device name updated on the signaling service/)).toBeTruthy()
+
+    // Revoke identity
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke & reset' }))
+    await waitFor(() => expect(runtime.resetDeviceIdentity).toHaveBeenCalledOnce())
+    expect(screen.getByText(/Identity reset completed/)).toBeTruthy()
+  })
+
+  it('supports Diagnostics capability refresh, copying sanitized diagnostics, and notice dismissal', async () => {
+    initialState({ serviceState: 'online', serviceError: '' })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: /System status/ }))
+    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
+
+    // Refresh capabilities
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh capabilities' }))
+    await waitFor(() => expect(runtime.refreshCapabilities).toHaveBeenCalledOnce())
+
+    // Copy sanitized diagnostics
+    fireEvent.click(screen.getByRole('button', { name: 'Copy sanitized diagnostics' }))
+    await waitFor(() => expect(bridge.copyText).toHaveBeenCalledOnce())
+    expect(screen.getByText(/Sanitized diagnostic summary copied/)).toBeTruthy()
+
+    // Dismiss notice
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(screen.queryByText(/Sanitized diagnostic summary copied/)).toBeNull())
   })
 })
 

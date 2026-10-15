@@ -393,6 +393,24 @@ export function useOpenDesk() {
     setState(current => ({ ...current, localDevice, device: current.device ? { ...current.device, deviceName: localDevice.name } : null }))
   }, [])
 
+  const renameRecentDevice = useCallback(async (id: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('Enter a device name with at least one visible character.')
+    setState(current => ({
+      ...current,
+      knownDevices: current.knownDevices.map(d => d.id === id ? { ...d, name: trimmed } : d),
+      recentSessions: current.recentSessions.map(s => s.peerId === id ? { ...s, peerName: trimmed } : s)
+    }))
+  }, [])
+
+  const removeRecentDevice = useCallback(async (id: string) => {
+    setState(current => ({
+      ...current,
+      knownDevices: current.knownDevices.filter(d => d.id !== id),
+      recentSessions: current.recentSessions.filter(s => s.peerId !== id)
+    }))
+  }, [])
+
   return {
     ...state,
     signalingClient: clientRef.current,
@@ -407,6 +425,8 @@ export function useOpenDesk() {
     refreshKnownDevices,
     forgetTrustedDevice,
     renameLocalDevice,
+    renameRecentDevice,
+    removeRecentDevice,
     updateConnectionState
   }
 }

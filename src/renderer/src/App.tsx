@@ -253,9 +253,16 @@ export default function App() {
         </div>
 
         <div className="window-actions">
-          <span className={`window-status status-${openDesk.serviceState}`} role="status" aria-live="polite" title={openDesk.serviceError || statusLabel}>
+          <button
+            type="button"
+            className={`window-status status-${openDesk.serviceState}`}
+            disabled={!!openDesk.activeSession}
+            onClick={() => setPage('Diagnostics')}
+            aria-label={`System status: ${headerStatus}. Click to open Diagnostics.`}
+            title={openDesk.serviceError ? `${openDesk.serviceError} — Click for diagnostics` : `${statusLabel} — Click for diagnostics`}
+          >
             <i aria-hidden="true"/>{headerStatus}
-          </span>
+          </button>
           <button className="window-settings" aria-label="Open Settings" title="Settings" onClick={() => setPage('Settings')}><Settings size={17}/></button>
 
           {!isMac && (
@@ -317,6 +324,8 @@ export default function App() {
             onToggleIncoming={setIncomingRequestsEnabled}
             onCopyId={copyId}
             onRename={openDesk.renameLocalDevice}
+            onRenameRecent={openDesk.renameRecentDevice}
+            onRemoveRecent={openDesk.removeRecentDevice}
             onNavigate={setPage}
             onOpenProject={() => void openProjectPage()}
             onError={reportError}
@@ -335,7 +344,7 @@ export default function App() {
           const presence = devicePresence(device, openDesk.serviceState === 'online', clock)
           return <article className="device-card" key={device.id}><div className="device-icon"><Monitor size={22}/></div><div className="device-main"><strong>{device.name}<em>{device.platform}</em></strong><small>{device.appVersion} · {device.checkedAt ? `Checked ${new Date(device.checkedAt).toLocaleString()}` : 'Lookup failed — retry to check presence'}</small><div className="id-row"><code>{device.id}</code></div></div><div className="device-actions"><span className={presence.fresh && device.online ? 'online-label' : 'offline-label'}><i/>{presence.label}</span><button className="subtle" onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}>Request access <ArrowRight size={13}/></button></div></article>
         })}</div> : <EmptyInline icon={HardDrive} title={query ? 'No matching devices' : 'No looked-up devices yet'} description="Enter a device ID on Home to look it up. There is no simulated device discovery; trusted fingerprints are listed below."/>}
-        <TrustedDevices devices={openDesk.trustedDevices} loadingError={openDesk.trustedDevicesError} forget={openDesk.forgetTrustedDevice} refresh={() => void refreshTrustedDevices()} refreshing={refreshingTrustedDevices} error={reportError}/>
+        <TrustedDevices devices={openDesk.trustedDevices} loadingError={openDesk.trustedDevicesError} forget={openDesk.forgetTrustedDevice} refresh={() => void refreshTrustedDevices()} refreshing={refreshingTrustedDevices} error={reportError} success={message => setNotice({ kind: 'success', message })}/>
       </>}
 
       {!openDesk.activeSession && page === 'Recent sessions' && <>
@@ -419,8 +428,36 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof Clock3; t
   return <div className="empty-state"><div><Icon size={27}/></div><h2>{title}</h2><p>{description}</p></div>
 }
 
-function TrustedDevices({ devices, loadingError, forget, refresh, refreshing, error }: { devices: TrustedDevice[]; loadingError: string; forget: (id: string) => Promise<boolean>; refresh: () => void; refreshing: boolean; error: (message: string) => void }) {
-  return <section className="section trusted-section"><div className="section-head"><div><h2>Trusted device fingerprints</h2><p>Public-key pins are stored locally. A changed key blocks connection until you remove the old pin and verify the new fingerprint.</p></div><button className="subtle" onClick={refresh} disabled={refreshing}><RefreshCw size={13}/>{refreshing ? 'Refreshing…' : 'Refresh'}</button></div>{loadingError ? <div className="inline-warning"><ShieldAlert size={15}/><span>Unable to read local trust records: {loadingError}</span></div> : devices.length === 0 ? <div className="empty-inline compact"><ShieldCheck size={18}/><span>No device fingerprints are trusted yet. The first connection flow asks you to verify and trust one.</span></div> : <div className="trusted-list">{devices.map(device => <div className="trusted-row" key={device.id}><div className="trusted-icon"><LockKeyhole size={15}/></div><div><strong>{device.name}</strong><small>{device.id} · Trusted {new Date(device.trustedAt).toLocaleString()}</small><code>{device.fingerprint}</code></div><button className="subtle" onClick={() => void forget(device.id).catch(reason => error(reason instanceof Error ? reason.message : 'Could not remove device trust.'))}><Trash2 size={13}/> Forget</button></div>)}</div>}</section>
+function TrustedDevices({ devices, loadingError, forget, refresh, refreshing, error, success }: { devices: TrustedDevice[]; loadingError: string; forget: (id: string) => Promise<boolean>; refresh: () => void; refreshing: boolean; error: (message: string) => void; success: (message: string) => void }) {
+  const [confirmForget, setConfirmForget] = useState<TrustedDevice | null>(null)
+  return <section className="section trusted-section"><div className="section-head"><div><h2>Trusted device fingerprints</h2><p>Public-key pins are stored locally. A changed key blocks connection until you remove the old pin and verify the new fingerprint.</p></div><button className="subtle" onClick={refresh} disabled={refreshing}><RefreshCw size={13}/>{refreshing ? 'Refreshing…' : 'Refresh'}</button></div>{loadingError ? <div className="inline-warning"><ShieldAlert size={15}/><span>Unable to read local trust records: {loadingError}</span></div> : devices.length === 0 ? <div className="empty-inline compact"><ShieldCheck size={18}/><span>No device fingerprints are trusted yet. The first connection flow asks you to verify and trust one.</span></div> : <div className="trusted-list">{devices.map(device => <div className="trusted-row" key={device.id}><div className="trusted-icon"><LockKeyhole size={15}/></div><div><strong>{device.name}</strong><small>{device.id} · Trusted {new Date(device.trustedAt).toLocaleString()}</small><code>{device.fingerprint}</code></div><button className="subtle" onClick={() => setConfirmForget(device)}><Trash2 size={13}/> Forget</button></div>)}</div>}
+  {confirmForget && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setConfirmForget(null) }}>
+    <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="forget-trusted-title">
+      <div className="dashboard-modal-heading">
+        <div className="dashboard-icon"><ShieldAlert size={20}/></div>
+        <div><h2 id="forget-trusted-title">Forget Trusted Fingerprint</h2><p>Security confirmation</p></div>
+        <button className="icon-button" aria-label="Close dialog" onClick={() => setConfirmForget(null)}><X size={16}/></button>
+      </div>
+      <div className="dashboard-modal-content">
+        <p>Remove trusted public key fingerprint for <strong>{confirmForget.name}</strong> (<code>{confirmForget.id}</code>)?</p>
+        <small>Future connections to this device will require you to re-verify its cryptographic fingerprint.</small>
+      </div>
+      <div className="dashboard-modal-actions">
+        <button className="subtle" onClick={() => setConfirmForget(null)}>Cancel</button>
+        <button className="primary danger-btn" onClick={async () => {
+          const target = confirmForget
+          setConfirmForget(null)
+          try {
+            await forget(target.id)
+            success(`Removed trusted fingerprint for “${target.name}”.`)
+          } catch (reason) {
+            error(reason instanceof Error ? reason.message : 'Could not remove device trust.')
+          }
+        }}>Confirm Forget</button>
+      </div>
+    </section>
+  </div>}
+  </section>
 }
 
 function RecentSessionRow({ session }: { session: RecentSession }) {

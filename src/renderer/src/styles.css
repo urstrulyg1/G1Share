@@ -206,9 +206,16 @@ button, input, select{touch-action:manipulation}
   border-radius: 20px;
   background: #0b1724;
   color: #c2cede;
+  font-family: inherit;
   font-size: 10px;
   white-space: nowrap;
+  cursor: pointer;
 }
+.window-status:hover:not(:disabled) {
+  border-color: #3e5e86;
+  color: #f0f4fa;
+}
+.window-status:disabled { cursor: default; }
 .window-status i { width: 7px; height: 7px; border-radius: 50%; background: #e0ad58; box-shadow: 0 0 8px rgba(224, 173, 88, .22); }
 .window-status.status-online i { background: #35ef63; box-shadow: 0 0 9px rgba(53, 239, 99, .48); }
 .window-settings,.window-control {
@@ -409,6 +416,8 @@ button, input, select{touch-action:manipulation}
 .device-context-menu button { width: 100%; min-height: 30px; padding: 0 8px; border: 0; border-radius: 5px; color: #d6e0ec; background: transparent; text-align: left; font-size: 9px; }
 .device-context-menu button:hover:not(:disabled) { color: #fff; background: #243a52; }
 .device-context-menu button:disabled { opacity: .48; }
+.device-context-menu button.danger-item { color: #f87171; }
+.device-context-menu button.danger-item:hover:not(:disabled) { color: #fff; background: #dc2626; }
 .device-menu-message { color: #9eafc4; font-size: 8px; }
 .network-panel { min-height: 0; padding: 13px 14px 10px; }
 .network-heading-row { display: flex; align-items: center; gap: 8px; }
@@ -468,6 +477,13 @@ button, input, select{touch-action:manipulation}
 .modal-device-status { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: #a9bbce; font-size: 9px; }
 .dashboard-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .dashboard-modal-actions .primary,.dashboard-modal-actions .subtle { min-height: 34px; }
+.dashboard-modal-actions .subtle.danger-text { color: #f87171; }
+.dashboard-modal-actions .subtle.danger-text:hover { color: #fca5a5; background: rgba(239, 68, 68, .12); }
+.primary.danger-btn { background: #dc2626; border-color: #ef4444; color: #fff; }
+.primary.danger-btn:hover { background: #b91c1c; }
+.modal-input { width: 100%; box-sizing: border-box; padding: 8px 12px; background: #09131d; border: 1px solid #2f4358; border-radius: 8px; color: #eef3f9; font-size: 11px; font-family: inherit; outline: none; }
+.modal-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
+.theme-light .modal-input { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
 .page-heading-actions { display: flex; align-items: center; gap: 8px; }
 .connect-panel-standalone { width: min(100%, 620px); height: auto; min-height: 250px; }
 .connect-panel-standalone .dashboard-panel-title h2 { font-size: 14px; }

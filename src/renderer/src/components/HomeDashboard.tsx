@@ -44,6 +44,8 @@ export interface HomeDashboardProps extends ConnectionCardProps {
   onNavigate: (destination: DashboardDestination) => void
   onOpenProject: () => void
   now: number
+  onRenameRecent?: (id: string, name: string) => Promise<void> | void
+  onRemoveRecent?: (id: string) => Promise<void> | void
 }
 
 interface RecentDeviceRowData {
@@ -118,28 +120,42 @@ export function HomeDashboard(props: HomeDashboardProps) {
   const {
     device, localDevice, knownDevices, recentSessions, serviceState, serviceError,
     incomingRequestsEnabled, onToggleIncoming, onCopyId, onRename, onNavigate,
-    onOpenProject, now, ...connectionProps
+    onOpenProject, now, onRenameRecent, onRemoveRecent, ...connectionProps
   } = props
   const [aliasEditing, setAliasEditing] = useState(false)
   const [aliasDraft, setAliasDraft] = useState(localDevice?.name || device?.deviceName || '')
   const [aliasSaving, setAliasSaving] = useState(false)
   const [detailsDevice, setDetailsDevice] = useState<RecentDeviceRowData | null>(null)
   const [menuDevice, setMenuDevice] = useState<string | null>(null)
+  const [renamingDevice, setRenamingDevice] = useState<RecentDeviceRowData | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [confirmingRemoveDevice, setConfirmingRemoveDevice] = useState<RecentDeviceRowData | null>(null)
 
   useEffect(() => {
     if (!aliasEditing) setAliasDraft(localDevice?.name || device?.deviceName || '')
   }, [aliasEditing, device?.deviceName, localDevice?.name])
   useEffect(() => {
-    if (!detailsDevice && !menuDevice) return
+    if (!detailsDevice && !menuDevice && !renamingDevice && !confirmingRemoveDevice) return
     const closeOverlaysOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setDetailsDevice(null)
         setMenuDevice(null)
+        setRenamingDevice(null)
+        setConfirmingRemoveDevice(null)
+      }
+    }
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuDevice && !(event.target as HTMLElement)?.closest('.device-menu-anchor')) {
+        setMenuDevice(null)
       }
     }
     window.addEventListener('keydown', closeOverlaysOnEscape)
-    return () => window.removeEventListener('keydown', closeOverlaysOnEscape)
-  }, [detailsDevice, menuDevice])
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      window.removeEventListener('keydown', closeOverlaysOnEscape)
+      window.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [detailsDevice, menuDevice, renamingDevice, confirmingRemoveDevice])
 
   const deviceId = device?.identityReady && device.deviceId ? device.deviceId : null
   const recentRows = useMemo(() => getRecentDeviceRows(knownDevices, recentSessions, serviceState === 'online', now), [knownDevices, recentSessions, serviceState, now])
@@ -246,6 +262,8 @@ export function HomeDashboard(props: HomeDashboardProps) {
                     <button role="menuitem" onClick={() => { setMenuDevice(null); setDetailsDevice(row) }}>View details</button>
                     <button role="menuitem" disabled={!row.id || props.busy} onClick={() => { setMenuDevice(null); if (row.id) void props.onConnect(row.id) }}>Connect</button>
                     {row.id && <button role="menuitem" onClick={() => { setMenuDevice(null); void copyRealDeviceId(row.id!) }}>Copy Device ID</button>}
+                    {row.id && onRenameRecent && <button role="menuitem" onClick={() => { setMenuDevice(null); setRenamingDevice(row); setRenameDraft(row.name) }}>Rename</button>}
+                    {row.id && onRemoveRecent && <button role="menuitem" className="danger-item" onClick={() => { setMenuDevice(null); setConfirmingRemoveDevice(row) }}>Remove</button>}
                   </div>}
                 </div>
               </div>)}
@@ -289,7 +307,72 @@ export function HomeDashboard(props: HomeDashboardProps) {
           {detailsDevice.id && <div className="modal-device-id"><small>Device ID</small><code>{detailsDevice.id}</code><button className="subtle" onClick={() => void copyRealDeviceId(detailsDevice.id!)}><Copy size={13}/> Copy ID</button></div>}
           <div className="modal-device-status"><span className={`device-status-indicator${detailsDevice.online ? ' is-online' : ''}`}/>{detailsDevice.presenceLabel}</div>
         </div>
-        <div className="dashboard-modal-actions"><button className="subtle" onClick={() => setDetailsDevice(null)}>Close</button>{detailsDevice.id ? <button className="primary" disabled={props.busy} onClick={() => { const id = detailsDevice.id; setDetailsDevice(null); void props.onConnect(id) }}>Connect <ChevronRight size={15}/></button> : null}</div>
+        <div className="dashboard-modal-actions">
+          {detailsDevice.id && onRenameRecent && <button className="subtle" onClick={() => { const target = detailsDevice; setDetailsDevice(null); setRenamingDevice(target); setRenameDraft(target.name) }}>Rename</button>}
+          {detailsDevice.id && onRemoveRecent && <button className="subtle danger-text" onClick={() => { const target = detailsDevice; setDetailsDevice(null); setConfirmingRemoveDevice(target) }}>Remove</button>}
+          <button className="subtle" onClick={() => setDetailsDevice(null)}>Close</button>
+          {detailsDevice.id ? <button className="primary" disabled={props.busy} onClick={() => { const id = detailsDevice.id; setDetailsDevice(null); void props.onConnect(id) }}>Connect <ChevronRight size={15}/></button> : null}
+        </div>
+      </section>
+    </div>}
+
+    {renamingDevice && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setRenamingDevice(null) }}>
+      <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="rename-device-title">
+        <div className="dashboard-modal-heading">
+          <div className="dashboard-icon"><Pencil size={20}/></div>
+          <div><h2 id="rename-device-title">Rename Device</h2><p>Set a custom local display name for this device.</p></div>
+          <button className="icon-button" aria-label="Close rename dialog" onClick={() => setRenamingDevice(null)}><X size={16}/></button>
+        </div>
+        <form onSubmit={async event => {
+          event.preventDefault()
+          const trimmed = renameDraft.trim()
+          if (!trimmed) {
+            props.onError('Enter a device name with at least one visible character.')
+            return
+          }
+          try {
+            await onRenameRecent?.(renamingDevice.id!, trimmed)
+            setRenamingDevice(null)
+            props.onSuccess?.(`Device renamed to “${trimmed}”.`)
+          } catch (err) {
+            props.onError(err instanceof Error ? err.message : 'Could not rename device.')
+          }
+        }}>
+          <div className="dashboard-modal-content">
+            <label htmlFor="rename-device-input" className="sr-only">New device name</label>
+            <input id="rename-device-input" autoFocus value={renameDraft} maxLength={80} onChange={event => setRenameDraft(event.target.value)} placeholder="Enter device name" className="modal-input"/>
+          </div>
+          <div className="dashboard-modal-actions">
+            <button type="button" className="subtle" onClick={() => setRenamingDevice(null)}>Cancel</button>
+            <button type="submit" className="primary" disabled={!renameDraft.trim()}>Save name</button>
+          </div>
+        </form>
+      </section>
+    </div>}
+
+    {confirmingRemoveDevice && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setConfirmingRemoveDevice(null) }}>
+      <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="remove-device-title">
+        <div className="dashboard-modal-heading">
+          <div className="dashboard-icon"><Laptop size={20}/></div>
+          <div><h2 id="remove-device-title">Remove Recent Device</h2><p>Confirm removing this device from your recent list.</p></div>
+          <button className="icon-button" aria-label="Close remove dialog" onClick={() => setConfirmingRemoveDevice(null)}><X size={16}/></button>
+        </div>
+        <div className="dashboard-modal-content">
+          <p>Are you sure you want to remove <strong>{confirmingRemoveDevice.name}</strong> from your recent devices? This will not remove any trusted cryptographic fingerprints.</p>
+        </div>
+        <div className="dashboard-modal-actions">
+          <button className="subtle" onClick={() => setConfirmingRemoveDevice(null)}>Cancel</button>
+          <button className="primary danger-btn" onClick={async () => {
+            const target = confirmingRemoveDevice
+            try {
+              await onRemoveRecent?.(target.id!)
+              setConfirmingRemoveDevice(null)
+              props.onSuccess?.(`Removed “${target.name}” from recent devices.`)
+            } catch (err) {
+              props.onError(err instanceof Error ? err.message : 'Could not remove device.')
+            }
+          }}>Remove device</button>
+        </div>
       </section>
     </div>}
   </div>
