@@ -1,8 +1,73 @@
 {
-  "name":"opendesk","version":"0.1.0","private":true,"type":"module",
-  "description":"A free-first, privacy-focused remote desktop platform",
-  "main":"out/main/index.js",
-  "scripts":{"dev":"electron-vite dev","build":"tsc --noEmit && electron-vite build","typecheck":"tsc --noEmit","test":"vitest run"},
-  "dependencies":{"lucide-react":"^0.468.0","react":"^19.0.0","react-dom":"^19.0.0"},
-  "devDependencies":{"@types/node":"^22.10.0","@types/react":"^19.0.0","@types/react-dom":"^19.0.0","@vitejs/plugin-react":"^4.3.4","electron":"^44.7.2","electron-vite":"^3.0.0","typescript":"^5.7.2","vitest":"^2.1.8"}
+  "name": "opendesk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A free-first, privacy-focused remote desktop platform",
+  "author": "OpenDesk contributors",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc --noEmit && electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "package:dir": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.7.2",
+    "electron-builder": "26.17.0",
+    "electron-vite": "^3.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.4"
+  },
+  "overrides": {
+    "@electron/get": "^5.1.0"
+  },
+  "build": {
+    "appId": "org.opendesk.desktop",
+    "productName": "OpenDesk",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Network",
+      "synopsis": "Consent-based remote desktop",
+      "maintainer": "OpenDesk contributors"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
 }

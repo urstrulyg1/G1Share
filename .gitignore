@@ -3,6 +3,8 @@ out/
 dist/
 release/
 coverage/
+data/
+services/signaling/data/
 .env
 .env.*
 !.env.example
