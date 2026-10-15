@@ -671,3 +671,28 @@ button, input, select{touch-action:manipulation}
   .dashboard-benefits { margin-top: 0; }
   .local-device-card { height: 250px; min-height: 250px; }
 }
+
+
+/* Final alignment corrections verified against the 1536×1024 reference bounds. */
+@media (min-width: 1321px) and (min-height: 821px) {
+  .workspace-main { padding: 0 11px 4px 0; }
+  .home-dashboard-layout { grid-template-rows: 623px 168px; row-gap: 15px; }
+  .dashboard-center-column { grid-template-rows: 298px 310px; gap: 15px; }
+  .access-panel, .connect-panel { min-height: 0; height: 310px; }
+  .dashboard-primary { grid-template-columns: minmax(0, 424fr) minmax(0, 429fr); gap: 15px; }
+  .local-device-card {
+    height: 250px;
+    min-height: 250px;
+    padding-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-version {
+    position: static;
+    margin-top: auto;
+    padding: 12px 0 0;
+    border-top: 1px solid #2a3c50;
+    color: #8fa0b8;
+    font-size: 12px;
+  }
+}
