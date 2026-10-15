@@ -97,7 +97,7 @@ try {
     note: 'Renderer screenshot uses a visual-only bridge. Device identity, signaling, sessions, and native capabilities are intentionally unavailable; sample rows are not live devices.',
     comparison: { reference: referenceBounds, differences, passed: differences.length === 0 },
     elements: result
-  }, null, 2) + '\\n')
+  }, null, 2) + '\n')
   console.log(JSON.stringify({ screenshot: 'artifacts/visual-validation/opendesk-after.png', comparison: { passed: differences.length === 0, differences }, measurements: result }, null, 2))
   if (differences.length) process.exitCode = 1
 } finally {
