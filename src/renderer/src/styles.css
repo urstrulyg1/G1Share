@@ -982,39 +982,85 @@ html:not([data-visual-validation="true"]) .device-id-display .icon-button {
   z-index: 2 !important;
 }
 
-/* Fix sidebar bottom device card height and text overflow */
-html:not([data-visual-validation="true"]) .local-device-card {
-  height: auto !important;
-  min-height: 220px !important;
-  padding: 14px 13px !important;
+/* Expand sidebar bottom device card vertically up to the Settings option */
+html:not([data-visual-validation="true"]) .sidebar {
   display: flex !important;
   flex-direction: column !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-spacer {
+  flex: 0 0 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-bottom {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  margin-top: 0 !important;
+  min-height: 260px !important;
+}
+html:not([data-visual-validation="true"]) .local-device-card {
+  flex: 1 1 auto !important;
+  height: 100% !important;
+  min-height: 260px !important;
+  padding: 18px 14px 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  background: linear-gradient(155deg, #111e2d 0%, #0c1824 100%) !important;
+  border: 1px solid #2e435b !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(1, 8, 18, 0.22) !important;
+}
+html:not([data-visual-validation="true"]) .local-device-heading {
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  gap: 8px !important;
+  color: #c7d5e8 !important;
+  margin-bottom: 6px !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-copy {
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 6px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-device-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 13px !important;
-  font-weight: 600 !important;
-  line-height: 1.35 !important;
-  letter-spacing: 0.2px !important;
-  padding: 8px 0 10px !important;
+  font-weight: 650 !important;
+  line-height: 1.4 !important;
+  letter-spacing: 0.3px !important;
+  padding: 12px 10px !important;
+  margin: 10px 0 10px !important;
   word-break: break-all !important;
+  background: rgba(7, 16, 26, 0.65) !important;
+  border: 1px solid rgba(42, 60, 80, 0.7) !important;
+  border-radius: 8px !important;
+  color: #f6f9fc !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-ready-status {
+  padding: 6px 0 !important;
+  font-size: 11px !important;
+  color: #b0c0d4 !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-network-status {
-  margin-top: 10px !important;
-  padding-top: 10px !important;
+  margin-top: auto !important;
+  padding-top: 14px !important;
   border-top: 1px solid #26384b !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-network-status strong {
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-network-status small {
-  font-size: 9px !important;
+  font-size: 9.5px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-version {
-  margin-top: 8px !important;
-  padding-top: 8px !important;
-  border-top: 1px solid #26384b !important;
-  font-size: 9px !important;
-  color: #70839a !important;
+  margin-top: 12px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid rgba(38, 56, 75, 0.6) !important;
+  font-size: 9.5px !important;
+  color: #72859d !important;
 }
 
