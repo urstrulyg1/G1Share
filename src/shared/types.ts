@@ -1,3 +1,8 @@
+import type { RemoteInputMessage } from './remote-input'
+import type { SessionPermission } from './permissions'
+
+export type { SessionPermission } from './permissions'
+
 export interface DeviceInfo {
   deviceId: string
   deviceName: string
@@ -9,7 +14,6 @@ export interface DeviceInfo {
   secureStorageBackend: string
 }
 
-export type SessionPermission = 'view' | 'files' | 'clipboard'
 export type SessionStatus = 'pending' | 'accepted' | 'rejected' | 'closed' | 'expired'
 
 export interface DeviceSummary {
@@ -112,7 +116,9 @@ export interface DesktopCapabilities {
   screenCapture: string
   secureStorage: string
   remoteInput: string
+  remoteInputSupported: boolean
   audioCapture: string
+  audioCaptureSupported: boolean
   clipboard: string
 }
 
@@ -134,7 +140,10 @@ export interface OpenDeskBridge {
   finishIncomingFile: (transferToken: string, expectedSHA256: string) => Promise<{ sha256: string; cleanupWarning?: string }>
   cancelIncomingFile: (transferToken: string) => Promise<void>
   resetDeviceIdentity: () => Promise<DeviceInfo | null>
-  armScreenCapture: () => Promise<void>
+  armScreenCapture: (options: { sessionId: string; audio: boolean }) => Promise<void>
+  startRemoteInput: (sessionId: string) => Promise<void>
+  stopRemoteInput: (sessionId: string) => Promise<void>
+  injectRemoteInput: (message: RemoteInputMessage) => Promise<void>
   openScreenCaptureSettings: () => Promise<void>
   getCapabilities: () => Promise<DesktopCapabilities>
   openProjectPage: () => Promise<void>

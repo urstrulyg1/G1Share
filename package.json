@@ -11,11 +11,14 @@
     "build": "tsc --noEmit && electron-vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "node e2e/two-client.e2e.mjs",
+    "bench:latency": "node e2e/perf/latency.bench.mjs",
     "package:dir": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "@noble/hashes": "^1.8.0",
+    "@nut-tree-fork/libnut": "4.2.6",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -28,6 +31,7 @@
     "electron": "^44.7.2",
     "electron-builder": "26.17.0",
     "electron-vite": "^3.0.0",
+    "puppeteer-core": "25.14.0",
     "typescript": "^5.7.2",
     "vitest": "^5.0.4"
   },

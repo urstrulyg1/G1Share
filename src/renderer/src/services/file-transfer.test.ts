@@ -217,3 +217,27 @@ describe('FileTransferManager', () => {
     await Promise.all([sender.close(), receiver.close()])
   })
 })
+
+describe('shared data-channel routing', () => {
+  it('lets remote-control envelopes pass without failing the transfer channel, and still delivers clipboard text that mentions them', async () => {
+    const [sender, receiver] = linkedChannels()
+    const errors: string[] = []
+    const clipboardTexts: string[] = []
+    const manager = new FileTransferManager(receiver as unknown as RTCDataChannel, createFileBridge().bridge, {
+      allowFiles: true,
+      allowClipboard: true,
+      onIncomingOffer: async () => null,
+      onClipboardText: async text => { clipboardTexts.push(text) },
+      onTransfer: () => undefined,
+      onError: message => errors.push(message)
+    })
+    sender.send(JSON.stringify({ type: 'input:key', code: 'KeyA', down: true }))
+    sender.send(JSON.stringify({ type: 'input:future-command' }))
+    sender.send(JSON.stringify({ type: 'clipboard:text', text: 'notes: {"type":"input:key"}' }))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(errors).toEqual([])
+    expect(receiver.readyState).toBe('open')
+    expect(clipboardTexts).toEqual(['notes: {"type":"input:key"}'])
+    await manager.close()
+  })
+})

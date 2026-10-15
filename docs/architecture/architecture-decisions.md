@@ -22,9 +22,9 @@ Status: implementation prototype. Decisions are provisional until a complete two
 
 **Decision:** use Chromium WebRTC for screen-video transport and optional ordered data-channel transfer, with standard ICE/STUN/TURN negotiation and DTLS-SRTP. Do not implement custom media encryption or relay protocols.
 
-**Current implementation:** screen capture uses Electron `getDisplayMedia` after session approval and local source selection. Data channels support chunked file transfer and one-time clipboard text. STUN/TURN URLs and short-lived HMAC-SHA1 TURN REST credentials can be supplied by the signaling service.
+**Current implementation:** screen capture uses Electron `getDisplayMedia` after session approval and local source selection. Data channels support chunked file transfer, one-time clipboard text, and per-session remote keyboard/mouse messages (`input:` envelopes on their own `opendesk-input-v1` channel, validated on both ends; the host injects only through `RemoteInputController`, which releases held keys and buttons on revoke, session end, and window or renderer loss). Video quality is a per-session profile (`balanced` by default, or `auto`, `ultra`, `high`, `low`). In `auto` mode the host adapts from packet loss, queueing delay over the session minimum RTT, and CPU limitation; a bandwidth limitation alone does not lower quality, because the congestion controller reports it during ramp-up. Measured effects and limits are in `docs/performance/README.md`. System audio uses Electron loopback capture on Windows hosts only. STUN/TURN URLs and short-lived HMAC-SHA1 TURN REST credentials can be supplied by the signaling service.
 
-**Not implemented:** remote keyboard/mouse injection, system audio, continuous clipboard synchronization, unattended sessions, trickle ICE, and a native remote-desktop engine. One-shot ICE gathering and cross-platform capture behavior still need real-network validation.
+**Not implemented:** continuous clipboard synchronization, unattended sessions, trickle ICE, and a native remote-desktop engine. Remote input and Windows system audio are implemented but unverified on real desktops. One-shot ICE gathering and cross-platform capture behavior still need real-network validation.
 
 ## ADR-004: Device identity is cryptographic, not a shared secret
 
@@ -34,7 +34,7 @@ A device ID alone grants no access. Trust of the remote key is explicit and shou
 
 ## ADR-005: Honest capability reporting
 
-Do not present unavailable capabilities as working. The UI and docs identify remote input, audio, unattended access, and unsupported platform paths. A successful build or unit test is not evidence of a real end-to-end desktop session.
+Do not present unavailable capabilities as working. The UI and docs identify unattended access and unsupported platform paths (including Wayland for remote input and non-Windows hosts for audio). A successful build or unit test is not evidence of a real end-to-end desktop session.
 
 ## ADR-006: File storage is exclusive and integrity checked
 

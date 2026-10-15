@@ -45,7 +45,7 @@ Protected assets include device private keys, trusted peer pins, screen/audio/in
 - The registry is a single JSON file protected by filesystem permissions, not encrypted at rest or replicated. Session/event state is in memory; a process restart drops it.
 - The HTTP signaling service relies on correct HTTPS reverse-proxy and trusted-proxy configuration. A bad proxy/CIDR setup can break rate limits or expose HTTP; deployment must be reviewed.
 - WebRTC gathers candidates in one step rather than trickling; ICE/STUN/TURN and screen capture are not verified across real networks/platforms. TURN metadata is visible to the relay; route policy and retention depend on the operator.
-- Remote keyboard/mouse, audio, unattended access, mobile support, and a native input/capture engine are not implemented.
+- Unattended access, mobile support, and a native capture engine are not implemented. Remote keyboard/mouse (per session, host-enabled, released on revoke or disconnect) and Windows-only system audio are implemented but unverified on real desktops.
 - Device identity and trust-store recovery is not resilient to OS keyring loss. Backups/export of private keys are deliberately not provided.
 - A hard crash or power loss can leave a hidden `.opendesk-*.part` file in the selected directory. Startup cleanup does not scan arbitrary user directories.
 - `safeStorage` protects keys at rest but does not defend against malware running as the same user while the keyring is unlocked.
@@ -54,5 +54,5 @@ Protected assets include device private keys, trusted peer pins, screen/audio/in
 
 - Do not expose the plain Go listener publicly. Use HTTPS, restrict trusted proxies exactly, keep data/private environment files private, back up the registry securely, and configure firewall/turn-server policies.
 - Never commit private keys, `.env`, TURN shared secrets, signing identities, user file data, clipboard data, or real session logs.
-- Do not describe remote input, audio, unattended access, signed installers, or untested platforms as working.
+- Do not describe remote input, audio, unattended access, signed installers, or untested platforms as verified on real hardware.
 - A passing unit test, build, or simulated RTC data-channel test is not end-to-end evidence. Require two independently installed clients and real network/platform validation before claiming the primary remote-desktop acceptance criterion is met.

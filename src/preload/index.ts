@@ -11,6 +11,7 @@ import type {
   SignalingRequest,
   TrustedDevice
 } from '../shared/types'
+import type { RemoteInputMessage } from '../shared/remote-input'
 
 const bridge: OpenDeskBridge = {
   getDeviceInfo: () => ipcRenderer.invoke('device:get-info') as Promise<DeviceInfo>,
@@ -30,7 +31,10 @@ const bridge: OpenDeskBridge = {
   finishIncomingFile: (transferToken, expectedSHA256) => ipcRenderer.invoke('files:finish-incoming', transferToken, expectedSHA256) as Promise<{ sha256: string; cleanupWarning?: string }>,
   cancelIncomingFile: (transferToken) => ipcRenderer.invoke('files:cancel-incoming', transferToken) as Promise<void>,
   resetDeviceIdentity: () => ipcRenderer.invoke('identity:reset') as Promise<DeviceInfo | null>,
-  armScreenCapture: () => ipcRenderer.invoke('capture:arm') as Promise<void>,
+  armScreenCapture: (options) => ipcRenderer.invoke('capture:arm', options) as Promise<void>,
+  startRemoteInput: (sessionId) => ipcRenderer.invoke('input:start', sessionId) as Promise<void>,
+  stopRemoteInput: (sessionId) => ipcRenderer.invoke('input:stop', sessionId) as Promise<void>,
+  injectRemoteInput: (message: RemoteInputMessage) => ipcRenderer.invoke('input:inject', message) as Promise<void>,
   openScreenCaptureSettings: () => ipcRenderer.invoke('capture:open-settings') as Promise<void>,
   getCapabilities: () => ipcRenderer.invoke('system:get-capabilities') as Promise<DesktopCapabilities>,
   openProjectPage: () => ipcRenderer.invoke('project:open') as Promise<void>

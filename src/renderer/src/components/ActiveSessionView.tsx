@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, ArrowLeftRight, Clipboard, File, FileUp, Fullscreen, LockKeyhole, Monitor, MonitorUp, ShieldAlert, Signal, Square, X } from 'lucide-react'
+import { ArrowLeftRight, Clipboard, File, FileUp, Fullscreen, LockKeyhole, Monitor, MonitorUp, MousePointer2, ShieldAlert, Signal, Square, X } from 'lucide-react'
 import type { DeviceInfo, SignalingEvent } from '../../../shared/types'
 import type { ActiveSession } from '../hooks/useOpenDesk'
 import type { SignalingClient } from '../services/signaling-client'
 import { FileTransferManager } from '../services/file-transfer'
 import type { TransferRecord } from '../services/file-transfer'
 import { RemoteSessionController } from '../services/remote-session'
-import type { ConnectionState, SessionMetrics } from '../services/remote-session'
+import type { ConnectionState, RemoteControlState, SessionMetrics } from '../services/remote-session'
+import { ViewerInputForwarder } from '../services/remote-input'
+import { VideoFrameProbe } from '../services/video-probe'
+import type { ProbeSnapshot } from '../services/video-probe'
+import { QUALITY_PROFILE_IDS, QUALITY_PROFILES } from '../../../shared/quality-profile'
+import type { EffectiveProfileId, QualityProfileId } from '../../../shared/quality-profile'
+import { permissionLabel } from '../../../shared/permissions'
 
 interface Props {
   active: ActiveSession
@@ -49,10 +55,16 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null)
   const [transfers, setTransfers] = useState<TransferRecord[]>([])
   const [metrics, setMetrics] = useState<SessionMetrics>({})
+  const [presentation, setPresentation] = useState<ProbeSnapshot | null>(null)
+  const [qualityChoice, setQualityChoice] = useState<QualityProfileId>('auto')
+  const [effectiveQuality, setEffectiveQuality] = useState<{ profile: EffectiveProfileId; mode: 'auto' | 'manual' } | null>(null)
   const [stopping, setStopping] = useState(false)
   const [shareStarted, setShareStarted] = useState(false)
   const [fitMode, setFitMode] = useState<'fit' | 'actual'>('fit')
   const [clipboardBusy, setClipboardBusy] = useState(false)
+  const [remoteControl, setRemoteControl] = useState<RemoteControlState>('off')
+  const [remoteControlReason, setRemoteControlReason] = useState('')
+  const [remoteControlBusy, setRemoteControlBusy] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const controllerRef = useRef<RemoteSessionController | null>(null)
@@ -61,6 +73,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   const lastSignalSequence = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const permissions = active.session.permissions || []
+  const canRemoteControl = permissions.includes('input')
   const canTransferFiles = permissions.includes('files')
   const canShareClipboard = permissions.includes('clipboard')
   const isViewer = active.role === 'viewer'
@@ -75,6 +88,9 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
     let disposed = false
     lastSignalSequence.current = 0
     incomingSignalsRef.current = []
+    setRemoteControl('off')
+    setRemoteControlReason('')
+    setEffectiveQuality(null)
     const instance = new RemoteSessionController(
       active.session.id,
       active.role,
@@ -84,6 +100,10 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
       window.openDesk,
       {
         onState: value => { onState(value) },
+        onRemoteControl: (state, reason) => {
+          setRemoteControl(state)
+          setRemoteControlReason(reason ?? '')
+        },
         onRemoteStream: stream => setRemoteStream(stream),
         onLocalStream: stream => setLocalStream(stream),
         onDataChannel: channel => {
@@ -108,10 +128,12 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
           })
         },
         onMetrics: value => setMetrics(value),
+        onQualityProfile: (profile, mode) => setEffectiveQuality({ profile, mode }),
         onPrepared: ready => setPrepared(ready),
         onSessionEnded: reason => { void onFinish(active.session.id, reason) },
         onError
-      }
+      },
+      active.session.permissions ?? ['view']
     )
     controllerRef.current = instance
     setController(instance)
@@ -136,7 +158,16 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
       transferManagerRef.current = null
       void instance.close()
     }
-  }, [active.session.id, active.session.status, active.role, active.peer, localDevice, client, canTransferFiles, canShareClipboard, onState, onFinish, onError, upsertTransfer])
+  }, [active.session.id, active.session.status, active.session.permissions, active.role, active.peer, localDevice, client, canTransferFiles, canShareClipboard, onState, onFinish, onError, upsertTransfer])
+
+  // The viewer forwards keyboard and pointer input only while the host has enabled remote control.
+  useEffect(() => {
+    const element = videoRef.current
+    if (!controller || active.role !== 'viewer' || remoteControl !== 'active' || !remoteStream || !element) return
+    const forwarder = new ViewerInputForwarder({ element, send: message => controller.sendRemoteInput(message) })
+    forwarder.attach()
+    return () => forwarder.detach()
+  }, [controller, active.role, remoteControl, remoteStream])
 
   useEffect(() => {
     for (const event of signals) {
@@ -153,6 +184,20 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = remoteStream
+  }, [remoteStream])
+
+  // Presentation timing is sampled on the same cadence as the WebRTC statistics, never per frame in React.
+  useEffect(() => {
+    const element = videoRef.current
+    if (!remoteStream || !element) return
+    const probe = new VideoFrameProbe()
+    probe.start(element)
+    const timer = setInterval(() => setPresentation(probe.snapshot()), 2000)
+    return () => {
+      clearInterval(timer)
+      probe.stop()
+      setPresentation(null)
+    }
   }, [remoteStream])
   useEffect(() => {
     if (localVideoRef.current) localVideoRef.current.srcObject = localStream
@@ -173,6 +218,11 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Screen capture failed.')
     }
+  }
+
+  const chooseQuality = (profile: QualityProfileId) => {
+    setQualityChoice(profile)
+    controllerRef.current?.requestQualityProfile(profile)
   }
 
   const selectFiles = () => fileInputRef.current?.click()
@@ -204,6 +254,28 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
     }
   }
 
+  const enableRemoteControl = async () => {
+    setRemoteControlBusy(true)
+    try {
+      await controllerRef.current?.enableRemoteControl()
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Remote control could not be enabled.')
+    } finally {
+      setRemoteControlBusy(false)
+    }
+  }
+
+  const revokeRemoteControl = async () => {
+    setRemoteControlBusy(true)
+    try {
+      await controllerRef.current?.revokeRemoteControl('The local user stopped remote control.')
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Remote control could not be stopped.')
+    } finally {
+      setRemoteControlBusy(false)
+    }
+  }
+
   const enterFullscreen = async () => {
     try {
       const element = videoRef.current?.parentElement
@@ -214,7 +286,8 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   }
 
   const connectionState = active.session.status === 'pending' && isViewer ? 'connecting' : active.connectionState
-  const sharingPermissionLabels = permissions.map(value => value === 'view' ? 'Screen view' : value === 'files' ? 'File transfer' : 'One-time clipboard text').join(' · ')
+  const sharingPermissionLabels = permissions.map(permissionLabel).join(' · ')
+  const remoteControlMessage = remoteControlMessageFor(active.role, remoteControl, remoteControlReason)
 
   return <section className="active-session" onDragOver={event => { if (canTransferFiles) event.preventDefault() }} onDrop={onDrop}>
     <div className="session-toolbar">
@@ -227,7 +300,13 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
     </div>
 
     {active.session.status === 'pending' && isViewer && <div className="session-message pending-message"><LockKeyhole size={18}/><div><strong>Waiting for local approval</strong><p>The remote user must approve this request before screen sharing begins.</p></div></div>}
-    {active.session.status === 'accepted' && <div className="permission-strip"><ShieldAlert size={15}/><span>Session permissions approved: {sharingPermissionLabels || 'Screen view only'}</span><span className="view-only-label">View-only · remote keyboard and mouse are not implemented</span></div>}
+    {active.session.status === 'accepted' && <div className="permission-strip"><ShieldAlert size={15}/><span>Session permissions approved: {sharingPermissionLabels || 'Screen view only'}</span>{!canRemoteControl && <span className="view-only-label">View-only · remote keyboard and mouse were not approved</span>}</div>}
+    {canRemoteControl && active.session.status === 'accepted' && (active.role === 'viewer' || shareStarted) && <div className={`remote-control-bar state-${remoteControl}`} role="status">
+      <MousePointer2 size={15}/>
+      <span>{remoteControlMessage}</span>
+      {active.role === 'host' && remoteControl === 'active' && <button className="danger-outline" onClick={() => void revokeRemoteControl()} disabled={remoteControlBusy}>Stop remote control</button>}
+      {active.role === 'host' && remoteControl !== 'active' && <button className="primary" onClick={() => void enableRemoteControl()} disabled={remoteControlBusy || !localStream}>Enable remote control</button>}
+    </div>}
 
     <div className="remote-view-layout">
       <div className={`remote-stage ${fitMode === 'actual' ? 'actual-size' : ''}`}>
@@ -262,8 +341,21 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
             <Metric label="Round trip" value={metrics.roundTripTimeMs !== undefined ? `${metrics.roundTripTimeMs.toFixed(0)} ms` : '—'}/>
             <Metric label="Packet loss" value={metrics.packetLossPercent !== undefined ? `${metrics.packetLossPercent.toFixed(1)}%` : '—'}/>
             <Metric label="Transport" value={metrics.transport || 'ICE negotiating'}/>
+            <Metric label="Jitter buffer" value={metrics.jitterBufferMs !== undefined ? `${metrics.jitterBufferMs.toFixed(0)} ms` : '—'}/>
+            <Metric label="Decode" value={metrics.decodeMs !== undefined ? `${metrics.decodeMs.toFixed(1)} ms/frame` : '—'}/>
+            <Metric label="Capture to screen (p50)" value={presentation?.captureAgeMs ? `${presentation.captureAgeMs.p50.toFixed(0)} ms` : '—'}/>
+            <Metric label="Capture to screen (p95)" value={presentation?.captureAgeMs ? `${presentation.captureAgeMs.p95.toFixed(0)} ms` : '—'}/>
+            <Metric label="Dropped frames" value={presentation?.droppedFrames !== undefined && presentation?.droppedFrames !== null ? String(presentation.droppedFrames) : metrics.droppedFrames !== undefined ? String(metrics.droppedFrames) : '—'}/>
+            <Metric label="Encode (host)" value={metrics.encodeMs !== undefined ? `${metrics.encodeMs.toFixed(1)} ms/frame` : '—'}/>
           </div>
-          <small className="metric-foot">Metrics appear only after WebRTC reports real media statistics.</small>
+          <div className="security-line quality-line">
+            <span>Quality profile</span>
+            <select value={qualityChoice} onChange={event => chooseQuality(event.target.value as QualityProfileId)} aria-label="Quality profile" disabled={!controller}>
+              {QUALITY_PROFILE_IDS.map(id => <option key={id} value={id}>{id === 'auto' ? 'Automatic' : QUALITY_PROFILES[id].label}</option>)}
+            </select>
+          </div>
+          <small className="metric-foot">{effectiveQuality ? `Sender uses ${QUALITY_PROFILES[effectiveQuality.profile].label}${effectiveQuality.mode === 'auto' ? ' (adapting automatically)' : ''}.` : 'Sender profile appears once the session is connected.'}</small>
+          <small className="metric-foot">Values are measured from WebRTC statistics and frame callbacks. Capture-to-screen compares sender and receiver clocks and is an estimate across machines.</small>
         </div>
 
         <div className="session-detail-card">
@@ -287,6 +379,20 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
       </aside>
     </div>
   </section>
+}
+
+function remoteControlMessageFor(role: 'viewer' | 'host', state: RemoteControlState, reason: string): string {
+  switch (state) {
+    case 'off': return 'Remote keyboard and mouse are not active.'
+    case 'pending': return role === 'host'
+      ? 'The approved viewer can control this display after you enable remote control.'
+      : 'Waiting for the host to enable remote control.'
+    case 'active': return role === 'host'
+      ? 'The approved viewer is controlling this display. Stop remote control at any time.'
+      : 'Remote control is active. Click the display to control it.'
+    case 'unavailable': return `Remote control is unavailable${reason ? `: ${reason}` : '.'}`
+    case 'revoked': return `Remote control stopped${reason ? `: ${reason}` : '.'}`
+  }
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

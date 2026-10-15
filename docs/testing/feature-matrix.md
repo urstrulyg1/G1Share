@@ -14,8 +14,9 @@ This matrix separates implemented source from exercised end-to-end behavior. **N
 | Go signaling broker | Implemented prototype | HTTP health/API, bounded requests, auth challenges, permission approval, long-poll events, rate limits, persistent device registry; current PR CI passed Go race tests/coverage and `go vet`. Go is not installed locally. |
 | STUN/TURN configuration | Implemented as operator-provided ICE settings | Go emits configured STUN endpoints and expiring TURN REST credentials; Coturn/reverse-proxy/firewall interoperability not tested here |
 | Screen capture and WebRTC video | Implemented source path | Native source picker, `getDisplayMedia`, signed SDP, DTLS-SRTP; **no actual cross-device stream verified** |
-| Remote keyboard/mouse | Not implemented | UI, README, and capability API explicitly identify unavailable behavior |
-| Audio capture/playback | Not implemented | Explicitly reported unavailable |
+| Latency and responsiveness | Measured on loopback only | `npm run bench:latency`, three full runs per configuration: pointer dispatch-to-host, key input-to-visible, presented frame rate and capture-to-screen, file transfer during input. No traffic shaping, real capture, libnut injection, TURN, or LAN/internet peers. See `docs/performance/README.md` |
+| Remote keyboard/mouse | Implemented; hardware unverified | Shared protocol with strict validation and key allowlist; host-side `RemoteInputController` tested with a fake native backend; the two-client E2E checks move/click/key delivery, revocation and disconnect releases, and rejection while disabled (`npm run test:e2e`). Native libnut injection and the OS permission flows are not verified on a real desktop.
+| Audio capture/playback | Implemented for Windows hosts; hardware unverified | Loopback capture is requested only when the audio permission is approved on a Windows host; no real audio path was tested. Viewer playback relies on the remote stream's audio track.
 | Unattended access | Not implemented | No hidden persistence or background capture |
 | File-transfer protocol | Implemented | Vitest uses paired simulated data channels to transfer >300 KiB, sequence/ack handling, permission check, refusal, cancellation, and SHA-256 mismatch cleanup |
 | Main-process file storage | Implemented | Node filesystem tests exercise temp writes, serial concurrent IPC writes, hash verification, cancellation, existing-destination rejection, and destination-creation race |
@@ -30,10 +31,10 @@ This matrix separates implemented source from exercised end-to-end behavior. **N
 
 | Platform | Electron shell/build | Screen capture path | Credential storage | Remote input/audio |
 |---|---|---|---|---|
-| Windows | Unsigned NSIS target built in CI; install/launch not tested | Electron display capture path is implemented; OS-specific verification pending | Electron safeStorage/DPAPI path is implemented; not tested on Windows here | Unavailable |
-| macOS | Unsigned DMG target built in CI; install/launch not tested | Screen Recording permission and native picker path is present; actual permission flow not tested here | Electron safeStorage/Keychain path is implemented; not tested on macOS here | Unavailable |
-| Linux X11 | Unsigned AppImage/DEB targets built in CI; install/launch not tested | Electron capture path is present; X11 session required; actual stream not tested | Requires a real GNOME Keyring/libsecret or KWallet backend; `basic_text` is blocked | Unavailable |
-| Linux Wayland | Unsigned Linux targets built in CI; install/launch not tested | Requires a working desktop portal/PipeWire source picker; distro/compositor combinations vary and remain unverified | Same OS keyring requirement as Linux X11 | Unavailable |
+| Windows | Unsigned NSIS target built in CI; install/launch not tested | Electron display capture path is implemented; OS-specific verification pending | Electron safeStorage/DPAPI path is implemented; not tested on Windows here | Remote input via libnut and loopback audio implemented; not tested on Windows here |
+| macOS | Unsigned DMG target built in CI; install/launch not tested | Screen Recording permission and native picker path is present; actual permission flow not tested here | Electron safeStorage/Keychain path is implemented; not tested on macOS here | Remote input requires Accessibility access (implemented, untested); audio unavailable |
+| Linux X11 | Unsigned AppImage/DEB targets built in CI; install/launch not tested | Electron capture path is present; X11 session required; actual stream not tested | Requires a real GNOME Keyring/libsecret or KWallet backend; `basic_text` is blocked | Remote input via libnut needs `libXtst` at runtime; untested; audio unavailable |
+| Linux Wayland | Unsigned Linux targets built in CI; install/launch not tested | Requires a working desktop portal/PipeWire source picker; distro/compositor combinations vary and remain unverified | Same OS keyring requirement as Linux X11 | Remote input refused (unsupported); audio unavailable |
 | iOS / Android | Not supported | Not supported | Not supported | Not supported |
 
 The matrix does not certify a platform merely because source code compiles. Screen capture, credential storage, packaging, code signing, accessibility/input permissions, and real peer connectivity must be tested on each OS/compositor combination.

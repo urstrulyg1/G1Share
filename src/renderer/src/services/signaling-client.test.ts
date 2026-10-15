@@ -95,3 +95,14 @@ describe('SignalingClient', () => {
     await expect(client.decideSession(session.id, false, ['view'])).rejects.toThrow('Session permission selection is invalid')
   })
 })
+
+describe('session decisions with input and audio permissions', () => {
+  it('forwards approved input and audio permissions to the local approval bridge', async () => {
+    const sessionId = 'a'.repeat(32)
+    const decideSession = vi.fn(async () => ({ id: sessionId }))
+    const client = new SignalingClient({ signalingRequest: vi.fn(), decideSession } as never, {} as never)
+    await client.decideSession(sessionId, true, ['view', 'input', 'audio'])
+    expect(decideSession).toHaveBeenCalledWith({ sessionId, accepted: true, permissions: ['view', 'input', 'audio'] })
+    await expect(client.decideSession(sessionId, true, ['view', 'root' as never])).rejects.toThrow('Session decision is invalid')
+  })
+})

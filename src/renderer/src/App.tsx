@@ -6,7 +6,8 @@ import {
   Settings, ShieldAlert, ShieldCheck, Signal, Sparkles, Sun, Wifi, X, Clipboard,
   File, Trash2, UserRound, ExternalLink, CircleHelp
 } from 'lucide-react'
-import type { SessionPermission, TrustedDevice } from '../../shared/types'
+import type { DesktopCapabilities, SessionPermission, TrustedDevice } from '../../shared/types'
+import { permissionLabel } from '../../shared/permissions'
 import { isValidDeviceId, normalizeDeviceId } from '../../shared/device-id'
 import { useOpenDesk } from './hooks/useOpenDesk'
 import type { IncomingSessionRequest, RecentSession } from './hooks/useOpenDesk'
@@ -32,6 +33,8 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('opendesk.theme') === 'light' ? 'light' : 'dark')
   const [requestFiles, setRequestFiles] = useState(false)
   const [requestClipboard, setRequestClipboard] = useState(false)
+  const [requestInput, setRequestInput] = useState(false)
+  const [requestAudio, setRequestAudio] = useState(false)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -67,6 +70,8 @@ export default function App() {
       const requested: SessionPermission[] = []
       if (requestFiles) requested.push('files')
       if (requestClipboard) requested.push('clipboard')
+      if (requestInput) requested.push('input')
+      if (requestAudio) requested.push('audio')
       const session = await openDesk.requestSession(normalized, requested)
       setRemoteId(normalized)
       setPage('Remote session')
@@ -89,6 +94,9 @@ export default function App() {
       if (allowRequested) {
         if (request.session.requestedPermissions.includes('files')) granted.push('files')
         if (request.session.requestedPermissions.includes('clipboard')) granted.push('clipboard')
+        // Input and audio are granted only when this device can actually provide them; otherwise the request is downgraded visibly on the card.
+        if (request.session.requestedPermissions.includes('input') && openDesk.capabilities?.remoteInputSupported) granted.push('input')
+        if (request.session.requestedPermissions.includes('audio') && openDesk.capabilities?.audioCaptureSupported) granted.push('audio')
       }
       await openDesk.approveSession(request.session.id, granted)
       setPage('Remote session')
@@ -103,6 +111,11 @@ export default function App() {
       setNotice({ kind: 'info', message: `Session request from ${request.peer.name} was rejected.` })
     } catch (error) { reportError(error instanceof Error ? error.message : 'Could not reject the session.') }
   }
+
+  const remoteTargetPlatform = useMemo(() => {
+    const normalized = normalizeDeviceId(remoteId)
+    return openDesk.knownDevices.find(device => device.id === normalized)?.platform
+  }, [remoteId, openDesk.knownDevices])
 
   const filteredDevices = useMemo(() => {
     const text = query.trim().toLowerCase()
@@ -132,7 +145,7 @@ export default function App() {
       </header>
 
       {notice && <div className={`notice notice-${notice.kind}`} role="status"><span>{notice.kind === 'success' ? <Check size={15}/> : notice.kind === 'error' ? <X size={15}/> : <CircleHelp size={15}/>}</span><p>{notice.message}</p><button aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14}/></button></div>}
-      {openDesk.incomingRequests.length > 0 && <IncomingRequests requests={openDesk.incomingRequests} busy={busy} hasActiveSession={!!openDesk.activeSession} approve={approve} reject={reject}/>}
+      {openDesk.incomingRequests.length > 0 && <IncomingRequests requests={openDesk.incomingRequests} busy={busy} hasActiveSession={!!openDesk.activeSession} approve={approve} reject={reject} capabilities={openDesk.capabilities}/>}
 
       {openDesk.activeSession && openDesk.device && <>
         <Heading eyebrow="LIVE REMOTE SESSION" title="Remote session" description="A session is active only after remote approval. Stop sharing or disconnect at any time."/>
@@ -144,7 +157,7 @@ export default function App() {
         <section className="connect-card">
           <div className="connect-title"><div className="section-icon"><Radio size={19}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown in the other OpenDesk installation.</p></div><span className="consent"><LockKeyhole size={12}/> Approval required</span></div>
           <form onSubmit={event => { event.preventDefault(); void connect() }}><label className="sr-only" htmlFor="remote-id">Remote device ID</label><div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Device ID · XXXXXXXX-XXXXXXXX-…"/></div><button className="primary" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={15}/></button></form>
-          <div className="permission-request-row"><span>Request additional permissions (optional)</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> One-time clipboard text</label></div>
+          <div className="permission-request-row"><span>Request additional permissions (optional)</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> One-time clipboard text</label><label><input type="checkbox" checked={requestInput} onChange={event => setRequestInput(event.target.checked)}/> Remote keyboard and mouse</label><label><input type="checkbox" checked={requestAudio} disabled={remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32'} onChange={event => setRequestAudio(event.target.checked)}/> System audio{remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32' ? ' (Windows hosts only)' : ''}</label></div>
           <div className="connect-foot"><span><LockKeyhole size={13}/> Device IDs locate devices; they never grant access.</span><button onClick={() => setPage('Diagnostics')}>View connection diagnostics <ArrowRight size={13}/></button></div>
         </section>
 
@@ -156,7 +169,7 @@ export default function App() {
         <section className="section"><div className="section-head"><div><h2>Connection status</h2><p>Live state from the configured signaling service.</p></div><span className={`status-text status-text-${openDesk.serviceState}`}><i/>{statusLabel}</span></div>
           <div className="service-card"><div className="service-icon"><Signal size={20}/></div><div><strong>{openDesk.serviceState === 'online' ? 'Signaling service reachable' : openDesk.serviceState === 'blocked' ? 'Secure device identity required' : 'No active signaling connection'}</strong><p>{openDesk.serviceError || `Configured endpoint: ${openDesk.signalingUrl}`}</p></div><button className="subtle" onClick={() => setPage('Settings')}><Settings size={13}/> Configure</button></div>
         </section>
-        <section className="section"><div className="section-head"><div><h2>Built around explicit consent</h2><p>Every session request remains visible to the remote user.</p></div></div><div className="feature-grid"><Feature icon={ShieldCheck} title="Approval on the remote device" text="No unattended access exists in this build. Each request must be approved locally."/><Feature icon={Wifi} title="Peer-to-peer transport" text="Screen media uses WebRTC; signaling carries setup only. TURN can be self-hosted for restrictive networks."/><Feature icon={LockKeyhole} title="Narrow capabilities" text="This build provides remote viewing, approved file transfer, and one-time clipboard text. Remote input and audio are not implemented."/></div></section>
+        <section className="section"><div className="section-head"><div><h2>Built around explicit consent</h2><p>Every session request remains visible to the remote user.</p></div></div><div className="feature-grid"><Feature icon={ShieldCheck} title="Approval on the remote device" text="No unattended access exists in this build. Each request must be approved locally."/><Feature icon={Wifi} title="Peer-to-peer transport" text="Screen media uses WebRTC; signaling carries setup only. TURN can be self-hosted for restrictive networks."/><Feature icon={LockKeyhole} title="Narrow capabilities" text="Remote viewing, approved file transfer, one-time clipboard text, and per-session remote keyboard and mouse. System audio is Windows-only."/></div></section>
       </>}
 
       {!openDesk.activeSession && page === 'Devices' && <>
@@ -191,8 +204,8 @@ export default function App() {
           <Diag label="Signaling service" detail={openDesk.signalingUrl} state={openDesk.serviceState === 'online' ? 'Connected' : openDesk.serviceState} good={openDesk.serviceState === 'online'}/>
           <Diag label="Screen capture" detail={openDesk.capabilities?.screenCapture || 'Loading capability status'} state={openDesk.capabilities ? 'Available with OS permission' : 'Loading'} good={!!openDesk.capabilities}/>
           <Diag label="WebRTC / ICE" detail="Peer-to-peer connection uses Chromium WebRTC; STUN/TURN endpoints are provided by the signaling service." state="Not connected"/>
-          <Diag label="Remote input" detail={openDesk.capabilities?.remoteInput || 'Not implemented'} state="Not implemented"/>
-          <Diag label="Remote audio" detail={openDesk.capabilities?.audioCapture || 'Not implemented'} state="Not implemented"/>
+          <Diag label="Remote input" detail={openDesk.capabilities?.remoteInput || 'Checking local input support'} state={openDesk.capabilities?.remoteInputSupported ? 'Available per session' : 'Unavailable on this device'} good={!!openDesk.capabilities?.remoteInputSupported}/>
+          <Diag label="Remote audio" detail={openDesk.capabilities?.audioCapture || 'Checking local audio support'} state={openDesk.capabilities?.audioCaptureSupported ? 'Available per session' : 'Unavailable on this device'} good={!!openDesk.capabilities?.audioCaptureSupported}/>
           <Diag label="Clipboard" detail={openDesk.capabilities?.clipboard || 'Not implemented'} state="User-confirmed, one-time text only"/>
           <Diag label="File transfer" detail="Encrypted data-channel chunks, user-selected destination, and SHA-256 verification. Directory transfers and resume are not implemented." state="Requires session permission"/>
         </div>
@@ -201,7 +214,7 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Settings' && <SettingsPage state={openDesk} theme={theme} setTheme={setTheme} error={reportError} success={message => setNotice({ kind: 'success', message })}/>}
-      <footer><span>OpenDesk · v{openDesk.device?.appVersion || '0.1.0'}</span><span><LockKeyhole size={12}/> Consent-first · Remote keyboard, audio, and unattended access are not implemented</span></footer>
+      <footer><span>OpenDesk · v{openDesk.device?.appVersion || '0.1.0'}</span><span><LockKeyhole size={12}/> Consent-first · Unattended access is not available</span></footer>
     </main>
   </div>
 }
@@ -214,14 +227,19 @@ function Feature({ icon: Icon, title, text }: { icon: typeof ShieldCheck; title:
   return <article className="feature"><div><Icon size={18}/></div><strong>{title}</strong><p>{text}</p></article>
 }
 
-function IncomingRequests({ requests, busy, hasActiveSession, approve, reject }: { requests: IncomingSessionRequest[]; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, allowRequested: boolean) => void; reject: (request: IncomingSessionRequest) => void }) {
-  return <section className="incoming-section"><div className="incoming-heading"><Bell size={16}/><strong>Incoming session requests</strong><span>{requests.length}</span></div>{requests.map(request => <IncomingRequest key={request.session.id} request={request} busy={busy} hasActiveSession={hasActiveSession} approve={approve} reject={reject}/>)}</section>
+function IncomingRequests({ requests, busy, hasActiveSession, approve, reject, capabilities }: { requests: IncomingSessionRequest[]; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, allowRequested: boolean) => void; reject: (request: IncomingSessionRequest) => void; capabilities: DesktopCapabilities | null }) {
+  return <section className="incoming-section"><div className="incoming-heading"><Bell size={16}/><strong>Incoming session requests</strong><span>{requests.length}</span></div>{requests.map(request => <IncomingRequest key={request.session.id} request={request} busy={busy} hasActiveSession={hasActiveSession} approve={approve} reject={reject} capabilities={capabilities}/>)}</section>
 }
 
-function IncomingRequest({ request, busy, hasActiveSession, approve, reject }: { request: IncomingSessionRequest; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, allowRequested: boolean) => void; reject: (request: IncomingSessionRequest) => void }) {
+function IncomingRequest({ request, busy, hasActiveSession, approve, reject, capabilities }: { request: IncomingSessionRequest; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, allowRequested: boolean) => void; reject: (request: IncomingSessionRequest) => void; capabilities: DesktopCapabilities | null }) {
   const [grantExtras, setGrantExtras] = useState(false)
-  const extraLabels = request.session.requestedPermissions.filter(permission => permission !== 'view').map(permission => permission === 'files' ? 'file transfer' : 'one-time clipboard text').join(' and ')
-  return <article className="incoming-card"><div className="incoming-icon"><ShieldAlert size={19}/></div><div className="incoming-copy"><strong>{request.peer.name} wants to view this device</strong><small>{request.peer.id} · {request.peer.platform} · Only this device can approve.</small><div className="incoming-permissions"><LockKeyhole size={12}/> Requested: {request.session.requestedPermissions.map(permission => permission === 'view' ? 'screen view' : permission === 'files' ? 'file transfer' : 'clipboard text').join(' · ')}</div><label className="grant-extra"><input type="checkbox" checked={grantExtras} onChange={event => setGrantExtras(event.target.checked)} disabled={!extraLabels}/> Grant requested extras ({extraLabels || 'none requested'})</label><small className="fingerprint-note">A first-time device key must be verified before approval. Screen sharing does not start until you separately choose a display.</small></div><div className="incoming-actions"><button className="danger-outline" onClick={() => reject(request)} disabled={busy}>Reject</button><button className="primary" onClick={() => approve(request, grantExtras)} disabled={busy || hasActiveSession}><Check size={14}/> Approve view</button></div></article>
+  const extraLabels = request.session.requestedPermissions.filter(permission => permission !== 'view').map(permissionLabel).join(' and ')
+  const unavailable = request.session.requestedPermissions.flatMap(permission => {
+    if (permission === 'input' && capabilities && !capabilities.remoteInputSupported) return [`remote keyboard and mouse: ${capabilities.remoteInput}`]
+    if (permission === 'audio' && capabilities && !capabilities.audioCaptureSupported) return [`system audio: ${capabilities.audioCapture}`]
+    return []
+  })
+  return <article className="incoming-card"><div className="incoming-icon"><ShieldAlert size={19}/></div><div className="incoming-copy"><strong>{request.peer.name} wants to view this device</strong><small>{request.peer.id} · {request.peer.platform} · Only this device can approve.</small><div className="incoming-permissions"><LockKeyhole size={12}/> Requested: {request.session.requestedPermissions.map(permissionLabel).join(' · ')}</div>{unavailable.length > 0 && <small className="fingerprint-note">Not available on this device, so these will not be granted: {unavailable.join('; ')}</small>}<label className="grant-extra"><input type="checkbox" checked={grantExtras} onChange={event => setGrantExtras(event.target.checked)} disabled={!extraLabels}/> Grant requested extras ({extraLabels || 'none requested'})</label><small className="fingerprint-note">A first-time device key must be verified before approval. Screen sharing does not start until you separately choose a display. Remote control must be enabled on this device separately after sharing starts.</small></div><div className="incoming-actions"><button className="danger-outline" onClick={() => reject(request)} disabled={busy}>Reject</button><button className="primary" onClick={() => approve(request, grantExtras)} disabled={busy || hasActiveSession}><Check size={14}/> Approve view</button></div></article>
 }
 
 function EmptyInline({ icon: Icon, title, description }: { icon: typeof HardDrive; title: string; description: string }) {
@@ -237,7 +255,7 @@ function TrustedDevices({ devices, forget, refresh, error }: { devices: TrustedD
 }
 
 function RecentSessionRow({ session }: { session: RecentSession }) {
-  return <article className="recent-row"><div className="recent-icon"><Monitor size={17}/></div><div className="recent-main"><strong>{session.role === 'viewer' ? 'Connected to' : 'Hosted session with'} {session.peerName}</strong><small>{session.peerId} · {new Date(session.startedAt).toLocaleString()}</small></div><span className={`recent-result ${session.result === 'Connected' || session.result === 'Disconnected' ? 'result-good' : ''}`}>{session.result}</span><small className="recent-ended">Ended {new Date(session.endedAt).toLocaleTimeString()}</small></article>
+  return <article className="recent-row"><div className="recent-icon"><Monitor size={17}/></div><div className="recent-main"><strong>{session.role === 'viewer' ? 'Connected to' : 'Hosted session with'} {session.peerName}</strong><small>{session.peerId} · {new Date(session.startedAt).toLocaleString()}</small></div><span className={`recent-result ${session.result === 'Connected' || session.result === 'Disconnected' ? 'result-good' : ''}`}>{session.result}</span><small className="recent-ended">Ended {new Date(session.endedAt).toLocaleTimeString()}{session.permissions ? ` · Approved: ${session.permissions.map(permissionLabel).join(', ')}` : ''}</small></article>
 }
 
 function Diag({ label, detail, state, good = false }: { label: string; detail: string; state: string; good?: boolean }) {
@@ -292,7 +310,7 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
 
     <div className="settings-card"><div className="settings-head"><h2>Local identity</h2><p>Private Ed25519 identity key is encrypted with the operating-system credential store. Linux basic_text storage is refused.</p></div><div className="setting"><div className="setting-icon"><LockKeyhole size={16}/></div><div className="setting-copy"><strong>{state.device?.deviceId || 'Loading device ID'}</strong><small>{state.device?.secureStorageBackend || 'Unknown credential backend'} · {state.device?.identityReady ? 'Identity key available' : state.device?.identityMessage || 'Checking identity'}</small></div><span className={state.device?.identityReady ? 'good' : 'muted'}>{state.device?.identityReady ? '● Ready' : '● Blocked'}</span></div><div className="setting"><div className="setting-copy"><strong>Revoke and reset identity</strong><small>Closes active sessions, revokes this public key on the signaling service, and creates a new ID. Peers must verify the new fingerprint.</small></div><button className="danger-outline" onClick={() => void revokeIdentity()} disabled={!state.device?.identityReady || !!state.activeSession}>Revoke & reset</button></div></div>
 
-    <div className="warning"><LockKeyhole size={17}/><div><strong>Remote input and audio are not implemented.</strong><p>This build supports approved remote viewing, optional chunked file transfer, and one-time clipboard text. It does not inject keyboard/mouse input, stream audio, or offer unattended access.</p></div></div>
+    <div className="warning"><LockKeyhole size={17}/><div><strong>Remote input and audio are limited.</strong><p>Keyboard and mouse control works only after the approved session starts sharing and the host enables it. It needs an X11 Linux session, Windows, or macOS with Accessibility access; Wayland is not supported. System audio is Windows-only. Unattended access is not available.</p></div></div>
   </>
 }
 
@@ -308,8 +326,8 @@ async function copyDiagnostics(device: ReturnType<typeof useOpenDesk>['device'],
     `Signaling error: ${serviceError || 'none'}`,
     `WebRTC state: ${connectionState || 'not connected'}`,
     `Screen capture: ${capabilities?.screenCapture || 'unknown'}`,
-    `Remote input: ${capabilities?.remoteInput || 'not implemented'}`,
-    `Audio: ${capabilities?.audioCapture || 'not implemented'}`
+    `Remote input: ${capabilities?.remoteInput || 'unknown'}`,
+    `Audio: ${capabilities?.audioCapture || 'unknown'}`
   ].join('\n')
   try { await window.openDesk.copyText(sanitized); success({ kind: 'success', message: 'Sanitized diagnostic summary copied. No tokens, private keys, clipboard content, screen data, or file content is included.' }) }
   catch (reason) { error(reason instanceof Error ? reason.message : 'Could not copy diagnostics.') }

@@ -1,10 +1,20 @@
 import { sha256 } from '@noble/hashes/sha256'
 import type { IncomingFileHandle, OpenDeskBridge } from '../../../shared/types'
+import { REMOTE_INPUT_PREFIX } from '../../../shared/remote-input'
+
+// Remote-control envelopes are serialized with `type` first; matching that prefix never mistakes
+// clipboard or file text that merely contains the same characters for a control message.
+function isRemoteInputEnvelope(data: unknown): boolean {
+  return typeof data === 'string' && data.startsWith('{"type":"' + REMOTE_INPUT_PREFIX)
+}
 
 const MAX_FILE_BYTES = 1024 * 1024 * 1024
 const CHUNK_BYTES = 16 * 1024
 const FRAME_HEADER_BYTES = 20
-const MAX_BUFFERED_BYTES = 512 * 1024
+// Bytes allowed to queue on the file channel before the sender waits. The SCTP association is shared with the
+// input channel, so this bound also bounds how long a queued input message can wait behind file data
+// (about 100 ms at 10 Mb/s). 128 KiB keeps that bounded while still pipelining across round trips up to ~100 ms.
+const MAX_BUFFERED_BYTES = 128 * 1024
 const MAX_CONTROL_BYTES = 64 * 1024
 const MAX_CLIPBOARD_BYTES = 32 * 1024
 const ACK_EVERY_CHUNKS = 16
@@ -130,8 +140,12 @@ export class FileTransferManager {
     private readonly handlers: TransferHandlers
   ) {
     channel.binaryType = 'arraybuffer'
-    channel.bufferedAmountLowThreshold = 128 * 1024
-    channel.addEventListener('message', event => this.queueMessage(event.data))
+    channel.bufferedAmountLowThreshold = MAX_BUFFERED_BYTES / 2
+    channel.addEventListener('message', event => {
+      // Remote-control messages share this data channel; they are handled by RemoteSessionController.
+      if (isRemoteInputEnvelope(event.data)) return
+      this.queueMessage(event.data)
+    })
     channel.addEventListener('close', () => { void this.close() }, { once: true })
   }
 

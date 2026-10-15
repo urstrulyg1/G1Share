@@ -40,12 +40,16 @@ const (
 	PermissionView      Permission = "view"
 	PermissionFiles     Permission = "files"
 	PermissionClipboard Permission = "clipboard"
+	PermissionInput     Permission = "input"
+	PermissionAudio     Permission = "audio"
 )
 
 var supportedPermissions = map[Permission]bool{
 	PermissionView:      true,
 	PermissionFiles:     true,
 	PermissionClipboard: true,
+	PermissionInput:     true,
+	PermissionAudio:     true,
 }
 
 type DeviceRecord struct {

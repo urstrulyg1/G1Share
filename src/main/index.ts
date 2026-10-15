@@ -6,10 +6,12 @@ import {
   dialog,
   ipcMain,
   safeStorage,
+  screen,
   session,
   shell,
   systemPreferences
 } from 'electron'
+import type { WebContents } from 'electron'
 import {
   createHash,
   createPrivateKey,
@@ -25,6 +27,10 @@ import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { hostname } from 'node:os'
 import type { DeviceInfo, DeviceSummary, DesktopCapabilities, IncomingFileHandle, IncomingFileRequest, OpenDeskBridge, PeerSignalVerification, RemoteSession, SessionDecisionRequest, SessionPermission, SignalingRequest, TrustedDevice } from '../shared/types'
+import { isSessionPermission, permissionLabel, SESSION_PERMISSIONS } from '../shared/permissions'
+import { parseRemoteInputMessage } from '../shared/remote-input'
+import { loadLibnutBackend, RemoteInputController, remoteInputSupport } from './remote-input'
+import type { InputSupport, NativeInputBackend } from './remote-input'
 import { formatDeviceId, isValidDeviceId } from '../shared/device-id'
 import { readBoundedResponse } from './http-response'
 import { IncomingFileStore } from './incoming-file-store'
@@ -68,7 +74,16 @@ class SignalingRequestError extends Error {
 let mainWindow: BrowserWindow | null = null
 let identityPromise: Promise<SecureIdentity> | null = null
 let settingsPromise: Promise<AppSettings> | null = null
-let captureArmedUntil = 0
+/** A screen capture is permitted only after the host approved the session and before the picker is used. */
+let captureArm: { sessionId: string; audio: boolean; until: number } | null = null
+/** The display the host actually picked for the current capture; remote input may only target this display. */
+let activeCapture: { sessionId: string; displayId: string } | null = null
+/** Permissions the host approved for each session, recorded from the local approval dialog. */
+const approvedSessions = new Map<string, ReadonlySet<SessionPermission>>()
+const CAPTURE_ARM_MS = 15 * 60 * 1000
+const MAX_APPROVED_SESSIONS = 50
+let nativeInput: { backend: NativeInputBackend } | { error: string } | null = null
+let inputController: RemoteInputController | null = null
 let lastClipboardPrompt = 0
 let quitCleanupComplete = false
 let quitCleanupPromise: Promise<void> | null = null
@@ -435,12 +450,72 @@ async function trustPeer(peer: { id: string; name: string; publicKey: string }):
   return true
 }
 
-function isSessionPermission(value: unknown): value is SessionPermission {
-  return value === 'view' || value === 'files' || value === 'clipboard'
+function audioLoopbackSupported(): boolean {
+  // Electron's loopback audio capture is Windows-only in this build; macOS and Linux hosts share video only.
+  return process.platform === 'win32'
+}
+
+function nativeInputBackend(): { backend: NativeInputBackend } | { error: string } {
+  if (!nativeInput) {
+    try {
+      nativeInput = { backend: loadLibnutBackend() }
+    } catch (error) {
+      nativeInput = { error: error instanceof Error ? error.message : 'the native input library is unavailable' }
+    }
+  }
+  return nativeInput
+}
+
+function inputSupport(): InputSupport {
+  const native = nativeInputBackend()
+  return remoteInputSupport({
+    platform: process.platform,
+    env: process.env,
+    accessibilityTrusted: process.platform === 'darwin' ? systemPreferences.isTrustedAccessibilityClient(false) : undefined,
+    backendError: 'error' in native ? native.error : undefined
+  })
+}
+
+function inputControllerOrThrow(): RemoteInputController {
+  const support = inputSupport()
+  if (!support.supported) throw new Error(support.reason)
+  const native = nativeInputBackend()
+  if (!('backend' in native)) throw new Error('The native input library is unavailable.')
+  inputController ??= new RemoteInputController(native.backend, process.platform)
+  return inputController
+}
+
+function assertSessionId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{32}$/.test(value)) throw new TypeError('Session ID is invalid.')
+  return value
+}
+
+function rememberApprovedSession(sessionId: string, permissions: readonly SessionPermission[]): void {
+  approvedSessions.delete(sessionId)
+  approvedSessions.set(sessionId, new Set(permissions))
+  while (approvedSessions.size > MAX_APPROVED_SESSIONS) {
+    const oldest = approvedSessions.keys().next().value
+    if (oldest === undefined) break
+    approvedSessions.delete(oldest)
+  }
+}
+
+function stopRemoteInputFor(sessionId: string): void {
+  if (inputController?.activeSessionId === sessionId) inputController.stop()
+  if (activeCapture?.sessionId === sessionId) activeCapture = null
+}
+
+function releaseRemoteInput(): void {
+  try {
+    inputController?.stop()
+  } catch (error) {
+    console.error('Could not release remote input.', error instanceof Error ? error.message : error)
+  }
+  activeCapture = null
 }
 
 async function decideSession(request: SessionDecisionRequest): Promise<RemoteSession> {
-  if (!request || typeof request !== 'object' || typeof request.sessionId !== 'string' || !/^[a-f0-9]{32}$/.test(request.sessionId) || typeof request.accepted !== 'boolean' || !Array.isArray(request.permissions) || request.permissions.length > 3) {
+  if (!request || typeof request !== 'object' || typeof request.sessionId !== 'string' || !/^[a-f0-9]{32}$/.test(request.sessionId) || typeof request.accepted !== 'boolean' || !Array.isArray(request.permissions) || request.permissions.length > SESSION_PERMISSIONS.length) {
     throw new TypeError('Session decision is invalid.')
   }
   if (request.permissions.some(permission => !isSessionPermission(permission)) || new Set(request.permissions).size !== request.permissions.length) {
@@ -463,7 +538,7 @@ async function decideSession(request: SessionDecisionRequest): Promise<RemoteSes
   if (!peer || !isValidDeviceId(peer.id) || peer.id !== session.fromDeviceId || typeof peer.name !== 'string' || typeof peer.publicKey !== 'string') {
     throw new Error('The signaling service returned an invalid peer identity.')
   }
-  if (!Array.isArray(session.requestedPermissions) || session.requestedPermissions.length > 3 || !session.requestedPermissions.every(isSessionPermission) || new Set(session.requestedPermissions).size !== session.requestedPermissions.length || !session.requestedPermissions.includes('view')) {
+  if (!Array.isArray(session.requestedPermissions) || session.requestedPermissions.length > SESSION_PERMISSIONS.length || !session.requestedPermissions.every(isSessionPermission) || new Set(session.requestedPermissions).size !== session.requestedPermissions.length || !session.requestedPermissions.includes('view')) {
     throw new Error('The incoming session contains invalid permission requests.')
   }
 
@@ -472,9 +547,16 @@ async function decideSession(request: SessionDecisionRequest): Promise<RemoteSes
     if (!request.permissions.includes('view') || request.permissions.some(permission => !requested.has(permission))) {
       throw new TypeError('Only the requested permissions, including screen viewing, can be approved.')
     }
+    if (request.permissions.includes('input')) {
+      const support = inputSupport()
+      if (!support.supported) throw new Error(support.reason)
+    }
+    if (request.permissions.includes('audio') && !audioLoopbackSupported()) {
+      throw new Error('System audio can only be shared from a Windows host in this build. Approve the session without audio.')
+    }
     const trusted = await trustPeer({ id: peer.id, name: peer.name, publicKey: peer.publicKey })
     if (!trusted) throw new Error('Peer identity was not trusted. The incoming session was not approved.')
-    const permissionLabels = request.permissions.map(permission => permission === 'view' ? 'screen viewing' : permission === 'files' ? 'file transfer' : 'one-time clipboard text')
+    const permissionLabels = request.permissions.map(permissionLabel)
     const answer = await dialog.showMessageBox(mainWindow!, {
       type: 'warning',
       title: 'Approve remote session',
@@ -496,6 +578,7 @@ async function decideSession(request: SessionDecisionRequest): Promise<RemoteSes
   if (!decided || typeof decided !== 'object' || (decided as RemoteSession).id !== request.sessionId) {
     throw new Error('The signaling service returned an invalid session decision.')
   }
+  if (request.accepted) rememberApprovedSession(request.sessionId, request.permissions)
   return decided as RemoteSession
 }
 
@@ -618,26 +701,47 @@ async function getCapabilities(): Promise<DesktopCapabilities> {
   } else if (process.platform === 'linux') {
     screenCapture = 'Electron capture is available; Wayland requires an active desktop portal/PipeWire picker, while X11 uses the active display session.'
   }
+  const input = inputSupport()
+  const audioSupported = audioLoopbackSupported()
   return {
     platform: process.platform,
     architecture: process.arch,
     screenCapture,
     secureStorage: secureStorageBackend(),
-    remoteInput: 'Not implemented. This build does not inject remote keyboard or mouse input.',
-    audioCapture: 'Not implemented. Remote system audio is not enabled in this build.',
+    remoteInput: input.supported
+      ? 'Available. The host enables remote keyboard and mouse per session after screen sharing starts.'
+      : input.reason,
+    remoteInputSupported: input.supported,
+    audioCapture: audioSupported
+      ? 'Available on Windows. System audio is shared only when the session approves the audio permission.'
+      : 'Not available on this OS. System audio sharing is supported from Windows hosts only.',
+    audioCaptureSupported: audioSupported,
     clipboard: 'User-confirmed one-time text transfer; continuous clipboard synchronization is not implemented.'
   }
+}
+
+/** Denies every browser permission except the one-time display capture for an armed, approved session. */
+function permissionAllowed(webContents: WebContents | null, permission: string): boolean {
+  if (permission !== 'display-capture' || !captureArm || Date.now() > captureArm.until) return false
+  return !!mainWindow && webContents?.id === mainWindow.webContents.id
+}
+
+function installPermissionPolicy(): void {
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => permissionAllowed(webContents, permission))
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permissionAllowed(webContents, permission)))
+  session.defaultSession.setDevicePermissionHandler(() => false)
 }
 
 function installDisplayCaptureHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const trustedFrame = !!mainWindow && request.frame === mainWindow.webContents.mainFrame
-    if (!captureArmedUntil || Date.now() > captureArmedUntil || !trustedFrame || !request.userGesture || !request.videoRequested) {
-      captureArmedUntil = 0
+    const arm = captureArm
+    captureArm = null
+    activeCapture = null
+    if (!arm || Date.now() > arm.until || !trustedFrame || !request.userGesture || !request.videoRequested) {
       callback(null)
       return
     }
-    captureArmedUntil = 0
     try {
       const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 320, height: 200 }, fetchWindowIcons: false })
       if (sources.length === 0) {
@@ -655,7 +759,9 @@ function installDisplayCaptureHandler(): void {
         callback(null)
         return
       }
-      callback({ video: sources[answer.response] })
+      const source = sources[answer.response]
+      activeCapture = { sessionId: arm.sessionId, displayId: source.display_id }
+      callback({ video: source, audio: arm.audio && audioLoopbackSupported() ? 'loopback' : undefined })
     } catch {
       callback(null)
     }
@@ -738,9 +844,39 @@ function registerIpcHandlers(): void {
     assertTrustedIPC(event)
     await incomingFileStore.cancel(assertString(token, 'Transfer token', 64))
   })
-  ipcMain.handle('capture:arm', event => {
+  ipcMain.handle('capture:arm', (event, value: unknown) => {
     assertTrustedIPC(event)
-    captureArmedUntil = Date.now() + 15 * 60 * 1000
+    if (!value || typeof value !== 'object') throw new TypeError('Capture request is invalid.')
+    const request = value as { sessionId?: unknown; audio?: unknown }
+    const sessionId = assertSessionId(request.sessionId)
+    if (typeof request.audio !== 'boolean') throw new TypeError('Capture request is invalid.')
+    const approved = approvedSessions.get(sessionId)
+    if (!approved?.has('view')) throw new Error('Screen capture is available only for an approved session.')
+    if (request.audio && (!approved.has('audio') || !audioLoopbackSupported())) {
+      throw new Error('System audio was not approved for this session on this platform.')
+    }
+    activeCapture = null
+    captureArm = { sessionId, audio: request.audio, until: Date.now() + CAPTURE_ARM_MS }
+  })
+  ipcMain.handle('input:start', (event, value: unknown) => {
+    assertTrustedIPC(event)
+    const sessionId = assertSessionId(value)
+    if (!approvedSessions.get(sessionId)?.has('input')) throw new Error('Remote keyboard and mouse were not approved for this session.')
+    if (!activeCapture || activeCapture.sessionId !== sessionId) throw new Error('Start screen sharing for this session before enabling remote control.')
+    const capturedId = activeCapture.displayId
+    const display = screen.getAllDisplays().find(candidate => String(candidate.id) === capturedId)
+    if (!display) throw new Error('The shared display could not be matched to a physical display, so remote control was not enabled.')
+    inputControllerOrThrow().start(sessionId, { bounds: display.bounds, scaleFactor: display.scaleFactor })
+  })
+  ipcMain.handle('input:inject', (event, value: unknown) => {
+    assertTrustedIPC(event)
+    if (!inputController?.active) throw new Error('Remote control is not active.')
+    if (!parseRemoteInputMessage(value)) throw new TypeError('Remote input message is invalid.')
+    inputController.inject(value)
+  })
+  ipcMain.handle('input:stop', (event, value: unknown) => {
+    assertTrustedIPC(event)
+    stopRemoteInputFor(assertSessionId(value))
   })
   ipcMain.handle('capture:open-settings', async event => {
     assertTrustedIPC(event)
@@ -766,7 +902,7 @@ function createWindow(): void {
     backgroundColor: '#0b1020',
     title: 'OpenDesk',
     webPreferences: {
-      preload: join(currentDir, '../preload/index.mjs'),
+      preload: join(currentDir, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -787,18 +923,26 @@ function createWindow(): void {
   })
   if (process.env.ELECTRON_RENDERER_URL) void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void mainWindow.loadFile(join(currentDir, '../renderer/index.html'))
-  mainWindow.on('closed', () => { mainWindow = null })
+  // Keys and buttons held through OpenDesk must never outlive the window that is driving them.
+  mainWindow.webContents.on('render-process-gone', () => releaseRemoteInput())
+  mainWindow.on('closed', () => {
+    releaseRemoteInput()
+    captureArm = null
+    mainWindow = null
+  })
 }
 
 app.whenReady().then(() => {
   registerIpcHandlers()
+  installPermissionPolicy()
   installDisplayCaptureHandler()
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
 app.on('before-quit', event => {
-  captureArmedUntil = 0
+  captureArm = null
+  releaseRemoteInput()
   if (quitCleanupComplete) return
   event.preventDefault()
   if (quitCleanupPromise) return

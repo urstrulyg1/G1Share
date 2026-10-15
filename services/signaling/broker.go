@@ -96,6 +96,26 @@ func newBroker(dataDir string, turn turnSettings) (*Broker, error) {
 	return broker, nil
 }
 
+// readiness reports whether this instance can serve authenticated traffic. It
+// checks that the persistent registry directory is still writable, so an orchestrator
+// stops routing to an instance whose registry can no longer be updated.
+func (broker *Broker) readiness() error {
+	if broker.statePath == "" {
+		return nil
+	}
+	directory := filepath.Dir(broker.statePath)
+	probe, err := os.CreateTemp(directory, ".readyz-*")
+	if err != nil {
+		return fmt.Errorf("data directory is not writable: %w", err)
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("data directory cleanup failed: %w", err)
+	}
+	return nil
+}
+
 func runtimeIsUnix() bool {
 	return filepath.Separator == '/'
 }
@@ -462,9 +482,7 @@ func (broker *Broker) decideSession(sessionID, actorID string, accepted bool, se
 		session.Permissions = permissions
 		session.Status = "accepted"
 		session.ExpiresAt = session.CreatedAt.Add(activeSessionTTL)
-		from := broker.devices[session.FromDeviceID]
 		broker.emitLocked(session.FromDeviceID, ServerEvent{Type: "session.accepted", SessionID: session.ID, Session: cloneSession(session), Peer: ptrSummary(summaryFor(broker.devices[session.ToDeviceID], time.Now()))})
-		_ = from
 	} else {
 		session.Status = "rejected"
 		session.ExpiresAt = time.Now().UTC()
@@ -500,6 +518,9 @@ func (broker *Broker) forwardSignal(sessionID, actorID string, message SignalMes
 	}
 	if session.Status != "accepted" {
 		return newFault(409, "session_not_accepted", "Signaling is allowed only after the remote user approves the session.")
+	}
+	if time.Now().After(session.ExpiresAt) {
+		return newFault(410, "session_expired", "This session has expired. Start a new session request.")
 	}
 	if err := validSignalPayload(message.Type, message.Payload); err != nil {
 		return newFault(400, "invalid_signal", err.Error())

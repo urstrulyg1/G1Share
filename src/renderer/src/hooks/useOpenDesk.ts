@@ -26,6 +26,8 @@ export interface RecentSession {
   result: string
   startedAt: string
   endedAt: string
+  /** Permissions approved for the session. Absent on records saved before this field existed. */
+  permissions?: SessionPermission[]
 }
 
 interface UseOpenDeskState {
@@ -134,7 +136,8 @@ export function useOpenDesk() {
       role: active.role,
       result,
       startedAt: active.session.createdAt,
-      endedAt: now
+      endedAt: now,
+      permissions: [...(active.session.permissions ?? [])]
     }
     setState(current => {
       if (current.recentSessions.some(item => item.id === recent.id)) return current
@@ -193,7 +196,8 @@ export function useOpenDesk() {
           role: active.role,
           result,
           startedAt: active.session.createdAt,
-          endedAt: new Date().toISOString()
+          endedAt: new Date().toISOString(),
+          permissions: [...(active.session.permissions ?? [])]
         }
         const recentSessions = current.recentSessions.some(item => item.id === recent.id) ? current.recentSessions : [recent, ...current.recentSessions].slice(0, 50)
         localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentSessions))

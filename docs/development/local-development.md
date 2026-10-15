@@ -32,9 +32,13 @@ Set `OPENDESK_SIGNALING_ADDR` to a valid host/port to change the Go listener. Th
 npm run typecheck
 npm test
 npm run build
+npm run test:e2e   # two-client test: real Go signaling broker + two headless Chromium pages
+npm run bench:latency   # loopback latency benchmark (needs CHROME_PATH); results go to docs/performance/results
 npm audit --audit-level=high
 (cd services/signaling && go test -race -cover ./... && go vet ./...)
 ```
+
+The two-client test (`npm run test:e2e`) needs Go on `PATH` (or `GO_BIN`) and a Chrome or Chromium executable in `CHROME_PATH`. It builds `services/signaling`, starts it on `127.0.0.1:18787`, serves `e2e/harness` with Vite, and runs two isolated browser contexts. The pages execute the real `SignalingClient`, `RemoteSessionController`, `ViewerInputForwarder`, and host `RemoteInputController`. Three things are substituted: Electron's preload bridge (requests are signed with WebCrypto in the same canonical format as the main process), display capture (an animated canvas), and the native input library (a recording backend). The test does not exercise Electron, real screen capture, libnut injection, or TURN relay.
 
 `npm run package:dir` builds an unpacked package for the current OS; `npm run dist` invokes configured electron-builder targets. The CI workflow successfully built unsigned Linux AppImage/DEB, Windows NSIS, and macOS DMG artifacts, but none has been install/launch-tested. Local package generation needs the Electron binary and platform tools; distribution still requires operator signing/notarization. Do not infer runtime support merely from a successful package build.
 
@@ -50,7 +54,7 @@ Use a separate user-data directory or genuinely separate OS user/installations f
 
 ## Important limitations
 
-- Remote keyboard/mouse input, audio, unattended access, continuous clipboard sync, trickle ICE, and a native input engine are not implemented.
+- Unattended access, continuous clipboard sync, and trickle ICE are not implemented. Remote keyboard/mouse (libnut) and Windows loopback audio are implemented but unverified on real desktops.
 - Screen capture is permission/source-picker based and has not been verified in a two-computer session. Linux Wayland depends on the desktop portal/PipeWire environment.
 - File transfer tests use a simulated RTC data channel; they do not demonstrate browser-to-browser/WebRTC connectivity.
 - Session/event queues and presence are in memory and are lost on signaling service restart. The public-key registry persists.

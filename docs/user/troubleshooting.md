@@ -51,4 +51,4 @@
 
 ## Unsupported controls
 
-Remote keyboard/mouse, remote input, audio, unattended access, and mobile clients are not implemented in this build. No setting or permission checkbox can enable them.
+Unattended access and mobile clients are not implemented in this build. Remote keyboard and mouse must be requested by the viewer, approved on the host, and enabled by the host after screen sharing starts; Wayland sessions refuse it. System audio is offered only for Windows hosts and only when the audio permission is approved.
