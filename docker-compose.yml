@@ -1,0 +1,64 @@
+services:
+  signaling:
+    build:
+      context: ./services/signaling
+    restart: unless-stopped
+    environment:
+      OPENDESK_SIGNALING_ADDR: "0.0.0.0:8787"
+      OPENDESK_DATA_DIR: /var/lib/opendesk
+      OPENDESK_TRUSTED_PROXIES: "172.30.10.2/32"
+      OPENDESK_STUN_URLS: "${OPENDESK_STUN_URLS:-}"
+      OPENDESK_TURN_URLS: "${OPENDESK_TURN_URLS:-}"
+      OPENDESK_TURN_SHARED_SECRET: "${OPENDESK_TURN_SHARED_SECRET:-}"
+      OPENDESK_TURN_CREDENTIAL_TTL: "${OPENDESK_TURN_CREDENTIAL_TTL:-10m}"
+    volumes:
+      - ./data/signaling:/var/lib/opendesk
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      backend:
+        ipv4_address: 172.30.10.3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      signaling:
+        condition: service_healthy
+    environment:
+      OPENDESK_DOMAIN: "${OPENDESK_DOMAIN:?Set OPENDESK_DOMAIN in .env}"
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      backend:
+        ipv4_address: 172.30.10.2
+
+networks:
+  backend:
+    name: opendesk_backend
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:
