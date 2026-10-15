@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g. v0.1.0)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify tests, typecheck, and backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install desktop dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build desktop bundles
+        run: npm run build
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache-dependency-path: services/signaling/go.mod
+      - name: Signaling tests with race detector
+        working-directory: services/signaling
+        run: go test -race -cover ./...
+
+  build-packages:
+    name: Build ${{ matrix.platform }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS DMG (x64, arm64)
+            os: macos-latest
+            build_cmd: npm run dist:mac
+            artifact: opendesk-release-macos
+            artifact_glob: |
+              release/*.dmg
+              release/*.blockmap
+          - platform: Windows NSIS .exe (x64, arm64)
+            os: windows-latest
+            build_cmd: npm run dist:win
+            artifact: opendesk-release-windows
+            artifact_glob: |
+              release/*.exe
+              release/*.blockmap
+          - platform: Linux AppImage and deb (x64)
+            os: ubuntu-latest
+            build_cmd: npm run dist:linux
+            artifact: opendesk-release-linux
+            artifact_glob: |
+              release/*.AppImage
+              release/*.deb
+              release/*.blockmap
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install desktop dependencies
+        run: npm ci
+      - name: Build ${{ matrix.platform }}
+        run: ${{ matrix.build_cmd }}
+      - name: Verify generated package artifacts
+        shell: bash
+        run: |
+          echo "=== Built distribution binaries in release/ ==="
+          ls -la release/
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 2
+
+  publish:
+    name: Publish GitHub Release with Changelog
+    needs: build-packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create release assets directory
+        run: mkdir -p release-assets
+
+      - name: Download macOS packages
+        uses: actions/download-artifact@v4
+        with:
+          name: opendesk-release-macos
+          path: release-assets/
+
+      - name: Download Windows packages
+        uses: actions/download-artifact@v4
+        with:
+          name: opendesk-release-windows
+          path: release-assets/
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: opendesk-release-linux
+          path: release-assets/
+
+      - name: Generate SHA-256 Checksums
+        working-directory: release-assets
+        run: |
+          echo "=== Computing SHA-256 Checksums ==="
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Determine Release Tag
+        id: release_tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v$(node -p "require('./package.json').version")"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create or Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          echo "Publishing GitHub Release for tag: $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, updating assets..."
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            echo "Creating new release $TAG with automated release notes and assets..."
+            gh release create "$TAG" release-assets/* \
+              --title "OpenDesk $TAG" \
+              --generate-notes
+          fi

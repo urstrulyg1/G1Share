@@ -54,7 +54,13 @@ npm audit --audit-level=high
 CHROME_PATH=/path/to/chrome npm run test:e2e  # also requires Go; two isolated clients + real broker
 ```
 
-Package configuration is available through `npm run package:dir` (unpacked build for the current OS) and `npm run dist` (platform targets configured in `package.json`). Native package generation needs the Electron binary and platform packaging tools; installers are unsigned unless an operator configures signing outside this repository. Current verification results and blockers are recorded in [the feature matrix](docs/testing/feature-matrix.md).
+Package configuration is available through `npm run package:dir` (unpacked build for the current OS) and platform distribution scripts:
+- `npm run dist:mac` — builds macOS `.dmg` installers for both **`arm64`** (Apple Silicon) and **`x64`** (Intel).
+- `npm run dist:win` — builds Windows NSIS `.exe` installers for both **`x64`** and **`arm64`**.
+- `npm run dist:linux` — builds Linux **`x64`** `.AppImage` and `.deb` packages.
+
+### Automated GitHub Releases
+Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) triggers the automated release pipeline in `.github/workflows/release.yml`. It compiles and verifies all platforms, generates SHA-256 checksums (`SHA256SUMS.txt`), auto-generates release notes, and publishes the release directly with all `.exe`, `.dmg`, `.AppImage`, and `.deb` binaries attached.
 
 ## Security model and limitations
 
