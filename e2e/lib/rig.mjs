@@ -1,10 +1,29 @@
 // Shared setup for the two-client end-to-end test and the latency benchmark: the real Go signaling broker,
 // the Vite-served harness page, and a headless Chromium. Both scripts use these helpers so that they run
 // the same startup path and the same timeouts.
+import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { createServer } from 'vite'
 import puppeteer from 'puppeteer-core'
+
+export function findChromePath() {
+  if (process.env.CHROME_PATH && existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH
+  const candidates = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return process.env.CHROME_PATH || null
+}
 
 export const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 

@@ -4,12 +4,13 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createRequire } from 'node:module'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { findChromePath } from '../lib/rig.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '../..')
 const out = resolve(root, 'artifacts/visual-validation')
 const port = 5188
-const chromePath = process.env.CHROME_PATH
+const chromePath = findChromePath()
 if (!chromePath) throw new Error('CHROME_PATH must point to Chromium/Chrome.')
 await mkdir(out, { recursive: true })
 const server = spawn(process.execPath, [
@@ -151,7 +152,7 @@ try {
         changedPixelRatio: Number((changedPixels / (width * height)).toFixed(4)),
         diffPngDataUrl: diffCanvas.toDataURL('image/png')
       }
-  }, 'data:image/png;base64,' + screenshotBuffer.toString('base64'), 'data:image/jpeg;base64,' + referenceBase64)
+  }, 'data:image/png;base64,' + Buffer.from(screenshotBuffer).toString('base64'), 'data:image/jpeg;base64,' + referenceBase64)
   const diffBase64 = pixelComparison.diffPngDataUrl.split(',')[1]
   await writeFile(resolve(out, 'pixel-diff-192.png'), Buffer.from(diffBase64, 'base64'))
   delete pixelComparison.diffPngDataUrl

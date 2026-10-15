@@ -4,10 +4,10 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { launchBrowser, startHarnessServer, startSignaling, waitFor } from './lib/rig.mjs'
+import { findChromePath, launchBrowser, startHarnessServer, startSignaling, waitFor } from './lib/rig.mjs'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
-const chromePath = process.env.CHROME_PATH
+const chromePath = findChromePath()
 if (!chromePath) throw new Error('Set CHROME_PATH to a Chrome or Chromium executable to run the two-client end-to-end test.')
 const goCommand = process.env.GO_BIN || 'go'
 const signalingPort = Number(process.env.E2E_SIGNALING_PORT || 18787)

@@ -14,3 +14,5 @@ services/signaling/data/
 *.key
 *.p12
 *.pfx
+artifacts/
+docs/performance/results/run*.json
