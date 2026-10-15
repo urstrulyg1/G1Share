@@ -81,7 +81,7 @@ The Go service issues Coturn REST credentials from the shared secret with a conf
 
 ## Connecting desktop clients
 
-In OpenDesk Settings, set **Signaling server** to `https://<your-domain>` on every client. Confirm the green signaling state before attempting a session. For first-time peers, compare the displayed public-key fingerprint through a separate trusted channel. An HTTPS endpoint alone does not replace user approval or key verification.
+On first launch OpenDesk has no configured server. In Settings, set **Signaling server** to `https://<your-domain>` on every client. Confirm the green signaling state before attempting a session. For LAN use, put the shared service behind a locally trusted HTTPS gateway and configure its hostname on both devices; direct ICE host candidates can then carry media, but a server is still needed to authenticate device requests and exchange setup messages. There is no automatic LAN discovery or account enrollment. For first-time peers, compare the displayed public-key fingerprint through a separate trusted channel. An HTTPS endpoint alone does not replace user approval or key verification.
 
 A STUN/TURN response only makes ICE endpoints available; it does not guarantee NAT traversal. Test from the actual networks you intend to support. Restrictive corporate firewalls may require TURN/TLS on port 443 and a relay configuration designed for that environment.
 

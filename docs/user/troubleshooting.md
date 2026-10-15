@@ -3,13 +3,13 @@
 ## Identity says unavailable or key storage is blocked
 
 - Linux: unlock GNOME Keyring/libsecret or KWallet before starting OpenDesk. `safeStorage` using the `basic_text` backend is refused.
-- Restart after unlocking the credential store. OpenDesk will not authenticate with the display-only fallback ID.
+- Restart after unlocking the credential store. OpenDesk will show **Device ID unavailable** rather than generating a display-only or stale ID when no cryptographic key can be used.
 - If an encrypted key cannot be decrypted, restore access to the original OS credential store. Do not delete the identity file as a first step; losing it changes the device identity and can strand its server registration.
 
 ## Signaling says offline
 
 - Confirm both devices use the exact same HTTPS origin and that its certificate is valid in the OS trust store.
-- On one computer, the development service defaults to `http://127.0.0.1:8787`; that loopback address is not reachable as the same server from another computer.
+- OpenDesk configures no server automatically. In **Settings → Signaling service**, enter your self-hosted HTTPS origin. For one-computer development only, start the Go service then enter `http://127.0.0.1:8787`; the same loopback address on another computer is a different machine. A LAN still needs a shared signaling service and trusted TLS certificate; there is no automatic peer discovery.
 - Check `/healthz` and `/readyz` from the client network. Check Caddy/service logs and host firewall rules.
 - Device presence uses heartbeats; a device with OpenDesk closed or disconnected becomes offline.
 - The service stores device registrations on disk but sessions/events/presence are in memory. After a service restart, wait for both clients to register and send a new request.

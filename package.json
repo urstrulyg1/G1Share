@@ -24,6 +24,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -31,6 +32,7 @@
     "electron": "^44.7.2",
     "electron-builder": "26.17.0",
     "electron-vite": "^3.0.0",
+    "jsdom": "^26.1.0",
     "puppeteer-core": "25.14.0",
     "typescript": "^5.7.2",
     "vitest": "^5.0.4"
@@ -51,20 +53,27 @@
     ],
     "asar": true,
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Network",
       "synopsis": "Consent-based remote desktop",
       "maintainer": "OpenDesk contributors"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.utilities",
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": false,

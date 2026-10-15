@@ -4,8 +4,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
+
+func TestUnknownDevicePresenceHasNoInventedTimestamp(t *testing.T) {
+	device := &DeviceRecord{ID: "ABCD1234-ABCD1234-ABCD1234-ABCD1234", Name: "Local device"}
+	summary := summaryFor(device, time.Now())
+	if summary.Online || summary.LastSeenAt != nil {
+		t.Fatalf("unobserved device should be offline without a last-seen timestamp: %+v", summary)
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "lastSeenAt") {
+		t.Fatalf("unknown presence must not serialize an invented timestamp: %s", encoded)
+	}
+}
 
 func TestHealthHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)

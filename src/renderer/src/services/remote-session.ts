@@ -166,10 +166,12 @@ export class RemoteSessionController {
           if (!this.closed) this.callbacks.onSessionEnded('The local user stopped screen sharing.')
         }, { once: true })
       }
-      // System audio is sent only when the host approved the audio permission and the OS capture
-      // supplied it; a stream without audio is still a valid screen share.
+      // Approval does not guarantee OS capture. A stream without audio is still a valid video share,
+      // but the user must be told instead of seeing an apparently successful audio grant.
       if (this.audioRequested) {
-        for (const track of stream.getAudioTracks()) this.peerConnection!.addTrack(track, stream)
+        const audioTracks = stream.getAudioTracks()
+        if (audioTracks.length === 0) this.callbacks.onError('System audio was approved, but this display did not provide an audio track. This session is video-only.')
+        for (const track of audioTracks) this.peerConnection!.addTrack(track, stream)
       }
       if (this.permissions.includes('input') && this.remoteControl === 'off') this.setRemoteControl('pending')
       this.callbacks.onState('negotiating')
@@ -229,13 +231,11 @@ export class RemoteSessionController {
    * Viewer: asks the host to use a quality profile (or `auto`). Host: applies the profile to its own sender now.
    * Viewer requests are rate-limited on the host, so a peer cannot force constant reconfiguration.
    */
-  requestQualityProfile(profile: QualityProfileId): void {
-    if (this.closed) return
-    if (this.role === 'viewer') {
-      this.sendOnInput(JSON.stringify({ type: 'session:quality', profile }))
-      return
-    }
+  requestQualityProfile(profile: QualityProfileId): boolean {
+    if (this.closed) return false
+    if (this.role === 'viewer') return this.sendOnInput(JSON.stringify({ type: 'session:quality', profile }))
     this.applyQualityMode(profile)
+    return true
   }
 
   /** The profile the sender is using, as last reported to this side. */
@@ -471,6 +471,7 @@ export class RemoteSessionController {
     // A recovered connection earns a fresh budget of ICE restarts for future transient failures.
     this.restartCount = 0
     this.callbacks.onState('connected')
+    if (this.role === 'host') this.callbacks.onQualityProfile(this.effectiveProfile, this.qualityMode === 'auto' ? 'auto' : 'manual')
     if (!this.metricsTimer) this.metricsTimer = setInterval(() => { void this.collectMetrics() }, 2000)
   }
 
@@ -645,20 +646,21 @@ export class RemoteSessionController {
       const inbound = readInboundVideo(report)
       if (inbound) {
         const interval: InboundVideoInterval = inboundInterval(this.lastInbound, inbound)
-        if (inbound.width > 0) metrics.width = inbound.width
-        if (inbound.height > 0) metrics.height = inbound.height
+        if (inbound.width !== null && inbound.width > 0) metrics.width = inbound.width
+        if (inbound.height !== null && inbound.height > 0) metrics.height = inbound.height
         if (interval.framesPerSecond !== null) metrics.framesPerSecond = interval.framesPerSecond
         if (interval.bitrateKbps !== null) metrics.bitrateKbps = interval.bitrateKbps
         if (interval.jitterBufferMs !== null) metrics.jitterBufferMs = interval.jitterBufferMs
         if (interval.decodeMs !== null) metrics.decodeMs = interval.decodeMs
         if (interval.packetLossPercent !== null) metrics.packetLossPercent = interval.packetLossPercent
-        metrics.droppedFrames = interval.droppedFrames
+        if (interval.droppedFrames !== null) metrics.droppedFrames = interval.droppedFrames
         this.lastInbound = inbound
       }
       const outbound = readOutboundVideo(report)
       if (outbound) {
         const interval: OutboundVideoInterval = outboundInterval(this.lastOutbound, outbound.sample)
         if (interval.encodeMs !== null) metrics.encodeMs = interval.encodeMs
+        if (interval.framesPerSecond !== null) metrics.framesPerSecond = interval.framesPerSecond
         if (interval.bitrateKbps !== null) metrics.bitrateKbps = interval.bitrateKbps
         if (outbound.qualityLimitation) metrics.qualityLimitation = outbound.qualityLimitation
         if (outbound.remotePacketLossPercent !== null) metrics.packetLossPercent = outbound.remotePacketLossPercent
@@ -672,9 +674,9 @@ export class RemoteSessionController {
       for (const stat of report.values()) {
         const pair = stat as RTCIceCandidatePairStats & { currentRoundTripTime?: number; availableOutgoingBitrate?: number; availableIncomingBitrate?: number; selected?: boolean; nominated?: boolean }
         if (stat.type !== 'candidate-pair' || pair.state !== 'succeeded' || !(pair.selected || pair.nominated)) continue
-        if (typeof pair.currentRoundTripTime === 'number') metrics.roundTripTimeMs = pair.currentRoundTripTime * 1000
+        if (typeof pair.currentRoundTripTime === 'number' && Number.isFinite(pair.currentRoundTripTime) && pair.currentRoundTripTime >= 0) metrics.roundTripTimeMs = pair.currentRoundTripTime * 1000
         const available = this.role === 'host' ? pair.availableOutgoingBitrate : pair.availableIncomingBitrate
-        if (typeof available === 'number') metrics.availableBitrateKbps = available / 1000
+        if (typeof available === 'number' && Number.isFinite(available) && available >= 0) metrics.availableBitrateKbps = available / 1000
       }
       // Automatic quality adaptation runs on the host, the only side that controls the encoder. It runs after the
       // candidate-pair values are read, because the decision uses the path RTT and the available bitrate.
@@ -690,7 +692,8 @@ export class RemoteSessionController {
       }
       this.callbacks.onMetrics(metrics)
     } catch {
-      // Stats are optional diagnostics. Failure does not alter the session state.
+      // Stats are optional. Clear previous measurements rather than displaying them as current.
+      if (!this.closed) this.callbacks.onMetrics({})
     } finally {
       this.collectingStats = false
     }

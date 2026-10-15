@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   DesktopCapabilities,
   DeviceInfo,
+  DeviceSummary,
   IncomingFileHandle,
   IncomingFileRequest,
   OpenDeskBridge,
@@ -15,6 +16,7 @@ import type { RemoteInputMessage } from '../shared/remote-input'
 
 const bridge: OpenDeskBridge = {
   getDeviceInfo: () => ipcRenderer.invoke('device:get-info') as Promise<DeviceInfo>,
+  renameLocalDevice: (name) => ipcRenderer.invoke('device:rename', name) as Promise<DeviceSummary>,
   getSignalingUrl: () => ipcRenderer.invoke('settings:get-signaling-url') as Promise<string>,
   setSignalingUrl: (url) => ipcRenderer.invoke('settings:set-signaling-url', url) as Promise<string>,
   signalingRequest: (request: SignalingRequest) => ipcRenderer.invoke('signaling:request', request) as Promise<unknown>,

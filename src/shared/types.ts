@@ -4,7 +4,9 @@ import type { SessionPermission } from './permissions'
 export type { SessionPermission } from './permissions'
 
 export interface DeviceInfo {
-  deviceId: string
+  // Null when the OS credential store cannot unlock/generate a genuine signing identity.
+  // A display-only random ID must never be presented as a usable device identity.
+  deviceId: string | null
   deviceName: string
   appVersion: string
   platform: string
@@ -124,6 +126,7 @@ export interface DesktopCapabilities {
 
 export interface OpenDeskBridge {
   getDeviceInfo: () => Promise<DeviceInfo>
+  renameLocalDevice: (name: string) => Promise<DeviceSummary>
   getSignalingUrl: () => Promise<string>
   setSignalingUrl: (url: string) => Promise<string>
   signalingRequest: (request: SignalingRequest) => Promise<unknown>

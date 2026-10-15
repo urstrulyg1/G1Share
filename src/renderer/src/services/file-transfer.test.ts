@@ -139,6 +139,14 @@ describe('FileTransferManager', () => {
     await Promise.all([sender.close(), receiver.close()])
   })
 
+  it('refuses an unnamed file instead of inventing a transfer filename', async () => {
+    const [senderChannel, receiverChannel] = linkedChannels()
+    const sender = createManager(senderChannel, createFileBridge().bridge)
+    const receiver = createManager(receiverChannel, createFileBridge().bridge)
+    await expect(sender.sendFiles([new File(['bytes'], '')])).rejects.toThrow('no name')
+    await Promise.all([sender.close(), receiver.close()])
+  })
+
   it('does not transfer when the remote destination is declined', async () => {
     const [senderChannel, receiverChannel] = linkedChannels()
     const senderTransfers: TransferRecord[] = []

@@ -383,14 +383,18 @@ func (broker *Broker) revokeDevice(id string) *apiFault {
 }
 
 func summaryFor(record *DeviceRecord, now time.Time) DeviceSummary {
-	lastSeen := record.LastSeen
+	var lastSeen *time.Time
+	if !record.LastSeen.IsZero() {
+		observed := record.LastSeen
+		lastSeen = &observed
+	}
 	return DeviceSummary{
 		ID:         record.ID,
 		Name:       record.Name,
 		PublicKey:  record.PublicKey,
 		Platform:   record.Platform,
 		AppVersion: record.AppVersion,
-		Online:     !lastSeen.IsZero() && now.Sub(lastSeen) <= deviceOnlineThreshold,
+		Online:     lastSeen != nil && now.Sub(*lastSeen) <= deviceOnlineThreshold,
 		LastSeenAt: lastSeen,
 	}
 }

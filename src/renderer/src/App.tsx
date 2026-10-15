@@ -4,7 +4,7 @@ import {
   Activity, ArrowLeftRight, ArrowRight, Bell, Check, Clock3, Copy, Github, HardDrive,
   Home, Laptop, LockKeyhole, Monitor, MonitorCheck, Moon, Radio, RefreshCw, Search,
   Settings, ShieldAlert, ShieldCheck, Signal, Sparkles, Sun, Wifi, X, Clipboard,
-  File, Trash2, UserRound, ExternalLink, CircleHelp
+  File, Trash2, ExternalLink, CircleHelp
 } from 'lucide-react'
 import type { DesktopCapabilities, SessionPermission, TrustedDevice } from '../../shared/types'
 import { permissionLabel } from '../../shared/permissions'
@@ -12,6 +12,7 @@ import { isValidDeviceId, normalizeDeviceId } from '../../shared/device-id'
 import { useOpenDesk } from './hooks/useOpenDesk'
 import type { IncomingSessionRequest, RecentSession } from './hooks/useOpenDesk'
 import { ActiveSessionView } from './components/ActiveSessionView'
+import { devicePresence } from './services/device-presence'
 
 export type Page = 'Home' | 'Devices' | 'Recent sessions' | 'File transfer' | 'Diagnostics' | 'Settings' | 'Remote session'
 type Notice = { kind: 'success' | 'info' | 'error'; message: string }
@@ -37,18 +38,27 @@ export default function App() {
   const [requestAudio, setRequestAudio] = useState(false)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refresh, setRefresh] = useState(0)
+  const [clock, setClock] = useState(() => Date.now())
 
   useEffect(() => { localStorage.setItem('opendesk.theme', theme) }, [theme])
+  useEffect(() => {
+    if (page !== 'Devices' || openDesk.activeSession) return
+    setClock(Date.now())
+    const timer = setInterval(() => setClock(Date.now()), 10_000)
+    return () => clearInterval(timer)
+  }, [page, openDesk.activeSession])
   useEffect(() => {
     if (openDesk.activeSession) setPage('Remote session')
     else if (page === 'Remote session') setPage('Home')
   }, [openDesk.activeSession, page])
 
   const reportError = useCallback((message: string) => setNotice({ kind: 'error', message }), [])
+  const finishSession = useCallback((id: string, reason?: string) => openDesk.finishSession(id, reason).catch(error => {
+    reportError(error instanceof Error ? error.message : 'Could not notify the signaling server that the session ended.')
+  }), [openDesk.finishSession, reportError])
 
   async function copyId() {
-    if (!openDesk.device) return
+    if (!openDesk.device?.identityReady || !openDesk.device.deviceId) return
     try {
       await window.openDesk.copyText(openDesk.device.deviceId)
       setNotice({ kind: 'success', message: 'Device ID copied. It identifies this device but is not an access password.' })
@@ -72,33 +82,24 @@ export default function App() {
       if (requestClipboard) requested.push('clipboard')
       if (requestInput) requested.push('input')
       if (requestAudio) requested.push('audio')
-      const session = await openDesk.requestSession(normalized, requested)
+      await openDesk.requestSession(normalized, requested)
       setRemoteId(normalized)
       setPage('Remote session')
-      setNotice({ kind: 'info', message: `Session request sent. The remote user must approve access before any screen data is shared.` })
-      setRefresh(value => value + 1)
-      void session
+      setNotice({ kind: 'info', message: 'Session request sent. The remote user must approve access before any screen data is shared.' })
     } catch (error) {
       reportError(error instanceof Error ? error.message : 'Could not request a remote session.')
     } finally { setBusy(false) }
   }
 
-  async function approve(request: IncomingSessionRequest, allowRequested: boolean) {
+  async function approve(request: IncomingSessionRequest, selected: SessionPermission[]) {
     if (openDesk.activeSession) {
       reportError('Disconnect the current session before approving another request.')
       return
     }
     setBusy(true)
     try {
-      const granted: SessionPermission[] = ['view']
-      if (allowRequested) {
-        if (request.session.requestedPermissions.includes('files')) granted.push('files')
-        if (request.session.requestedPermissions.includes('clipboard')) granted.push('clipboard')
-        // Input and audio are granted only when this device can actually provide them; otherwise the request is downgraded visibly on the card.
-        if (request.session.requestedPermissions.includes('input') && openDesk.capabilities?.remoteInputSupported) granted.push('input')
-        if (request.session.requestedPermissions.includes('audio') && openDesk.capabilities?.audioCaptureSupported) granted.push('audio')
-      }
-      await openDesk.approveSession(request.session.id, granted)
+      // The host selects each extra independently; main re-fetches and confirms the exact set natively.
+      await openDesk.approveSession(request.session.id, ['view', ...selected])
       setPage('Remote session')
       setNotice({ kind: 'success', message: 'Session approved. Screen sharing will not begin until you choose a display.' })
     } catch (error) { reportError(error instanceof Error ? error.message : 'Could not approve the session.') }
@@ -112,6 +113,12 @@ export default function App() {
     } catch (error) { reportError(error instanceof Error ? error.message : 'Could not reject the session.') }
   }
 
+  async function refreshDevices() {
+    try {
+      await Promise.all([openDesk.refreshKnownDevices(), openDesk.refreshTrustedDevices()])
+    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not refresh device information.') }
+  }
+
   const remoteTargetPlatform = useMemo(() => {
     const normalized = normalizeDeviceId(remoteId)
     return openDesk.knownDevices.find(device => device.id === normalized)?.platform
@@ -123,46 +130,46 @@ export default function App() {
     return openDesk.knownDevices.filter(device => device.name.toLowerCase().includes(text) || device.id.toLowerCase().includes(text) || device.platform.toLowerCase().includes(text))
   }, [openDesk.knownDevices, query])
   const platform = openDesk.device ? (({ darwin: 'macOS', win32: 'Windows', linux: 'Linux' } as Record<string, string>)[openDesk.device.platform] || openDesk.device.platform) : 'Detecting platform'
-  const statusLabel = openDesk.serviceState === 'online' ? 'Signaling connected' : openDesk.serviceState === 'connecting' ? 'Connecting to signaling' : openDesk.serviceState === 'blocked' ? 'Identity needs attention' : openDesk.serviceState === 'loading' ? 'Starting OpenDesk' : 'Signaling offline'
+  const statusLabel = openDesk.serviceState === 'online' ? 'Signaling connected' : openDesk.serviceState === 'connecting' ? 'Connecting to signaling' : openDesk.serviceState === 'blocked' ? 'Identity needs attention' : openDesk.serviceState === 'unconfigured' ? 'Signaling not configured' : openDesk.serviceState === 'loading' ? 'Starting OpenDesk' : 'Signaling unavailable'
   const currentPage = openDesk.activeSession ? 'Remote session' : page
 
   return <div className={`app-shell theme-${theme}`}>
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><ArrowLeftRight size={20}/></div><div><strong>OpenDesk</strong><small>REMOTE, WITHOUT LIMITS</small></div></div>
       <div className="nav-label">WORKSPACE</div>
-      <nav>{nav.map(({ label, icon: Icon }) => <button key={label} className={'nav-item ' + (page === label || (label === 'File transfer' && page === 'Remote session' && openDesk.activeSession?.session.permissions?.includes('files')) ? 'active' : '')} onClick={() => setPage(openDesk.activeSession ? 'Remote session' : label)}><Icon size={17}/><span>{label}</span>{label === 'File transfer' && <small>{openDesk.activeSession?.session.permissions?.includes('files') ? 'LIVE' : ''}</small>}{label === 'Devices' && openDesk.incomingRequests.length > 0 && <b className="nav-badge">{openDesk.incomingRequests.length}</b>}</button>)}</nav>
+      <nav>{nav.map(({ label, icon: Icon }) => <button key={label} className={'nav-item ' + (page === label && !openDesk.activeSession ? 'active' : '')} onClick={() => setPage(label)} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect the session to open another page.' : undefined}><Icon size={17}/><span>{label}</span>{label === 'Devices' && openDesk.incomingRequests.length > 0 && <b className="nav-badge">{openDesk.incomingRequests.length}</b>}</button>)}</nav>
       <div className="sidebar-bottom">
-        <div className="free-card"><ShieldCheck size={19}/><strong>Free by design.</strong><p>Self-hosted signaling and standard WebRTC. Your devices, your choice.</p><button onClick={() => setPage('Settings')}>Connection settings <ArrowRight size={13}/></button></div>
-        <button className="github-link" onClick={() => void window.openDesk.openProjectPage()}><Github size={16}/> Open-source project <ExternalLink size={13}/></button>
-        <div className="profile"><div className="avatar"><Laptop size={15}/></div><div><strong>{openDesk.device?.deviceName || 'Local device'}</strong><small>{platform}</small></div><span className={`green-dot ${openDesk.serviceState === 'online' ? '' : 'dot-muted'}`}/></div>
+        <div className="free-card"><ShieldCheck size={19}/><strong>Free by design.</strong><p>Self-hosted signaling and standard WebRTC. Your devices, your choice.</p><button onClick={() => setPage('Settings')} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect the session to change settings.' : undefined}>Connection settings <ArrowRight size={13}/></button></div>
+        <button className="github-link" onClick={() => void window.openDesk.openProjectPage().catch(error => reportError(error instanceof Error ? error.message : 'Could not open the project page.'))}><Github size={16}/> Open-source project <ExternalLink size={13}/></button>
+        <div className="local-device"><div className="local-icon"><Laptop size={15}/></div><div><strong>{openDesk.device?.deviceName || 'Local device'}</strong><small>{platform} · this device</small></div><span className={`green-dot ${openDesk.serviceState === 'online' ? '' : 'dot-muted'}`}/></div>
       </div>
     </aside>
 
     <main className="main">
       <header className="topbar">
         <div className="crumb">Workspace <span>/</span> <strong>{currentPage}</strong></div>
-        <div className="top-actions"><span className={`status-pill status-${openDesk.serviceState}`}><i/>{statusLabel}</span><button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button><button className="icon-button" aria-label="Diagnostics" onClick={() => setPage('Diagnostics')}><CircleHelp size={16}/></button></div>
+        <div className="top-actions"><span className={`status-pill status-${openDesk.serviceState}`}><i/>{statusLabel}</span><button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button><button className="icon-button" aria-label="Diagnostics" onClick={() => setPage('Diagnostics')} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect to open diagnostics.' : undefined}><CircleHelp size={16}/></button></div>
       </header>
 
       {notice && <div className={`notice notice-${notice.kind}`} role="status"><span>{notice.kind === 'success' ? <Check size={15}/> : notice.kind === 'error' ? <X size={15}/> : <CircleHelp size={15}/>}</span><p>{notice.message}</p><button aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14}/></button></div>}
       {openDesk.incomingRequests.length > 0 && <IncomingRequests requests={openDesk.incomingRequests} busy={busy} hasActiveSession={!!openDesk.activeSession} approve={approve} reject={reject} capabilities={openDesk.capabilities}/>}
 
       {openDesk.activeSession && openDesk.device && <>
-        <Heading eyebrow="LIVE REMOTE SESSION" title="Remote session" description="A session is active only after remote approval. Stop sharing or disconnect at any time."/>
-        <ActiveSessionView active={openDesk.activeSession} localDevice={openDesk.device} client={openDesk.signalingClient} signals={openDesk.signals} onState={openDesk.updateConnectionState} onFinish={openDesk.finishSession} onError={reportError}/>
+        <Heading eyebrow="REMOTE SESSION" title="Remote session" description={openDesk.activeSession.session.status === 'pending' ? 'Awaiting remote approval. No screen or data is shared yet.' : 'Approved request. The host must select a display before capture; either user can disconnect at any time.'}/>
+        <ActiveSessionView active={openDesk.activeSession} localDevice={openDesk.device} client={openDesk.signalingClient} signals={openDesk.signals} onState={openDesk.updateConnectionState} onFinish={finishSession} onError={reportError}/>
       </>}
 
       {!openDesk.activeSession && page === 'Home' && <>
         <section className="welcome"><div><div className="eyebrow"><Sparkles size={13}/> YOUR REMOTE WORKSPACE</div><h1>Good to see you.</h1><p>Connect to another computer. Screen sharing starts only after the remote user approves.</p></div><div className="orbit"><span><Monitor size={16}/></span><b><ArrowLeftRight size={28}/></b><i><Laptop size={15}/></i></div></section>
         <section className="connect-card">
           <div className="connect-title"><div className="section-icon"><Radio size={19}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown in the other OpenDesk installation.</p></div><span className="consent"><LockKeyhole size={12}/> Approval required</span></div>
-          <form onSubmit={event => { event.preventDefault(); void connect() }}><label className="sr-only" htmlFor="remote-id">Remote device ID</label><div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Device ID · XXXXXXXX-XXXXXXXX-…"/></div><button className="primary" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={15}/></button></form>
+          <form onSubmit={event => { event.preventDefault(); void connect() }}><label className="sr-only" htmlFor="remote-id">Remote device ID</label><div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Enter the other device’s ID"/></div><button className="primary" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={15}/></button></form>
           <div className="permission-request-row"><span>Request additional permissions (optional)</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> One-time clipboard text</label><label><input type="checkbox" checked={requestInput} onChange={event => setRequestInput(event.target.checked)}/> Remote keyboard and mouse</label><label><input type="checkbox" checked={requestAudio} disabled={remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32'} onChange={event => setRequestAudio(event.target.checked)}/> System audio{remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32' ? ' (Windows hosts only)' : ''}</label></div>
           <div className="connect-foot"><span><LockKeyhole size={13}/> Device IDs locate devices; they never grant access.</span><button onClick={() => setPage('Diagnostics')}>View connection diagnostics <ArrowRight size={13}/></button></div>
         </section>
 
-        <section className="section"><div className="section-head"><div><h2>Your device</h2><p>This identity authenticates signaling requests and does not authorize incoming sessions.</p></div><button className="subtle" onClick={() => void copyId()} disabled={!openDesk.device}><Copy size={13}/> Copy ID</button></div>
-          <div className="device-card"><div className="device-icon"><MonitorCheck size={24}/></div><div className="device-main"><strong>{platform} device <em>THIS DEVICE</em></strong><small>{openDesk.device ? `${openDesk.device.platform} · ${openDesk.device.architecture}` : 'Loading local identity'}</small><div className="id-row"><code>{openDesk.device?.deviceId || '••••••••-••••••••-••••••••-••••••••'}</code><button aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device}><Copy size={13}/></button></div></div><div className="local-only"><span className={openDesk.device?.identityReady ? '' : 'dot-warning'}/>{openDesk.device?.identityReady ? 'Authenticated' : 'Key unavailable'}<small>{openDesk.device?.secureStorageBackend || 'checking secure storage'}</small></div></div>
+        <section className="section"><div className="section-head"><div><h2>Your device</h2><p>This identity authenticates signaling requests and does not authorize incoming sessions.</p></div><button className="subtle" onClick={() => void copyId()} disabled={!openDesk.device?.identityReady || !openDesk.device.deviceId}><Copy size={13}/> Copy ID</button></div>
+          <div className="device-card"><div className="device-icon"><MonitorCheck size={24}/></div><div className="device-main"><strong>{platform} device <em>THIS DEVICE</em></strong><small>{openDesk.device ? `${openDesk.device.platform} · ${openDesk.device.architecture}` : 'Loading local identity'}</small><div className="id-row"><code>{openDesk.device ? openDesk.device.deviceId || 'Unavailable — unlock your OS credential store' : 'Generating secure device identity…'}</code><button aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device?.identityReady || !openDesk.device.deviceId}><Copy size={13}/></button></div></div><div className="local-only"><span className={openDesk.device?.identityReady ? '' : 'dot-warning'}/>{openDesk.device?.identityReady ? 'Key ready' : openDesk.device ? 'Key unavailable' : 'Loading identity'}<small>{openDesk.device?.secureStorageBackend || 'checking secure storage'}</small></div></div>
           {!openDesk.device?.identityReady && openDesk.device && <div className="inline-warning"><ShieldAlert size={15}/><span>{openDesk.device.identityMessage}</span><button onClick={() => setPage('Diagnostics')}>Details</button></div>}
         </section>
 
@@ -173,15 +180,18 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Devices' && <>
-        <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices are located by ID. Trust fingerprints before connecting; every remote session still requires approval." action={<button className="subtle" onClick={() => { void openDesk.refreshTrustedDevices(); setRefresh(value => value + 1) }}><RefreshCw size={13}/> Refresh</button>}/>
-        <div className="search"><Search size={15}/><input placeholder="Search known devices" value={query} onChange={event => setQuery(event.target.value)}/></div>
-        {filteredDevices.length > 0 ? <div className="device-list">{filteredDevices.map(device => <article className="device-card" key={device.id}><div className="device-icon"><Monitor size={22}/></div><div className="device-main"><strong>{device.name}<em>{device.platform}</em></strong><small>{device.appVersion} · {device.online ? 'Online at last lookup' : 'Status from last lookup may be stale'}</small><div className="id-row"><code>{device.id}</code></div></div><div className="device-actions"><span className={device.online ? 'online-label' : 'offline-label'}><i/>{device.online ? 'Online' : 'Last seen offline'}</span><button className="subtle" onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}>Request access <ArrowRight size={13}/></button></div></article>)}</div> : <EmptyInline icon={HardDrive} title={query ? 'No matching devices' : 'No discovered devices yet'} description="Look up a device by its ID from the Home screen. The list is local and contains no access credentials."/>}
-        <TrustedDevices devices={openDesk.trustedDevices} forget={openDesk.forgetTrustedDevice} refresh={() => void openDesk.refreshTrustedDevices()} error={reportError}/>
+        <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices appear only after an actual ID lookup in this app run. Presence expires quickly; trust pins do not grant access." action={<button className="subtle" onClick={() => void refreshDevices()} disabled={openDesk.serviceState !== 'online'} title={openDesk.serviceState === 'online' ? undefined : 'Connect to the signaling server before refreshing.'}><RefreshCw size={13}/> Refresh</button>}/>
+        <div className="search"><Search size={15}/><input placeholder="Search looked-up devices" value={query} onChange={event => setQuery(event.target.value)}/></div>
+        {filteredDevices.length > 0 ? <div className="device-list">{filteredDevices.map(device => {
+          const presence = devicePresence(device, openDesk.serviceState === 'online', clock)
+          return <article className="device-card" key={device.id}><div className="device-icon"><Monitor size={22}/></div><div className="device-main"><strong>{device.name}<em>{device.platform}</em></strong><small>{device.appVersion} · {device.checkedAt ? `Checked ${new Date(device.checkedAt).toLocaleString()}` : 'Lookup failed — retry to check presence'}</small><div className="id-row"><code>{device.id}</code></div></div><div className="device-actions"><span className={presence.fresh && device.online ? 'online-label' : 'offline-label'}><i/>{presence.label}</span><button className="subtle" onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}>Request access <ArrowRight size={13}/></button></div></article>
+        })}</div> : <EmptyInline icon={HardDrive} title={query ? 'No matching devices' : 'No looked-up devices yet'} description="Enter a device ID on Home to look it up. There is no simulated device discovery; trusted fingerprints are listed below."/>}
+        <TrustedDevices devices={openDesk.trustedDevices} loadingError={openDesk.trustedDevicesError} forget={openDesk.forgetTrustedDevice} refresh={() => void openDesk.refreshTrustedDevices().catch(reason => reportError(reason instanceof Error ? reason.message : 'Could not refresh trusted devices.'))} error={reportError}/>
       </>}
 
       {!openDesk.activeSession && page === 'Recent sessions' && <>
-        <Heading eyebrow="SESSION HISTORY" title="Recent sessions" description="Local history records session times and outcomes. It contains no screen, file, or clipboard content." action={<span className="history-count">{openDesk.recentSessions.length} saved locally</span>}/>
-        {openDesk.recentSessions.length > 0 ? <div className="history-list">{openDesk.recentSessions.map(session => <RecentSessionRow key={session.id} session={session}/>)}</div> : <EmptyState icon={Clock3} title="No sessions yet" description="A session appears here after a connection request is approved, rejected, or closed."/>}
+        <Heading eyebrow="SESSION HISTORY" title="Recent sessions" description="Local request/connection times and real outcomes. A request is not counted as a successful connection." action={<span className="history-count">{openDesk.recentSessions.length} in local history</span>}/>
+        {openDesk.recentSessions.length > 0 ? <div className="history-list">{openDesk.recentSessions.map(session => <RecentSessionRow key={session.id} session={session}/>)}</div> : <EmptyState icon={Clock3} title="No recent sessions" description="Session requests appear here when they end. The history contains no screen, file, or clipboard content."/>}
       </>}
 
       {!openDesk.activeSession && page === 'File transfer' && <>
@@ -195,26 +205,26 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Diagnostics' && <>
-        <Heading eyebrow="HEALTH & TROUBLESHOOTING" title="Diagnostics" description="Values below are read from local capabilities and live signaling state; unavailable measurements are not fabricated." action={<button className="subtle" onClick={() => { setRefresh(value => value + 1); void openDesk.refreshTrustedDevices() }}><RefreshCw size={13}/> Refresh</button>}/>
+        <Heading eyebrow="HEALTH & TROUBLESHOOTING" title="Diagnostics" description="Values below are read from local capabilities and live signaling state; unavailable measurements are not fabricated." action={<button className="subtle" onClick={() => void openDesk.refreshCapabilities().catch(error => reportError(error instanceof Error ? error.message : 'Could not refresh local capabilities.'))}><RefreshCw size={13}/> Refresh capabilities</button>}/>
         <div className="health-card"><Activity size={20}/><div><strong>{openDesk.serviceState === 'online' ? 'Signaling connection operational' : 'Signaling connection unavailable'}</strong><p>{openDesk.serviceError || `Configured server: ${openDesk.signalingUrl}`}</p></div><span className={openDesk.serviceState === 'online' ? 'good' : 'muted'}>● {statusLabel}</span></div>
         <div className="diag-list">
-          <Diag label="Application version" detail={openDesk.device?.appVersion || 'Loading'} state={openDesk.device?.appVersion || 'Loading'} good={!!openDesk.device}/>
-          <Diag label="Local device identity" detail={openDesk.device?.deviceId || 'Loading'} state={openDesk.device?.identityReady ? 'Secure key available' : 'Unavailable'} good={!!openDesk.device?.identityReady}/>
-          <Diag label="Credential storage" detail={openDesk.device?.secureStorageBackend || 'Unknown'} state={openDesk.device?.identityReady ? 'Ready' : 'Needs attention'} good={!!openDesk.device?.identityReady}/>
-          <Diag label="Signaling service" detail={openDesk.signalingUrl} state={openDesk.serviceState === 'online' ? 'Connected' : openDesk.serviceState} good={openDesk.serviceState === 'online'}/>
-          <Diag label="Screen capture" detail={openDesk.capabilities?.screenCapture || 'Loading capability status'} state={openDesk.capabilities ? 'Available with OS permission' : 'Loading'} good={!!openDesk.capabilities}/>
-          <Diag label="WebRTC / ICE" detail="Peer-to-peer connection uses Chromium WebRTC; STUN/TURN endpoints are provided by the signaling service." state="Not connected"/>
-          <Diag label="Remote input" detail={openDesk.capabilities?.remoteInput || 'Checking local input support'} state={openDesk.capabilities?.remoteInputSupported ? 'Available per session' : 'Unavailable on this device'} good={!!openDesk.capabilities?.remoteInputSupported}/>
-          <Diag label="Remote audio" detail={openDesk.capabilities?.audioCapture || 'Checking local audio support'} state={openDesk.capabilities?.audioCaptureSupported ? 'Available per session' : 'Unavailable on this device'} good={!!openDesk.capabilities?.audioCaptureSupported}/>
-          <Diag label="Clipboard" detail={openDesk.capabilities?.clipboard || 'Not implemented'} state="User-confirmed, one-time text only"/>
+          <Diag label="Application version" detail={openDesk.device?.appVersion || 'Unavailable'} state={openDesk.device?.appVersion || 'Unavailable'} good={!!openDesk.device}/>
+          <Diag label="Local device identity" detail={openDesk.device?.deviceId || (openDesk.device ? openDesk.device.identityMessage : 'Loading identity')} state={openDesk.device?.identityReady ? 'Secure key available' : openDesk.device ? 'Unavailable' : 'Loading'} good={!!openDesk.device?.identityReady}/>
+          <Diag label="Credential storage" detail={openDesk.device?.secureStorageBackend || 'Unavailable'} state={openDesk.device?.identityReady ? 'Ready' : openDesk.device ? 'Needs attention' : 'Loading'} good={!!openDesk.device?.identityReady}/>
+          <Diag label="Signaling service" detail={openDesk.signalingUrl || 'No server configured. Add one in Settings.'} state={statusLabel} good={openDesk.serviceState === 'online'}/>
+          <Diag label="Screen capture" detail={openDesk.capabilities?.screenCapture || openDesk.capabilitiesError || 'Loading capability status'} state={openDesk.capabilities ? 'OS-dependent; requires consent' : 'Unavailable'} />
+          <Diag label="WebRTC / ICE" detail="A session is needed to measure ICE connectivity. STUN/TURN endpoints come from the signaling service." state="No active peer connection"/>
+          <Diag label="Remote input" detail={openDesk.capabilities?.remoteInput || openDesk.capabilitiesError || 'Loading capability status'} state={openDesk.capabilities ? openDesk.capabilities.remoteInputSupported ? 'Available per session' : 'Unavailable on this device' : 'Unavailable'} good={!!openDesk.capabilities?.remoteInputSupported}/>
+          <Diag label="Remote audio" detail={openDesk.capabilities?.audioCapture || openDesk.capabilitiesError || 'Loading capability status'} state={openDesk.capabilities ? openDesk.capabilities.audioCaptureSupported ? 'Available per session' : 'Unavailable on this device' : 'Unavailable'} good={!!openDesk.capabilities?.audioCaptureSupported}/>
+          <Diag label="Clipboard" detail={openDesk.capabilities?.clipboard || openDesk.capabilitiesError || 'Loading capability status'} state={openDesk.capabilities ? 'Per-session consent' : 'Unavailable'}/>
           <Diag label="File transfer" detail="Encrypted data-channel chunks, user-selected destination, and SHA-256 verification. Directory transfers and resume are not implemented." state="Requires session permission"/>
         </div>
         <div className="diag-actions"><button className="subtle" onClick={() => void copyDiagnostics(openDesk.device, openDesk.signalingUrl, openDesk.serviceState, openDesk.serviceError, openDesk.capabilities, openDesk.activeSession?.connectionState, reportError, setNotice)}><Copy size={13}/> Copy sanitized diagnostics</button><small>Includes no keys, credentials, clipboard contents, screen data, or file data.</small></div>
-        <p className="diag-foot">Platform: {openDesk.device?.platform || 'detecting'} · Architecture: {openDesk.device?.architecture || 'detecting'} · Refresh {refresh}</p>
+        <p className="diag-foot">Platform: {openDesk.device?.platform || 'Unavailable'} · Architecture: {openDesk.device?.architecture || 'Unavailable'}</p>
       </>}
 
       {!openDesk.activeSession && page === 'Settings' && <SettingsPage state={openDesk} theme={theme} setTheme={setTheme} error={reportError} success={message => setNotice({ kind: 'success', message })}/>}
-      <footer><span>OpenDesk · v{openDesk.device?.appVersion || '0.1.0'}</span><span><LockKeyhole size={12}/> Consent-first · Unattended access is not available</span></footer>
+      <footer><span>OpenDesk · {openDesk.device?.appVersion ? `v${openDesk.device.appVersion}` : 'Version unavailable'}</span><span><LockKeyhole size={12}/> Consent-first · Unattended access is not available</span></footer>
     </main>
   </div>
 }
@@ -227,19 +237,22 @@ function Feature({ icon: Icon, title, text }: { icon: typeof ShieldCheck; title:
   return <article className="feature"><div><Icon size={18}/></div><strong>{title}</strong><p>{text}</p></article>
 }
 
-function IncomingRequests({ requests, busy, hasActiveSession, approve, reject, capabilities }: { requests: IncomingSessionRequest[]; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, allowRequested: boolean) => void; reject: (request: IncomingSessionRequest) => void; capabilities: DesktopCapabilities | null }) {
+function IncomingRequests({ requests, busy, hasActiveSession, approve, reject, capabilities }: { requests: IncomingSessionRequest[]; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, selected: SessionPermission[]) => void; reject: (request: IncomingSessionRequest) => void; capabilities: DesktopCapabilities | null }) {
   return <section className="incoming-section"><div className="incoming-heading"><Bell size={16}/><strong>Incoming session requests</strong><span>{requests.length}</span></div>{requests.map(request => <IncomingRequest key={request.session.id} request={request} busy={busy} hasActiveSession={hasActiveSession} approve={approve} reject={reject} capabilities={capabilities}/>)}</section>
 }
 
-function IncomingRequest({ request, busy, hasActiveSession, approve, reject, capabilities }: { request: IncomingSessionRequest; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, allowRequested: boolean) => void; reject: (request: IncomingSessionRequest) => void; capabilities: DesktopCapabilities | null }) {
-  const [grantExtras, setGrantExtras] = useState(false)
-  const extraLabels = request.session.requestedPermissions.filter(permission => permission !== 'view').map(permissionLabel).join(' and ')
-  const unavailable = request.session.requestedPermissions.flatMap(permission => {
-    if (permission === 'input' && capabilities && !capabilities.remoteInputSupported) return [`remote keyboard and mouse: ${capabilities.remoteInput}`]
-    if (permission === 'audio' && capabilities && !capabilities.audioCaptureSupported) return [`system audio: ${capabilities.audioCapture}`]
-    return []
-  })
-  return <article className="incoming-card"><div className="incoming-icon"><ShieldAlert size={19}/></div><div className="incoming-copy"><strong>{request.peer.name} wants to view this device</strong><small>{request.peer.id} · {request.peer.platform} · Only this device can approve.</small><div className="incoming-permissions"><LockKeyhole size={12}/> Requested: {request.session.requestedPermissions.map(permissionLabel).join(' · ')}</div>{unavailable.length > 0 && <small className="fingerprint-note">Not available on this device, so these will not be granted: {unavailable.join('; ')}</small>}<label className="grant-extra"><input type="checkbox" checked={grantExtras} onChange={event => setGrantExtras(event.target.checked)} disabled={!extraLabels}/> Grant requested extras ({extraLabels || 'none requested'})</label><small className="fingerprint-note">A first-time device key must be verified before approval. Screen sharing does not start until you separately choose a display. Remote control must be enabled on this device separately after sharing starts.</small></div><div className="incoming-actions"><button className="danger-outline" onClick={() => reject(request)} disabled={busy}>Reject</button><button className="primary" onClick={() => approve(request, grantExtras)} disabled={busy || hasActiveSession}><Check size={14}/> Approve view</button></div></article>
+function IncomingRequest({ request, busy, hasActiveSession, approve, reject, capabilities }: { request: IncomingSessionRequest; busy: boolean; hasActiveSession: boolean; approve: (request: IncomingSessionRequest, selected: SessionPermission[]) => void; reject: (request: IncomingSessionRequest) => void; capabilities: DesktopCapabilities | null }) {
+  const [selected, setSelected] = useState<SessionPermission[]>([])
+  const extras = request.session.requestedPermissions.filter(permission => permission !== 'view')
+  const limitation = (permission: SessionPermission): string | null => {
+    if (permission === 'input' && !capabilities?.remoteInputSupported) return capabilities?.remoteInput || 'Local input capability is unavailable.'
+    if (permission === 'audio' && !capabilities?.audioCaptureSupported) return capabilities?.audioCapture || 'Local audio capability is unavailable.'
+    return null
+  }
+  return <article className="incoming-card"><div className="incoming-icon"><ShieldAlert size={19}/></div><div className="incoming-copy"><strong>{request.peer.name} wants to view this device</strong><small>{request.peer.id} · {request.peer.platform} · Only this device can approve.</small><div className="incoming-permissions"><LockKeyhole size={12}/> Requested: {request.session.requestedPermissions.map(permissionLabel).join(' · ')}</div><div className="permission-choices"><strong>Screen viewing (required to approve)</strong>{extras.map(permission => {
+    const unavailable = limitation(permission)
+    return <label key={permission} className="grant-extra"><input type="checkbox" checked={selected.includes(permission)} disabled={busy || !!unavailable} onChange={event => setSelected(current => event.target.checked ? [...current, permission] : current.filter(value => value !== permission))}/> Grant {permissionLabel(permission)}{unavailable ? <small>Unavailable: {unavailable}</small> : null}</label>
+  })}</div><small className="fingerprint-note">Each extra is off by default. Verify a first-time fingerprint out of band. A native confirmation lists exactly what you grant; screen sharing requires a separate display choice. Remote control also requires a separate host action.</small></div><div className="incoming-actions"><button className="danger-outline" onClick={() => reject(request)} disabled={busy}>Reject</button><button className="primary" onClick={() => approve(request, selected)} disabled={busy || hasActiveSession}><Check size={14}/> Approve selected</button></div></article>
 }
 
 function EmptyInline({ icon: Icon, title, description }: { icon: typeof HardDrive; title: string; description: string }) {
@@ -250,12 +263,12 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof Clock3; t
   return <div className="empty-state"><div><Icon size={27}/></div><h2>{title}</h2><p>{description}</p></div>
 }
 
-function TrustedDevices({ devices, forget, refresh, error }: { devices: TrustedDevice[]; forget: (id: string) => Promise<boolean>; refresh: () => void; error: (message: string) => void }) {
-  return <section className="section trusted-section"><div className="section-head"><div><h2>Trusted device fingerprints</h2><p>Public-key pins are stored locally. A changed key blocks connection until you remove the old pin and verify the new fingerprint.</p></div><button className="subtle" onClick={refresh}><RefreshCw size={13}/> Refresh</button></div>{devices.length === 0 ? <div className="empty-inline compact"><ShieldCheck size={18}/><span>No device fingerprints are trusted yet. The first connection flow asks you to verify and trust one.</span></div> : <div className="trusted-list">{devices.map(device => <div className="trusted-row" key={device.id}><div className="trusted-icon"><LockKeyhole size={15}/></div><div><strong>{device.name}</strong><small>{device.id} · Trusted {new Date(device.trustedAt).toLocaleString()}</small><code>{device.fingerprint}</code></div><button className="subtle" onClick={() => void forget(device.id).catch(reason => error(reason instanceof Error ? reason.message : 'Could not remove device trust.'))}><Trash2 size={13}/> Forget</button></div>)}</div>}</section>
+function TrustedDevices({ devices, loadingError, forget, refresh, error }: { devices: TrustedDevice[]; loadingError: string; forget: (id: string) => Promise<boolean>; refresh: () => void; error: (message: string) => void }) {
+  return <section className="section trusted-section"><div className="section-head"><div><h2>Trusted device fingerprints</h2><p>Public-key pins are stored locally. A changed key blocks connection until you remove the old pin and verify the new fingerprint.</p></div><button className="subtle" onClick={refresh}><RefreshCw size={13}/> Refresh</button></div>{loadingError ? <div className="inline-warning"><ShieldAlert size={15}/><span>Unable to read local trust records: {loadingError}</span></div> : devices.length === 0 ? <div className="empty-inline compact"><ShieldCheck size={18}/><span>No device fingerprints are trusted yet. The first connection flow asks you to verify and trust one.</span></div> : <div className="trusted-list">{devices.map(device => <div className="trusted-row" key={device.id}><div className="trusted-icon"><LockKeyhole size={15}/></div><div><strong>{device.name}</strong><small>{device.id} · Trusted {new Date(device.trustedAt).toLocaleString()}</small><code>{device.fingerprint}</code></div><button className="subtle" onClick={() => void forget(device.id).catch(reason => error(reason instanceof Error ? reason.message : 'Could not remove device trust.'))}><Trash2 size={13}/> Forget</button></div>)}</div>}</section>
 }
 
 function RecentSessionRow({ session }: { session: RecentSession }) {
-  return <article className="recent-row"><div className="recent-icon"><Monitor size={17}/></div><div className="recent-main"><strong>{session.role === 'viewer' ? 'Connected to' : 'Hosted session with'} {session.peerName}</strong><small>{session.peerId} · {new Date(session.startedAt).toLocaleString()}</small></div><span className={`recent-result ${session.result === 'Connected' || session.result === 'Disconnected' ? 'result-good' : ''}`}>{session.result}</span><small className="recent-ended">Ended {new Date(session.endedAt).toLocaleTimeString()}{session.permissions ? ` · Approved: ${session.permissions.map(permissionLabel).join(', ')}` : ''}</small></article>
+  return <article className="recent-row"><div className="recent-icon"><Monitor size={17}/></div><div className="recent-main"><strong>{session.role === 'viewer' ? 'Requested access to' : 'Received request from'} {session.peerName}</strong><small>{session.peerId} · Requested {new Date(session.requestedAt).toLocaleString()}{session.connectedAt ? ` · WebRTC connected ${new Date(session.connectedAt).toLocaleString()}` : ''}</small></div><span className={`recent-result ${session.result === 'Disconnected' ? 'result-good' : ''}`}>{session.result}</span><small className="recent-ended">Ended locally {new Date(session.endedAt).toLocaleTimeString()}{session.permissions.length ? ` · Approved: ${session.permissions.map(permissionLabel).join(', ')}` : ''}</small></article>
 }
 
 function Diag({ label, detail, state, good = false }: { label: string; detail: string; state: string; good?: boolean }) {
@@ -294,7 +307,8 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
     try {
       const device = await state.resetDeviceIdentity()
       if (!device) return
-      success(`Identity reset completed. This device now has a new ID: ${device.deviceId}. Share it with peers and verify the new fingerprint before reconnecting.`)
+      if (device.identityReady && device.deviceId) success(`Identity reset completed. This device now has a new ID: ${device.deviceId}. Share it with peers and verify the new fingerprint before reconnecting.`)
+      else error('The old identity was revoked, but a new secure ID is unavailable. Unlock your OS credential store and restart before reconnecting.')
     } catch (reason) { error(reason instanceof Error ? reason.message : 'Could not revoke and reset the device identity.') }
   }
 
@@ -302,13 +316,13 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
     <Heading eyebrow="PREFERENCES & SECURITY" title="Settings" description="Settings that affect the real app are connected to the main process and signaling service."/>
     <div className="settings-card"><div className="settings-head"><h2>Appearance</h2><p>Local interface preference.</p></div><div className="setting"><div className="setting-icon"><Sun size={16}/></div><div className="setting-copy"><strong>Color theme</strong><small>Choose a dark or light interface.</small></div><div className="segmented"><button className={theme === 'dark' ? 'selected' : ''} onClick={() => setTheme('dark')}><Moon size={13}/> Dark</button><button className={theme === 'light' ? 'selected' : ''} onClick={() => setTheme('light')}><Sun size={13}/> Light</button></div></div></div>
 
-    <div className="settings-card"><div className="settings-head"><h2>Signaling service</h2><p>LAN development can use loopback. Remote servers must use HTTPS with a trusted certificate.</p></div><form className="settings-form" onSubmit={event => void saveURL(event)}><label htmlFor="signal-url">Signaling server origin</label><div className="settings-form-row"><input id="signal-url" value={urlInput} onChange={event => setUrlInput(event.target.value)} placeholder="https://remote.example.org" spellCheck={false}/><button className="primary" type="submit" disabled={savingURL || !urlInput.trim()}>{savingURL ? 'Saving…' : 'Save & reconnect'}</button></div><small>Default for local development: http://127.0.0.1:8787. Non-loopback HTTP is rejected by the desktop main process.</small></form></div>
+    <div className="settings-card"><div className="settings-head"><h2>Signaling service</h2><p>Choose your own server; no cloud account is required. For LAN, both computers must reach the same server over HTTPS with a trusted certificate.</p></div><form className="settings-form" onSubmit={event => void saveURL(event)}><label htmlFor="signal-url">Signaling server origin</label><div className="settings-form-row"><input id="signal-url" value={urlInput} onChange={event => setUrlInput(event.target.value)} placeholder="https://your-signaling-server" spellCheck={false}/><button className="primary" type="submit" disabled={savingURL || !urlInput.trim()}>{savingURL ? 'Saving…' : 'Save & reconnect'}</button></div><small>No server is configured by default. For same-computer development run the Go service and set http://127.0.0.1:8787. For LAN/Internet use a reachable HTTPS origin; non-loopback HTTP is rejected. See README → Self-hosting.</small></form></div>
 
-    <div className="settings-card"><div className="settings-head"><h2>Device name</h2><p>Displayed to other users. Your device ID remains stable.</p></div><form className="settings-form" onSubmit={event => void saveName(event)}><label htmlFor="device-name">Display name</label><div className="settings-form-row"><input id="device-name" value={nameInput} onChange={event => setNameInput(event.target.value)} maxLength={80}/><button className="subtle" type="submit" disabled={savingName || !nameInput.trim()}><UserRound size={13}/>{savingName ? 'Saving…' : 'Save name'}</button></div></form></div>
+    <div className="settings-card"><div className="settings-head"><h2>Device name</h2><p>Displayed to other users. Your device ID remains stable.</p></div><form className="settings-form" onSubmit={event => void saveName(event)}><label htmlFor="device-name">Display name</label><div className="settings-form-row"><input id="device-name" value={nameInput} onChange={event => setNameInput(event.target.value)} maxLength={80}/><button className="subtle" type="submit" disabled={savingName || !nameInput.trim() || state.serviceState !== 'online'} title={state.serviceState === 'online' ? undefined : 'Connect to the signaling server to rename this device.'}><Laptop size={13}/>{savingName ? 'Saving…' : 'Save name'}</button></div></form></div>
 
-    <div className="settings-card"><div className="settings-head"><h2>Privacy and session capabilities</h2><p>These controls reflect implemented behavior; unsupported features are not presented as active switches.</p></div><div className="setting"><div className="setting-icon"><Clipboard size={16}/></div><div className="setting-copy"><strong>Clipboard</strong><small>Manual, one-time text transfer only; requires session permission and local confirmation for each action.</small></div><span className="setting-status">Per-session consent</span></div><div className="setting"><div className="setting-icon"><Monitor size={16}/></div><div className="setting-copy"><strong>Screen capture</strong><small>Only after approval and a separate local display selection.</small></div><button className="subtle" onClick={() => void window.openDesk.openScreenCaptureSettings()}><ExternalLink size={13}/> OS permissions</button></div><div className="setting"><div className="setting-icon"><ShieldAlert size={16}/></div><div className="setting-copy"><strong>Unattended access</strong><small>Not implemented. No background access or silent persistence is enabled.</small></div><span className="setting-status unavailable">Unavailable</span></div></div>
+    <div className="settings-card"><div className="settings-head"><h2>Privacy and session capabilities</h2><p>These controls reflect implemented behavior; unsupported features are not presented as active switches.</p></div><div className="setting"><div className="setting-icon"><Clipboard size={16}/></div><div className="setting-copy"><strong>Clipboard</strong><small>Manual, one-time text transfer only; requires session permission and local confirmation for each action.</small></div><span className="setting-status">Per-session consent</span></div><div className="setting"><div className="setting-icon"><Monitor size={16}/></div><div className="setting-copy"><strong>Screen capture</strong><small>Only after approval and a separate local display selection.</small></div>{state.device?.platform === 'darwin' ? <button className="subtle" onClick={() => void window.openDesk.openScreenCaptureSettings().catch(reason => error(reason instanceof Error ? reason.message : 'Could not open macOS Screen Recording settings.'))}><ExternalLink size={13}/> macOS permissions</button> : <span className="setting-status">Configure in OS settings</span>}</div><div className="setting"><div className="setting-icon"><ShieldAlert size={16}/></div><div className="setting-copy"><strong>Unattended access</strong><small>Not implemented. No background access or silent persistence is enabled.</small></div><span className="setting-status unavailable">Unavailable</span></div></div>
 
-    <div className="settings-card"><div className="settings-head"><h2>Local identity</h2><p>Private Ed25519 identity key is encrypted with the operating-system credential store. Linux basic_text storage is refused.</p></div><div className="setting"><div className="setting-icon"><LockKeyhole size={16}/></div><div className="setting-copy"><strong>{state.device?.deviceId || 'Loading device ID'}</strong><small>{state.device?.secureStorageBackend || 'Unknown credential backend'} · {state.device?.identityReady ? 'Identity key available' : state.device?.identityMessage || 'Checking identity'}</small></div><span className={state.device?.identityReady ? 'good' : 'muted'}>{state.device?.identityReady ? '● Ready' : '● Blocked'}</span></div><div className="setting"><div className="setting-copy"><strong>Revoke and reset identity</strong><small>Closes active sessions, revokes this public key on the signaling service, and creates a new ID. Peers must verify the new fingerprint.</small></div><button className="danger-outline" onClick={() => void revokeIdentity()} disabled={!state.device?.identityReady || !!state.activeSession}>Revoke & reset</button></div></div>
+    <div className="settings-card"><div className="settings-head"><h2>Local identity</h2><p>Private Ed25519 identity key is encrypted with the operating-system credential store. Linux basic_text storage is refused.</p></div><div className="setting"><div className="setting-icon"><LockKeyhole size={16}/></div><div className="setting-copy"><strong>{state.device ? state.device.deviceId || 'Device ID unavailable' : 'Generating secure device identity…'}</strong><small>{state.device?.secureStorageBackend || 'Credential backend unavailable'} · {state.device?.identityReady ? 'Identity key available' : state.device?.identityMessage || 'Checking identity'}</small></div><span className={state.device?.identityReady ? 'good' : 'muted'}>{state.device?.identityReady ? '● Ready' : state.device ? '● Blocked' : '● Loading'}</span></div><div className="setting"><div className="setting-copy"><strong>Revoke and reset identity</strong><small>Closes active sessions, revokes this public key on the signaling service, and creates a new ID. Peers must verify the new fingerprint.</small></div><button className="danger-outline" onClick={() => void revokeIdentity()} disabled={!state.device?.identityReady || !!state.activeSession}>Revoke & reset</button></div></div>
 
     <div className="warning"><LockKeyhole size={17}/><div><strong>Remote input and audio are limited.</strong><p>Keyboard and mouse control works only after the approved session starts sharing and the host enables it. It needs an X11 Linux session, Windows, or macOS with Accessibility access; Wayland is not supported. System audio is Windows-only. Unattended access is not available.</p></div></div>
   </>
@@ -319,12 +333,12 @@ async function copyDiagnostics(device: ReturnType<typeof useOpenDesk>['device'],
     'OpenDesk sanitized diagnostics',
     `Version: ${device?.appVersion || 'unknown'}`,
     `Platform: ${device?.platform || 'unknown'} ${device?.architecture || ''}`,
-    `Identity ready: ${device?.identityReady ? 'yes' : 'no'}`,
-    `Secure storage: ${device?.secureStorageBackend || 'unknown'}`,
-    `Signaling endpoint: ${signalingUrl}`,
+    `Identity ready: ${device ? device.identityReady ? 'yes' : 'no' : 'unavailable'}`,
+    `Secure storage: ${device?.secureStorageBackend || 'unavailable'}`,
+    `Signaling endpoint: ${signalingUrl || 'not configured'}`,
     `Signaling state: ${serviceState}`,
-    `Signaling error: ${serviceError || 'none'}`,
-    `WebRTC state: ${connectionState || 'not connected'}`,
+    `Signaling error: ${serviceError || 'none reported'}`,
+    `WebRTC state: ${connectionState || 'no active peer connection'}`,
     `Screen capture: ${capabilities?.screenCapture || 'unknown'}`,
     `Remote input: ${capabilities?.remoteInput || 'unknown'}`,
     `Audio: ${capabilities?.audioCapture || 'unknown'}`

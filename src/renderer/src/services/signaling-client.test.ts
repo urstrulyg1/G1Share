@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DeviceInfo, DeviceSummary, RemoteSession, SignalingRequest } from '../../../shared/types'
 import { SignalingClient } from './signaling-client'
 
-const local: DeviceInfo = {
+const local: DeviceInfo & { deviceId: string } = {
   deviceId: '11223344-55667788-99AABBCC-DDEEFF00',
   deviceName: 'Test workstation',
   appVersion: '0.1.0',

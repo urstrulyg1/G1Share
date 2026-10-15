@@ -4,7 +4,7 @@ Status: implementation prototype, not an independent security audit. This docume
 
 ## Scope and assets
 
-Protected assets include device private keys, trusted peer pins, screen/audio/input data, transferred files, clipboard contents, local session metadata, the signaling registry, TURN credentials, and release integrity. Audio and remote input are not implemented. This threat model covers Electron, the signaling API, WebRTC setup, file/clipboard features, and self-hosting assumptions.
+Protected assets include device private keys, trusted peer pins, screen/audio/input data, transferred files, clipboard contents, local session metadata, the signaling registry, TURN credentials, and release integrity. Remote input and Windows system audio have implementation paths but are not verified on real desktops. This threat model covers Electron, the signaling API, WebRTC setup, file/clipboard features, and self-hosting assumptions.
 
 ## Actors and trust boundaries
 
@@ -22,8 +22,8 @@ Protected assets include device private keys, trusted peer pins, screen/audio/in
 - Narrow typed preload API; privileged functions validate IPC values and transfer tokens. Generic signaling IPC cannot accept or revoke a session; main-process approval re-fetches the pending request, checks the peer identity, and presents an OS-native confirmation listing the exact grants.
 - Ed25519 device key protected with OS `safeStorage`; Linux basic-text/unknown backend is refused. Device ID is derived from the public key and does not authorize access.
 - Short-lived single-use signed API challenges; server binds registered ID to key and rejects key substitution, replay, invalid permissions, unauthorized session roles, and invalid signed WebRTC signals.
-- First-use peer fingerprint warning, local key pinning, and changed-key refusal. User should compare fingerprints out of band.
-- Explicit remote approval per session (with a main-process native confirmation of the exact permission set), explicit local display-source selection, optional file/clipboard permission selection, per-file destination approval, and native sender/receiver clipboard confirmations.
+- First-use peer fingerprint warning, local key pinning, revocable local trust, and changed-key refusal. A malformed trust store fails closed instead of being treated as empty. Users should compare fingerprints out of band.
+- Explicit remote approval per session (with a main-process native confirmation of the exact permission set), explicit local display-source selection, optional file/clipboard/input/audio grants selected independently and off by default, per-file destination approval, and native sender/receiver clipboard confirmations. Unattended access is disabled.
 - WebRTC DTLS-SRTP; bounded JSON/SDP/signaling bodies, response streaming limits, data-channel buffers/chunks, sequence numbers, file sizes, clipboard text, event queues, service headers, timeouts, and rate limits.
 - Incoming files use per-transfer serialization, hidden private temporary files, byte-count/SHA-256 checks, exclusive hard-link publication, and no-overwrite semantics. Disconnect/cancel cleanup reports failures where possible.
 - HTTPS required for non-loopback app signaling endpoints. Go service binds to loopback by default and sample deployment places it behind Caddy. Forwarded IP headers are trusted only from explicitly configured proxy addresses.

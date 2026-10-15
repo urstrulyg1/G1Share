@@ -8,6 +8,7 @@ export class SignalingClient {
   constructor(private readonly bridge: SignalingBridge, private readonly localDevice: DeviceInfo) {}
 
   async register(): Promise<DeviceSummary> {
+    if (!this.localDevice.identityReady || !this.localDevice.deviceId) throw new Error('A secure local device identity is required to register.')
     return await this.call<DeviceSummary>('POST', '/api/v1/devices/register', {
       id: this.localDevice.deviceId,
       name: this.localDevice.deviceName,
@@ -25,10 +26,6 @@ export class SignalingClient {
     if (!isValidDeviceId(id)) throw new TypeError('Enter a valid OpenDesk device ID.')
     if (id === this.localDevice.deviceId) throw new TypeError('You cannot connect to this device itself.')
     return await this.call<DeviceSummary>('GET', `/api/v1/devices/${id}`)
-  }
-
-  async renameDevice(name: string): Promise<DeviceSummary> {
-    return await this.call<DeviceSummary>('POST', '/api/v1/devices/rename', { name })
   }
 
   async createSession(toDeviceId: string, requestedPermissions: SessionPermission[]): Promise<{ session: RemoteSession; peer: DeviceSummary }> {

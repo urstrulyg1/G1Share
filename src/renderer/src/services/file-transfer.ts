@@ -215,8 +215,9 @@ export class FileTransferManager {
 
   private async sendFile(file: File): Promise<void> {
     if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_FILE_BYTES) throw new Error('Each file must be no larger than 1 GiB.')
+    if (!file.name.trim()) throw new Error('The selected file has no name. Choose a named file to transfer.')
     const id = randomTransferId()
-    const record: TransferRecord = { id, name: file.name.slice(0, 240) || 'unnamed-file', size: file.size, transferred: 0, direction: 'sending', status: 'waiting' }
+    const record: TransferRecord = { id, name: file.name.slice(0, 240), size: file.size, transferred: 0, direction: 'sending', status: 'waiting' }
     const transfer: OutgoingTransfer = {
       record, file, hash: sha256.create(), transferred: 0, nextSequence: 0,
       accepted: deferred<boolean>(), verified: deferred<boolean>(), ack: null, reader: null, cancelled: false

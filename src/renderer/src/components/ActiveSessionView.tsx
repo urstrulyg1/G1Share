@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeftRight, Clipboard, File, FileUp, Fullscreen, LockKeyhole, Monitor, MonitorUp, MousePointer2, ShieldAlert, Signal, Square, X } from 'lucide-react'
 import type { DeviceInfo, SignalingEvent } from '../../../shared/types'
 import type { ActiveSession } from '../hooks/useOpenDesk'
@@ -77,7 +77,9 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   const canTransferFiles = permissions.includes('files')
   const canShareClipboard = permissions.includes('clipboard')
   const isViewer = active.role === 'viewer'
-  const sessionLabel = useMemo(() => isViewer ? 'Viewing remote display' : 'Sharing this display', [isViewer])
+  const sessionLabel = isViewer
+    ? active.session.status === 'pending' ? 'Awaiting remote approval' : remoteStream && active.connectionState === 'connected' ? 'Viewing live display' : 'Waiting for remote display'
+    : shareStarted ? active.connectionState === 'connected' ? 'Sharing selected display' : 'Capturing selected display · peer not connected' : 'Screen not selected'
 
   const upsertTransfer = useCallback((transfer: TransferRecord) => {
     setTransfers(current => [transfer, ...current.filter(item => item.id !== transfer.id)].slice(0, 20))
@@ -167,7 +169,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
     const forwarder = new ViewerInputForwarder({ element, send: message => controller.sendRemoteInput(message) })
     forwarder.attach()
     return () => forwarder.detach()
-  }, [controller, active.role, remoteControl, remoteStream])
+  }, [controller, active.role, remoteControl, remoteStream, active.connectionState])
 
   useEffect(() => {
     for (const event of signals) {
@@ -184,7 +186,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = remoteStream
-  }, [remoteStream])
+  }, [remoteStream, active.connectionState])
 
   // Presentation timing is sampled on the same cadence as the WebRTC statistics, never per frame in React.
   useEffect(() => {
@@ -198,7 +200,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
       probe.stop()
       setPresentation(null)
     }
-  }, [remoteStream])
+  }, [remoteStream, active.connectionState])
   useEffect(() => {
     if (localVideoRef.current) localVideoRef.current.srcObject = localStream
   }, [localStream])
@@ -213,7 +215,8 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
 
   const startSharing = async () => {
     try {
-      await controllerRef.current?.startScreenShare()
+      if (!controllerRef.current) throw new Error('Secure transport is not prepared yet.')
+      await controllerRef.current.startScreenShare()
       setShareStarted(true)
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Screen capture failed.')
@@ -221,8 +224,11 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   }
 
   const chooseQuality = (profile: QualityProfileId) => {
+    if (!controllerRef.current?.requestQualityProfile(profile)) {
+      onError('The peer control channel is not connected. Try again after WebRTC connects.')
+      return
+    }
     setQualityChoice(profile)
-    controllerRef.current?.requestQualityProfile(profile)
   }
 
   const selectFiles = () => fileInputRef.current?.click()
@@ -230,8 +236,10 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
     if (!canTransferFiles) return
     const items = Array.from(files)
     if (items.length === 0) return
-    try { await transferManagerRef.current?.sendFiles(items) }
-    catch (error) { onError(error instanceof Error ? error.message : 'File transfer failed.') }
+    try {
+      if (!transferManagerRef.current) throw new Error('The secure file-transfer channel is not connected.')
+      await transferManagerRef.current.sendFiles(items)
+    } catch (error) { onError(error instanceof Error ? error.message : 'File transfer failed.') }
   }
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -257,7 +265,8 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   const enableRemoteControl = async () => {
     setRemoteControlBusy(true)
     try {
-      await controllerRef.current?.enableRemoteControl()
+      if (!controllerRef.current) throw new Error('The approved session is not ready for remote control.')
+      await controllerRef.current.enableRemoteControl()
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Remote control could not be enabled.')
     } finally {
@@ -268,7 +277,8 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   const revokeRemoteControl = async () => {
     setRemoteControlBusy(true)
     try {
-      await controllerRef.current?.revokeRemoteControl('The local user stopped remote control.')
+      if (!controllerRef.current) throw new Error('Remote control is not active.')
+      await controllerRef.current.revokeRemoteControl('The local user stopped remote control.')
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Remote control could not be stopped.')
     } finally {
@@ -286,6 +296,9 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
   }
 
   const connectionState = active.session.status === 'pending' && isViewer ? 'connecting' : active.connectionState
+  // Statistics belong to a currently connected transport. Do not keep old numbers during a failure/reconnect.
+  const liveMetrics: SessionMetrics = connectionState === 'connected' ? metrics : {}
+  const livePresentation = connectionState === 'connected' ? presentation : null
   const sharingPermissionLabels = permissions.map(permissionLabel).join(' · ')
   const remoteControlMessage = remoteControlMessageFor(active.role, remoteControl, remoteControlReason)
 
@@ -299,7 +312,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
       <button className="danger-outline" onClick={() => void disconnect()} disabled={stopping}><Square size={13}/> Disconnect</button>
     </div>
 
-    {active.session.status === 'pending' && isViewer && <div className="session-message pending-message"><LockKeyhole size={18}/><div><strong>Waiting for local approval</strong><p>The remote user must approve this request before screen sharing begins.</p></div></div>}
+    {active.session.status === 'pending' && isViewer && <div className="session-message pending-message"><LockKeyhole size={18}/><div><strong>Waiting for remote approval</strong><p>The remote user must approve this request before screen sharing begins.</p></div></div>}
     {active.session.status === 'accepted' && <div className="permission-strip"><ShieldAlert size={15}/><span>Session permissions approved: {sharingPermissionLabels || 'Screen view only'}</span>{!canRemoteControl && <span className="view-only-label">View-only · remote keyboard and mouse were not approved</span>}</div>}
     {canRemoteControl && active.session.status === 'accepted' && (active.role === 'viewer' || shareStarted) && <div className={`remote-control-bar state-${remoteControl}`} role="status">
       <MousePointer2 size={15}/>
@@ -310,21 +323,23 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
 
     <div className="remote-view-layout">
       <div className={`remote-stage ${fitMode === 'actual' ? 'actual-size' : ''}`}>
-        {remoteStream ? <video ref={videoRef} autoPlay playsInline className="remote-video" aria-label={`Remote display from ${active.peer.name}`}/> : <div className="remote-placeholder">
+        {remoteStream && connectionState === 'connected' ? <video ref={videoRef} autoPlay playsInline className="remote-video" aria-label={`Remote display from ${active.peer.name}`}/> : <div className="remote-placeholder">
           <div className="placeholder-icon">{active.role === 'host' ? <MonitorUp size={28}/> : <Signal size={27}/>}</div>
-          <strong>{active.session.status === 'pending' ? 'Approval is required' : active.role === 'host' && !shareStarted ? 'Your screen is not being shared' : connectionState === 'failed' ? 'Connection could not be established' : 'Waiting for the remote display'}</strong>
-          <p>{active.role === 'host' && active.session.status === 'accepted'
+          <strong>{active.session.status === 'pending' ? 'Approval is required' : connectionState === 'failed' ? 'Connection failed' : connectionState === 'degraded' || connectionState === 'reconnecting' ? 'Connection interrupted' : active.role === 'host' && !shareStarted ? 'Your screen is not being shared' : 'Waiting for the remote display'}</strong>
+          <p>{connectionState === 'failed' || connectionState === 'degraded' || connectionState === 'reconnecting'
+            ? 'No live display is available. Check ICE/STUN/TURN and both devices’ connectivity; close the session if it does not recover.'
+            : active.role === 'host' && active.session.status === 'accepted'
             ? 'Choose a screen to share. OpenDesk shows a native source-selection dialog and captures only after your confirmation.'
             : active.role === 'viewer' && active.session.status === 'accepted'
               ? 'The remote user must start screen sharing on their computer. You will see the live display here after WebRTC connects.'
               : active.session.status === 'pending'
                 ? 'No screen or input data is available until the remote user approves this session.'
                 : 'Check the server, ICE/STUN/TURN configuration, and both devices’ network connectivity.'}</p>
-          {active.role === 'host' && active.session.status === 'accepted' && !shareStarted && <button className="primary" onClick={() => void startSharing()} disabled={!prepared}><MonitorUp size={15}/>{prepared ? 'Choose screen & share' : 'Preparing secure transport…'}</button>}
+          {active.role === 'host' && active.session.status === 'accepted' && !shareStarted && <button className="primary" onClick={() => void startSharing()} disabled={!prepared || connectionState === 'failed'}><MonitorUp size={15}/>{prepared ? 'Choose screen & share' : 'Preparing secure transport…'}</button>}
           {connectionState === 'failed' && <button className="subtle" onClick={() => void disconnect('Connection failed')}><X size={13}/> Close session</button>}
         </div>}
-        {localStream && active.role === 'host' && <div className="local-preview"><video ref={localVideoRef} autoPlay playsInline muted aria-label="Local screen-share preview"/><span>Sharing this display</span></div>}
-        {remoteStream && <div className="view-controls">
+        {localStream && active.role === 'host' && <div className="local-preview"><video ref={localVideoRef} autoPlay playsInline muted aria-label="Local screen-share preview"/><span>{connectionState === 'connected' ? 'Sharing this display' : 'Selected display · peer not connected'}</span></div>}
+        {remoteStream && connectionState === 'connected' && <div className="view-controls">
           <button className="subtle" onClick={() => setFitMode(mode => mode === 'fit' ? 'actual' : 'fit')} title={fitMode === 'fit' ? 'Show actual size' : 'Fit to window'}>{fitMode === 'fit' ? 'Fit' : 'Actual size'}</button>
           <button className="subtle icon-only" aria-label="Toggle fullscreen" onClick={() => void enterFullscreen()}><Fullscreen size={15}/></button>
         </div>}
@@ -335,18 +350,18 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
         <div className="session-detail-card">
           <div className="detail-heading"><Signal size={15}/><strong>Connection quality</strong></div>
           <div className="metric-grid">
-            <Metric label="Frame rate" value={metrics.framesPerSecond !== undefined ? `${metrics.framesPerSecond.toFixed(1)} fps` : '—'}/>
-            <Metric label="Resolution" value={metrics.width && metrics.height ? `${metrics.width} × ${metrics.height}` : '—'}/>
-            <Metric label="Video bitrate" value={metrics.bitrateKbps !== undefined ? `${metrics.bitrateKbps.toFixed(0)} kb/s` : '—'}/>
-            <Metric label="Round trip" value={metrics.roundTripTimeMs !== undefined ? `${metrics.roundTripTimeMs.toFixed(0)} ms` : '—'}/>
-            <Metric label="Packet loss" value={metrics.packetLossPercent !== undefined ? `${metrics.packetLossPercent.toFixed(1)}%` : '—'}/>
-            <Metric label="Transport" value={metrics.transport || 'ICE negotiating'}/>
-            <Metric label="Jitter buffer" value={metrics.jitterBufferMs !== undefined ? `${metrics.jitterBufferMs.toFixed(0)} ms` : '—'}/>
-            <Metric label="Decode" value={metrics.decodeMs !== undefined ? `${metrics.decodeMs.toFixed(1)} ms/frame` : '—'}/>
-            <Metric label="Capture to screen (p50)" value={presentation?.captureAgeMs ? `${presentation.captureAgeMs.p50.toFixed(0)} ms` : '—'}/>
-            <Metric label="Capture to screen (p95)" value={presentation?.captureAgeMs ? `${presentation.captureAgeMs.p95.toFixed(0)} ms` : '—'}/>
-            <Metric label="Dropped frames" value={presentation?.droppedFrames !== undefined && presentation?.droppedFrames !== null ? String(presentation.droppedFrames) : metrics.droppedFrames !== undefined ? String(metrics.droppedFrames) : '—'}/>
-            <Metric label="Encode (host)" value={metrics.encodeMs !== undefined ? `${metrics.encodeMs.toFixed(1)} ms/frame` : '—'}/>
+            <Metric label="Frame rate" value={liveMetrics.framesPerSecond !== undefined ? `${liveMetrics.framesPerSecond.toFixed(1)} fps` : 'Unavailable'}/>
+            <Metric label="Resolution" value={liveMetrics.width && liveMetrics.height ? `${liveMetrics.width} × ${liveMetrics.height}` : 'Unavailable'}/>
+            <Metric label="Video bitrate" value={liveMetrics.bitrateKbps !== undefined ? `${liveMetrics.bitrateKbps.toFixed(0)} kb/s` : 'Unavailable'}/>
+            <Metric label="Round trip" value={liveMetrics.roundTripTimeMs !== undefined ? `${liveMetrics.roundTripTimeMs.toFixed(0)} ms` : 'Unavailable'}/>
+            <Metric label="Packet loss" value={liveMetrics.packetLossPercent !== undefined ? `${liveMetrics.packetLossPercent.toFixed(1)}%` : 'Unavailable'}/>
+            <Metric label="Transport" value={liveMetrics.transport || 'Unavailable'}/>
+            <Metric label="Jitter buffer" value={liveMetrics.jitterBufferMs !== undefined ? `${liveMetrics.jitterBufferMs.toFixed(0)} ms` : 'Unavailable'}/>
+            <Metric label="Decode" value={liveMetrics.decodeMs !== undefined ? `${liveMetrics.decodeMs.toFixed(1)} ms/frame` : 'Unavailable'}/>
+            <Metric label="Capture to screen (p50)" value={livePresentation?.captureAgeMs ? `${livePresentation.captureAgeMs.p50.toFixed(0)} ms` : 'Unavailable'}/>
+            <Metric label="Capture to screen (p95)" value={livePresentation?.captureAgeMs ? `${livePresentation.captureAgeMs.p95.toFixed(0)} ms` : 'Unavailable'}/>
+            <Metric label="Dropped frames" value={livePresentation?.droppedFrames !== undefined && livePresentation?.droppedFrames !== null ? String(livePresentation.droppedFrames) : liveMetrics.droppedFrames !== undefined ? String(liveMetrics.droppedFrames) : 'Unavailable'}/>
+            <Metric label="Encode (host)" value={liveMetrics.encodeMs !== undefined ? `${liveMetrics.encodeMs.toFixed(1)} ms/frame` : 'Unavailable'}/>
           </div>
           <div className="security-line quality-line">
             <span>Quality profile</span>
@@ -354,15 +369,15 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
               {QUALITY_PROFILE_IDS.map(id => <option key={id} value={id}>{id === 'auto' ? 'Automatic' : QUALITY_PROFILES[id].label}</option>)}
             </select>
           </div>
-          <small className="metric-foot">{effectiveQuality ? `Sender uses ${QUALITY_PROFILES[effectiveQuality.profile].label}${effectiveQuality.mode === 'auto' ? ' (adapting automatically)' : ''}.` : 'Sender profile appears once the session is connected.'}</small>
+          <small className="metric-foot">{effectiveQuality ? `Sender target: ${QUALITY_PROFILES[effectiveQuality.profile].label}${effectiveQuality.mode === 'auto' ? ' (adapting automatically)' : ''}. Actual quality depends on the connection.` : 'Sender profile is unavailable until the host reports it.'}</small>
           <small className="metric-foot">Values are measured from WebRTC statistics and frame callbacks. Capture-to-screen compares sender and receiver clocks and is an estimate across machines.</small>
         </div>
 
         <div className="session-detail-card">
           <div className="detail-heading"><LockKeyhole size={15}/><strong>Session security</strong></div>
           <div className="security-line"><span>Device identity</span><code>{active.peer.id}</code></div>
-          <div className="security-line"><span>Approval</span><strong>{active.session.status === 'accepted' ? 'Approved locally' : 'Pending'}</strong></div>
-          <div className="security-line"><span>Transport</span><strong>WebRTC DTLS-SRTP</strong></div>
+          <div className="security-line"><span>Approval</span><strong>{active.session.status === 'accepted' ? active.role === 'host' ? 'Approved on this device' : 'Approved on host' : 'Pending'}</strong></div>
+          <div className="security-line"><span>Protocol</span><strong>WebRTC DTLS-SRTP (after connection)</strong></div>
           <p className="detail-note">WebRTC media and data channels are encrypted. The signaling service carries setup messages, not screen video.</p>
         </div>
 
