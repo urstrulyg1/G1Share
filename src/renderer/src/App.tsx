@@ -37,7 +37,7 @@ export default function App() {
   const [requestAudio, setRequestAudio] = useState(false)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refresh, setRefresh] = useState(0)
+  const [refreshingTrustedDevices, setRefreshingTrustedDevices] = useState(false)
 
   useEffect(() => { localStorage.setItem('opendesk.theme', theme) }, [theme])
   useEffect(() => {
@@ -46,6 +46,19 @@ export default function App() {
   }, [openDesk.activeSession, page])
 
   const reportError = useCallback((message: string) => setNotice({ kind: 'error', message }), [])
+
+  async function refreshTrustedDevices() {
+    if (refreshingTrustedDevices) return
+    setRefreshingTrustedDevices(true)
+    try {
+      await openDesk.refreshTrustedDevices()
+      setNotice({ kind: 'success', message: 'Trusted-device list refreshed.' })
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : 'Could not refresh trusted devices.')
+    } finally {
+      setRefreshingTrustedDevices(false)
+    }
+  }
 
   async function copyId() {
     if (!openDesk.device) return
@@ -141,7 +154,7 @@ export default function App() {
     <main className="main">
       <header className="topbar">
         <div className="crumb">Workspace <span>/</span> <strong>{currentPage}</strong></div>
-        <div className="top-actions"><span className={`status-pill status-${openDesk.serviceState}`}><i/>{statusLabel}</span><button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button><button className="icon-button" aria-label="Diagnostics" onClick={() => setPage('Diagnostics')}><CircleHelp size={16}/></button></div>
+        <div className="top-actions"><span className={`status-pill status-${openDesk.serviceState}`} role="status" aria-live="polite"><i/>{statusLabel}</span><button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button><button className="icon-button" aria-label="Diagnostics" onClick={() => setPage('Diagnostics')}><CircleHelp size={16}/></button></div>
       </header>
 
       {notice && <div className={`notice notice-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live={notice.kind === 'error' ? 'assertive' : 'polite'}><span>{notice.kind === 'success' ? <Check size={15}/> : notice.kind === 'error' ? <X size={15}/> : <CircleHelp size={15}/>}</span><p>{notice.message}</p><button aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14}/></button></div>}
@@ -205,10 +218,10 @@ export default function App() {
         </section>
       </>}
       {!openDesk.activeSession && page === 'Devices' && <>
-        <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices are located by ID. Trust fingerprints before connecting; every remote session still requires approval." action={<button className="subtle" onClick={() => { void openDesk.refreshTrustedDevices(); setRefresh(value => value + 1) }}><RefreshCw size={13}/> Refresh</button>}/>
+        <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices are located by ID. Trust fingerprints before connecting; every remote session still requires approval." action={<button className="subtle" onClick={() => void refreshTrustedDevices()} disabled={refreshingTrustedDevices}><RefreshCw size={13}/>{refreshingTrustedDevices ? 'Refreshing…' : 'Refresh trusted devices'}</button>}/>
         <div className="search"><Search size={15}/><label className="sr-only" htmlFor="device-search">Search known devices</label><input id="device-search" placeholder="Search known devices" value={query} onChange={event => setQuery(event.target.value)}/></div>
         {filteredDevices.length > 0 ? <div className="device-list">{filteredDevices.map(device => <article className="device-card" key={device.id}><div className="device-icon"><Monitor size={22}/></div><div className="device-main"><strong>{device.name}<em>{device.platform}</em></strong><small>{device.appVersion} · {device.online ? 'Online at last lookup' : 'Status from last lookup may be stale'}</small><div className="id-row"><code>{device.id}</code></div></div><div className="device-actions"><span className={device.online ? 'online-label' : 'offline-label'}><i/>{device.online ? 'Online' : 'Last seen offline'}</span><button className="subtle" onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}>Request access <ArrowRight size={13}/></button></div></article>)}</div> : <EmptyInline icon={HardDrive} title={query ? 'No matching devices' : 'No discovered devices yet'} description="Look up a device by its ID from the Home screen. The list is local and contains no access credentials."/>}
-        <TrustedDevices devices={openDesk.trustedDevices} forget={openDesk.forgetTrustedDevice} refresh={() => void openDesk.refreshTrustedDevices()} error={reportError}/>
+        <TrustedDevices devices={openDesk.trustedDevices} forget={openDesk.forgetTrustedDevice} refresh={() => void refreshTrustedDevices()} error={reportError}/>
       </>}
 
       {!openDesk.activeSession && page === 'Recent sessions' && <>
@@ -227,7 +240,7 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Diagnostics' && <>
-        <Heading eyebrow="HEALTH & TROUBLESHOOTING" title="Diagnostics" description="Values below are read from local capabilities and live signaling state; unavailable measurements are not fabricated." action={<button className="subtle" onClick={() => { setRefresh(value => value + 1); void openDesk.refreshTrustedDevices() }}><RefreshCw size={13}/> Refresh</button>}/>
+        <Heading eyebrow="HEALTH & TROUBLESHOOTING" title="Diagnostics" description="Values below are read from local capabilities and live signaling state; unavailable measurements are not fabricated." action={<button className="subtle" onClick={() => void refreshTrustedDevices()} disabled={refreshingTrustedDevices}><RefreshCw size={13}/>{refreshingTrustedDevices ? 'Refreshing…' : 'Refresh trusted devices'}</button>}/>
         <div className="health-card"><Activity size={20}/><div><strong>{openDesk.serviceState === 'online' ? 'Signaling connection operational' : 'Signaling connection unavailable'}</strong><p>{openDesk.serviceError || `Configured server: ${openDesk.signalingUrl}`}</p></div><span className={openDesk.serviceState === 'online' ? 'good' : 'muted'}>● {statusLabel}</span></div>
         <div className="diag-list">
           <Diag label="Application version" detail={openDesk.device?.appVersion || 'Loading'} state={openDesk.device?.appVersion || 'Loading'} good={!!openDesk.device}/>
