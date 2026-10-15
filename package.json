@@ -61,9 +61,16 @@
         "AppImage",
         "deb"
       ],
+      "artifactName": "${name}_x64.${ext}",
       "category": "Network",
       "synopsis": "Consent-based remote desktop",
       "maintainer": "OpenDesk contributors"
+    },
+    "appImage": {
+      "artifactName": "${name}_x64.${ext}"
+    },
+    "deb": {
+      "artifactName": "${name}_x64.${ext}"
     },
     "mac": {
       "target": [

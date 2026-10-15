@@ -75,25 +75,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: Linux AppImage/deb (x64)
+          - platform: Linux AppImage and deb (x64)
             os: ubuntu-latest
             build_cmd: npm run dist:linux
-            artifact: g1viewer-linux
-            artifact_glob: |
-              release/*.AppImage
-              release/*.deb
           - platform: Windows NSIS .exe (x64, arm64)
             os: windows-latest
             build_cmd: npm run dist:win
-            artifact: g1viewer-windows
-            artifact_glob: |
-              release/*.exe
           - platform: macOS DMG (x64, arm64)
             os: macos-latest
             build_cmd: npm run dist:mac
-            artifact: g1viewer-macos
-            artifact_glob: |
-              release/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -105,16 +95,71 @@ jobs:
         run: npm ci
       - name: Build unsigned installer targets (${{ matrix.platform }})
         run: ${{ matrix.build_cmd }}
-      - name: Verify generated package artifacts
+      - name: Normalize package filenames and clean blockmaps
         shell: bash
         run: |
-          echo "=== Generated distribution packages in release/ ==="
+          rm -f release/*.blockmap* release/*.yml* release/*.yaml*
+          if [ -f release/g1viewer_x86_64.AppImage ]; then
+            mv release/g1viewer_x86_64.AppImage release/g1viewer_x64.AppImage
+          fi
+          if [ -f release/g1viewer_amd64.deb ]; then
+            mv release/g1viewer_amd64.deb release/g1viewer_x64.deb
+          fi
+          echo "=== Verified standalone distribution packages in release/ ==="
           ls -la release/
-      - name: Upload package artifacts
+
+      # Upload each standalone artifact separately (not bundled into multi-package zips)
+      - name: Upload g1viewer_x64.AppImage
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact_glob }}
+          name: g1viewer_x64.AppImage
+          path: release/g1viewer_x64.AppImage
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload g1viewer_x64.deb
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1viewer_x64.deb
+          path: release/g1viewer_x64.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload g1viewer_x64.exe
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1viewer_x64.exe
+          path: release/g1viewer_x64.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload g1viewer_arm64.exe
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1viewer_arm64.exe
+          path: release/g1viewer_arm64.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload g1viewer_arm64.dmg
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1viewer_arm64.dmg
+          path: release/g1viewer_arm64.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload g1viewer_x64.dmg
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1viewer_x64.dmg
+          path: release/g1viewer_x64.dmg
           if-no-files-found: error
           retention-days: 14
 

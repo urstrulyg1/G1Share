@@ -77,9 +77,16 @@ jobs:
         run: npm ci
       - name: Build ${{ matrix.platform }}
         run: ${{ matrix.build_cmd }}
-      - name: Verify generated package artifacts
+      - name: Normalize package filenames and clean blockmaps
         shell: bash
         run: |
+          rm -f release/*.blockmap* release/*.yml* release/*.yaml*
+          if [ -f release/g1viewer_x86_64.AppImage ]; then
+            mv release/g1viewer_x86_64.AppImage release/g1viewer_x64.AppImage
+          fi
+          if [ -f release/g1viewer_amd64.deb ]; then
+            mv release/g1viewer_amd64.deb release/g1viewer_x64.deb
+          fi
           echo "=== Built distribution binaries in release/ ==="
           ls -la release/
       - name: Upload platform artifacts
@@ -120,11 +127,23 @@ jobs:
           name: g1viewer-release-linux
           path: release-assets/
 
+      - name: Clean and verify standalone assets
+        run: |
+          rm -f release-assets/*.blockmap* release-assets/*.yml* release-assets/*.yaml*
+          if [ -f release-assets/g1viewer_x86_64.AppImage ]; then
+            mv release-assets/g1viewer_x86_64.AppImage release-assets/g1viewer_x64.AppImage
+          fi
+          if [ -f release-assets/g1viewer_amd64.deb ]; then
+            mv release-assets/g1viewer_amd64.deb release-assets/g1viewer_x64.deb
+          fi
+          echo "=== Standalone distribution binaries to be published uncompressed ==="
+          ls -la release-assets/
+
       - name: Generate SHA-256 Checksums
         working-directory: release-assets
         run: |
           echo "=== Computing SHA-256 Checksums ==="
-          sha256sum * > SHA256SUMS.txt
+          sha256sum g1viewer_* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Determine Release Tag
@@ -146,10 +165,21 @@ jobs:
         run: |
           echo "Publishing GitHub Release for tag: $TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists, updating assets..."
+            echo "Release $TAG already exists, cleaning up obsolete/blockmap assets..."
+            for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name'); do
+              case "$asset" in
+                g1viewer_x64.exe|g1viewer_arm64.exe|g1viewer_arm64.dmg|g1viewer_x64.dmg|g1viewer_x64.AppImage|g1viewer_x64.deb|SHA256SUMS.txt)
+                  ;;
+                *)
+                  echo "Deleting obsolete asset from release: $asset"
+                  gh release delete-asset "$TAG" "$asset" -y || true
+                  ;;
+              esac
+            done
+            echo "Uploading standalone uncompressed assets to $TAG..."
             gh release upload "$TAG" release-assets/* --clobber
           else
-            echo "Creating new release $TAG with automated release notes and assets..."
+            echo "Creating new release $TAG with automated release notes and standalone assets..."
             gh release create "$TAG" release-assets/* \
               --title "G1Viewer $TAG" \
               --generate-notes
