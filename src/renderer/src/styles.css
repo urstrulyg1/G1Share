@@ -572,3 +572,73 @@ button, input, select{touch-action:manipulation}
 @media (min-width: 1321px) and (min-height: 821px) {
   .dashboard-hero { min-height: 0; }
 }
+
+
+/* 1536×1024 reference composition: preserve the screenshot's three-column balance. */
+@media (min-width: 1321px) and (min-height: 821px) {
+  .app-shell.desktop-surface {
+    padding: 6.055vh 2.6042vw;
+    background:
+      radial-gradient(ellipse at 4% 68%, rgba(73, 154, 236, .82) 0, rgba(73, 154, 236, 0) 37%),
+      radial-gradient(ellipse at 94% 12%, rgba(64, 90, 203, .88) 0, rgba(64, 90, 203, 0) 33%),
+      radial-gradient(ellipse at 84% 100%, rgba(222, 112, 157, .72) 0, rgba(222, 112, 157, 0) 35%),
+      radial-gradient(ellipse at 38% 0%, rgba(188, 218, 248, .95) 0, rgba(188, 218, 248, 0) 40%),
+      linear-gradient(125deg, #83b7ed 0%, #4168bf 42%, #162c64 75%, #d68ea6 100%);
+  }
+  .application-content { grid-template-columns: 250px minmax(0, 1fr); }
+  .workspace-main { padding: 0 13px 4px; overflow: hidden; }
+  .home-dashboard { height: 100%; min-height: 0; }
+  .home-dashboard-layout {
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) 314px;
+    grid-template-rows: minmax(0, 1fr) 168px;
+    gap: 14px;
+  }
+  .dashboard-center-column { grid-template-rows: 298px minmax(0, 1fr); gap: 14px; }
+  .dashboard-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .dashboard-panel { padding: 20px 22px; border-radius: 14px; }
+  .dashboard-hero {
+    min-height: 0;
+    padding: 28px 30px;
+    border-radius: 14px;
+    background-position: center 48%;
+    background-size: cover;
+  }
+  .dashboard-hero::before { content: none; }
+  .dashboard-hero::after {
+    background: linear-gradient(90deg, rgba(6, 17, 30, .82) 0%, rgba(6, 17, 30, .60) 37%, rgba(6, 17, 30, .13) 66%, rgba(6, 17, 30, .02) 100%);
+  }
+  .hero-copy { max-width: 62%; }
+  .hero-copy h1 { margin: 0 0 13px; font-size: 40px; line-height: 1.1; letter-spacing: -.8px; }
+  .hero-copy p { font-size: 16px; line-height: 1.5; max-width: 440px; }
+  .dashboard-panel-title { gap: 13px; margin-bottom: 20px; }
+  .dashboard-icon { width: 48px; height: 48px; flex-basis: 48px; border-radius: 14px; }
+  .dashboard-panel-title h2, .dashboard-section-heading h2 { font-size: 16px; }
+  .dashboard-panel-title p { font-size: 12px; }
+  .device-id-display { min-height: 72px; padding: 9px 14px 9px 18px; }
+  .device-id-display code { font-size: 29px; letter-spacing: .3px; white-space: nowrap; overflow-wrap: normal; }
+  .alias-action { min-height: 45px; margin-top: 13px; font-size: 12px; }
+  .access-state { margin-top: 15px; flex-wrap: nowrap; font-size: 12px; }
+  .access-switch { flex: 0 0 auto; margin-left: auto; }
+  .connect-panel .device-input-wrap, .connect-panel .input-wrap { min-height: 73px; height: 73px; }
+  .connect-panel .device-input-wrap input, .connect-panel .input-wrap input { font-size: 16px; }
+  .dashboard-connect-button { min-height: 52px; font-size: 15px; }
+  .dashboard-side { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 182px; gap: 14px; }
+  .recent-devices-panel { min-height: 0; padding: 20px 22px; }
+  .recent-devices-panel .dashboard-section-heading { margin-bottom: 10px; }
+  .dashboard-device-row { padding: 9px 0; gap: 10px; }
+  .recent-device-main { gap: 12px; }
+  .dashboard-device-icon { width: 40px; height: 40px; flex-basis: 40px; }
+  .dashboard-device-copy strong { font-size: 14px; }
+  .dashboard-device-copy small { font-size: 12px; margin-top: 5px; }
+  .network-panel { min-height: 0; padding: 16px 18px; }
+  .network-heading-row h2 { font-size: 15px; }
+  .network-metrics { margin-top: 15px; }
+  .network-metrics > * { padding-inline: 10px; }
+  .dashboard-benefits { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .benefit-card { min-height: 168px; align-items: center; gap: 15px; padding: 16px; border-radius: 14px; }
+  .benefit-icon { width: 76px; height: 76px; flex-basis: 76px; }
+  .benefit-card strong { font-size: 16px; }
+  .benefit-card p { font-size: 14px; line-height: 1.55; margin-top: 10px; }
+}
