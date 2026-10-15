@@ -15,7 +15,6 @@ await mkdir(out, { recursive: true })
 const server = spawn(process.execPath, [
   resolve(root, 'node_modules/vite/bin/vite.js'),
   '--config', resolve(here, 'vite.config.ts'),
-  resolve(here, 'index.html'),
   '--host', '127.0.0.1',
   '--port', String(port),
   '--strictPort'
