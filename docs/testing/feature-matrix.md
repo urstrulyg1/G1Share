@@ -11,7 +11,7 @@ This matrix separates implemented source from exercised end-to-end behavior. **N
 | Ed25519 local device identity | Implemented | OS `safeStorage`, key-derived ID, Linux basic-text refusal, main-process identity reset/revocation. Unavailable key means unavailable ID, not a dummy ID. No OS keyring matrix test. |
 | Authenticated signaling | Implemented | Go integration tests cover registration without accounts, pairing, per-session consent, signed WebRTC setup, replay/tampering, and close with independent keys; TypeScript client unit tests cover route/permission validation. |
 | Peer fingerprint trust | Implemented | Explicit local fingerprint pinning, changed-key refusal, revocation, malformed trust-store fail-closed behavior. Requires real UI/keyring validation. |
-| Go signaling broker | Implemented prototype | HTTP health/API, bounded requests, auth challenges, permission approval, long-poll events, rate limits, persistent public-key registry; Go tests/race and vet must be checked in CI if Go is not available locally. |
+| Go signaling broker | Implemented prototype | HTTP health/API, bounded requests, auth challenges, permission approval, long-poll events, rate limits, persistent public-key registry; Go race tests/coverage and vet passed in PR #4 CI; Go was unavailable locally. |
 | STUN/TURN configuration | Operator-provided ICE settings | Go emits configured STUN endpoints and expiring TURN REST credentials; Coturn/reverse-proxy/firewall interoperability not tested here. |
 | Screen capture and WebRTC video | Implemented source path | Native source picker, `getDisplayMedia`, signed SDP, DTLS-SRTP; **no actual cross-device stream verified**. |
 | Remote keyboard/mouse | Implemented; hardware unverified | Shared protocol with strict validation and key allowlist; host-side controller tested with a fake native backend. Two-client browser E2E covers move/click/key delivery, revocation and disconnect releases, rejection while disabled. Native libnut injection and OS permission flows need real desktop testing. |
@@ -23,16 +23,16 @@ This matrix separates implemented source from exercised end-to-end behavior. **N
 | Local devices and history | Implemented | Device rows come from this run's actual lookups; presence expires and server gaps show unknown. History records real requests, with connected time only after WebRTC connects; legacy unverified cache is discarded. Unit and UI tests cover both. |
 | Diagnostics | Implemented | Actual app/signaling/session capabilities and browser statistics; missing counters or inactive streams show unavailable rather than a made-up number or live state. |
 | Self-host deployment | Configured | Go Dockerfile, Caddy Compose, optional Coturn overlay and docs; Docker deployment not run in this sandbox. |
-| Linux/Windows/macOS installers | Previously built unsigned in CI; runtime unverified | Previous workflow built Linux AppImage/DEB, Windows NSIS, and macOS DMG targets. Current changes need fresh CI and platform runtime validation. No signed release. |
+| Linux/Windows/macOS installers | Built unsigned in PR #4 CI; runtime unverified | Linux AppImage/DEB, Windows NSIS, and macOS DMG targets built and uploaded successfully. Install/launch and platform runtime validation remain outstanding. No signed release. |
 
 ## Platform support statement
 
 | Platform | Electron shell/build | Screen capture path | Credential storage | Remote input/audio |
 |---|---|---|---|---|
-| Windows | Unsigned NSIS target built previously; install/launch not tested | Electron display capture path; OS-specific verification pending | safeStorage/DPAPI path; not tested on Windows here | libnut input and loopback audio implemented; not tested on Windows here |
-| macOS | Unsigned DMG target built previously; install/launch not tested | Screen Recording permission and native picker path present; flow untested | safeStorage/Keychain path; not tested on macOS here | input requires Accessibility access (implemented, untested); audio unavailable |
-| Linux X11 | Unsigned AppImage/DEB targets built previously; install/launch not tested | Electron capture path; X11 session required; actual stream untested | Requires GNOME Keyring/libsecret or KWallet; `basic_text` blocked | libnut input needs `libXtst` at runtime; untested; audio unavailable |
-| Linux Wayland | Unsigned Linux targets built previously; install/launch not tested | Requires desktop portal/PipeWire source picker; unverified across compositors | Same keyring requirement | Input refused; audio unavailable |
+| Windows | Unsigned NSIS target built in PR #4 CI; install/launch not tested | Electron display capture path; OS-specific verification pending | safeStorage/DPAPI path; not tested on Windows here | libnut input and loopback audio implemented; not tested on Windows here |
+| macOS | Unsigned DMG target built in PR #4 CI; install/launch not tested | Screen Recording permission and native picker path present; flow untested | safeStorage/Keychain path; not tested on macOS here | input requires Accessibility access (implemented, untested); audio unavailable |
+| Linux X11 | Unsigned AppImage/DEB targets built in PR #4 CI; install/launch not tested | Electron capture path; X11 session required; actual stream untested | Requires GNOME Keyring/libsecret or KWallet; `basic_text` blocked | libnut input needs `libXtst` at runtime; untested; audio unavailable |
+| Linux Wayland | Unsigned Linux targets built in PR #4 CI; install/launch not tested | Requires desktop portal/PipeWire source picker; unverified across compositors | Same keyring requirement | Input refused; audio unavailable |
 | iOS / Android | Not supported | Not supported | Not supported | Not supported |
 
 Compilation does not certify screen capture, credential storage, packaging, code signing, accessibility permissions, or peer connectivity on any platform.
@@ -50,7 +50,7 @@ npm audit --audit-level=high
 CHROME_PATH=/path/to/chrome npm run test:e2e  # also requires Go
 ```
 
-For this change, local `npm run typecheck`, `npm test` (16 files, 121 tests), `npm run build`, and `npm audit --audit-level=high` passed, with zero vulnerabilities reported. Go and Chrome/Chromium were not available in the initial local environment; Go race and two-client E2E results should be recorded after CI rather than assumed. The two-client suite drives separate browser clients against a real Go broker but uses simulated screen capture and native-input hooks: it cannot certify real OS capture or injection. The linked data-channel tests use stand-ins. Main-process storage tests use real temporary files.
+For this change, local `npm run typecheck`, `npm test` (16 files, 121 tests), `npm run build`, and `npm audit --audit-level=high` passed, with zero vulnerabilities reported. Go and Chrome/Chromium were not available locally. [PR #4 CI](https://github.com/urstrulyg1/G1Share/actions/runs/38690955194) passed Go race tests/coverage, Go vet, the headless two-client E2E suite, and the three unsigned packaging jobs on Linux, Windows, and macOS. The CI workflow runs the Go race suite rather than a separate plain `go test ./...`; local plain Go tests could not run. The two-client suite drives separate browser clients against a real Go broker but uses simulated screen capture and native-input hooks: it cannot certify real OS capture or injection. The linked data-channel tests use stand-ins. Main-process storage tests use real temporary files.
 
 ## Required next verification
 
