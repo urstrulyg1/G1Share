@@ -807,6 +807,141 @@ html:not([data-visual-validation="true"]) .workspace-main {
   padding: 16px 20px 16px !important;
   overflow-y: auto !important;
 }
+html:not([data-visual-validation="true"]) .workspace-main > * {
+  flex-shrink: 0 !important;
+}
+html:not([data-visual-validation="true"]) .workspace-main > .home-dashboard {
+  flex-shrink: 1 !important;
+  flex-grow: 1 !important;
+}
+html:not([data-visual-validation="true"]) .settings-card,
+html:not([data-visual-validation="true"]) .diag-list,
+html:not([data-visual-validation="true"]) .device-card,
+html:not([data-visual-validation="true"]) .recent-row,
+html:not([data-visual-validation="true"]) .health-card,
+html:not([data-visual-validation="true"]) .warning,
+html:not([data-visual-validation="true"]) .feature-detail {
+  height: auto !important;
+  min-height: fit-content !important;
+  flex-shrink: 0 !important;
+}
+html:not([data-visual-validation="true"]) .workspace-main footer {
+  flex-shrink: 0 !important;
+  margin-top: 24px !important;
+  padding-bottom: 12px !important;
+}
+
+/* Crisp, readable typography across Settings, Devices, Diagnostics & History */
+html:not([data-visual-validation="true"]) .settings-head h2 {
+  font-size: 15px !important;
+  font-weight: 650 !important;
+  color: #f2f6ff !important;
+  margin-bottom: 4px !important;
+}
+html:not([data-visual-validation="true"]) .settings-head p {
+  font-size: 12px !important;
+  color: #9eb0c6 !important;
+  line-height: 1.5 !important;
+}
+html:not([data-visual-validation="true"]) .setting {
+  padding: 16px 20px !important;
+}
+html:not([data-visual-validation="true"]) .setting-copy strong {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #edf2f9 !important;
+}
+html:not([data-visual-validation="true"]) .setting-copy small {
+  font-size: 11.5px !important;
+  color: #92a4bc !important;
+  margin-top: 4px !important;
+  line-height: 1.5 !important;
+}
+html:not([data-visual-validation="true"]) .settings-form {
+  padding: 16px 20px !important;
+  gap: 9px !important;
+}
+html:not([data-visual-validation="true"]) .settings-form label {
+  font-size: 12px !important;
+  font-weight: 550 !important;
+  color: #c5d3e5 !important;
+}
+html:not([data-visual-validation="true"]) .settings-form-row input {
+  height: 40px !important;
+  font-size: 12.5px !important;
+  color: #f0f4fa !important;
+}
+html:not([data-visual-validation="true"]) .settings-form > small {
+  font-size: 11px !important;
+  color: #8da1b8 !important;
+  line-height: 1.55 !important;
+}
+html:not([data-visual-validation="true"]) .segmented {
+  padding: 4px !important;
+  gap: 4px !important;
+}
+html:not([data-visual-validation="true"]) .segmented button {
+  padding: 7px 13px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+}
+html:not([data-visual-validation="true"]) .setting-status {
+  font-size: 10.5px !important;
+  padding: 5px 9px !important;
+}
+html:not([data-visual-validation="true"]) .warning {
+  padding: 16px 20px !important;
+}
+html:not([data-visual-validation="true"]) .warning strong {
+  font-size: 13px !important;
+}
+html:not([data-visual-validation="true"]) .warning p {
+  font-size: 11.5px !important;
+  line-height: 1.55 !important;
+}
+html:not([data-visual-validation="true"]) .diag-row strong {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #edf2f9 !important;
+}
+html:not([data-visual-validation="true"]) .diag-row small {
+  font-size: 11.5px !important;
+  color: #92a4bc !important;
+  line-height: 1.5 !important;
+}
+html:not([data-visual-validation="true"]) .health-card strong {
+  font-size: 14px !important;
+  font-weight: 650 !important;
+}
+html:not([data-visual-validation="true"]) .health-card p {
+  font-size: 12px !important;
+  color: #9eb0c6 !important;
+}
+html:not([data-visual-validation="true"]) .device-main strong {
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: #edf2f9 !important;
+}
+html:not([data-visual-validation="true"]) .device-main small {
+  font-size: 11.5px !important;
+  color: #92a4bc !important;
+}
+html:not([data-visual-validation="true"]) .search {
+  height: 42px !important;
+  padding: 0 14px !important;
+}
+html:not([data-visual-validation="true"]) .search input {
+  font-size: 13px !important;
+}
+html:not([data-visual-validation="true"]) .recent-main strong {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #edf2f9 !important;
+}
+html:not([data-visual-validation="true"]) .recent-main small {
+  font-size: 11.5px !important;
+  color: #92a4bc !important;
+}
 html:not([data-visual-validation="true"]) .home-dashboard {
   height: 100% !important;
   min-height: 100% !important;
