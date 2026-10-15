@@ -153,25 +153,57 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Home' && <>
-        <section className="welcome"><div><div className="eyebrow"><Sparkles size={13}/> YOUR REMOTE WORKSPACE</div><h1>Good to see you.</h1><p>Connect to another computer. Screen sharing starts only after the remote user approves.</p></div><div className="orbit"><span><Monitor size={16}/></span><b><ArrowLeftRight size={28}/></b><i><Laptop size={15}/></i></div></section>
-        <section className="connect-card">
-          <div className="connect-title"><div className="section-icon"><Radio size={19}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown in the other OpenDesk installation.</p></div><span className="consent"><LockKeyhole size={12}/> Approval required</span></div>
-          <form onSubmit={event => { event.preventDefault(); void connect() }}><label className="sr-only" htmlFor="remote-id">Remote device ID</label><div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Device ID · XXXXXXXX-XXXXXXXX-…"/></div><button className="primary" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={15}/></button></form>
-          <div className="permission-request-row"><span>Request additional permissions (optional)</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> One-time clipboard text</label><label><input type="checkbox" checked={requestInput} onChange={event => setRequestInput(event.target.checked)}/> Remote keyboard and mouse</label><label><input type="checkbox" checked={requestAudio} disabled={remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32'} onChange={event => setRequestAudio(event.target.checked)}/> System audio{remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32' ? ' (Windows hosts only)' : ''}</label></div>
-          <div className="connect-foot"><span><LockKeyhole size={13}/> Device IDs locate devices; they never grant access.</span><button onClick={() => setPage('Diagnostics')}>View connection diagnostics <ArrowRight size={13}/></button></div>
+        <section className="dashboard-hero">
+          <div className="hero-copy">
+            <div className="eyebrow"><Sparkles size={13}/> FREE · PRIVATE · ACCOUNT-FREE</div>
+            <h1>Access your devices.<br/>From anywhere.</h1>
+            <p>Fast, secure remote access. No account required. Every session stays under your control.</p>
+            <button className="hero-cta" onClick={() => document.getElementById('remote-id')?.focus()}>Connect to a device <ArrowRight size={15}/></button>
+          </div>
+          <div className="hero-art" aria-hidden="true"><div className="hero-screen hero-screen-back"><span/><i/><b/></div><div className="hero-screen hero-screen-front"><span/><i/><b/></div><div className="hero-link"><ArrowLeftRight size={25}/></div></div>
         </section>
 
-        <section className="section"><div className="section-head"><div><h2>Your device</h2><p>This identity authenticates signaling requests and does not authorize incoming sessions.</p></div><button className="subtle" onClick={() => void copyId()} disabled={!openDesk.device}><Copy size={13}/> Copy ID</button></div>
-          <div className="device-card"><div className="device-icon"><MonitorCheck size={24}/></div><div className="device-main"><strong>{platform} device <em>THIS DEVICE</em></strong><small>{openDesk.device ? `${openDesk.device.platform} · ${openDesk.device.architecture}` : 'Loading local identity'}</small><div className="id-row"><code>{openDesk.device?.deviceId || '••••••••-••••••••-••••••••-••••••••'}</code><button aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device}><Copy size={13}/></button></div></div><div className="local-only"><span className={openDesk.device?.identityReady ? '' : 'dot-warning'}/>{openDesk.device?.identityReady ? 'Authenticated' : 'Key unavailable'}<small>{openDesk.device?.secureStorageBackend || 'checking secure storage'}</small></div></div>
-          {!openDesk.device?.identityReady && openDesk.device && <div className="inline-warning"><ShieldAlert size={15}/><span>{openDesk.device.identityMessage}</span><button onClick={() => setPage('Diagnostics')}>Details</button></div>}
+        <section className="dashboard-main-grid">
+          <div className="dashboard-primary">
+            <section className="dashboard-panel access-panel">
+              <div className="dashboard-panel-title"><div className="dashboard-icon"><Radio size={20}/></div><div><h2>Allow remote access</h2><p>Share this device ID with someone you trust.</p></div></div>
+              <div className="device-id-display"><code>{openDesk.device?.deviceId || 'Loading device identity…'}</code><button className="icon-button" aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device}><Copy size={17}/></button></div>
+              <div className="access-state"><i className={openDesk.device?.identityReady ? 'state-dot-ready' : 'state-dot-waiting'}/><span>{openDesk.device?.identityReady ? 'Device identity ready' : openDesk.device?.identityMessage || 'Preparing secure device identity'}</span><span className="access-platform">{platform}</span></div>
+              <p className="dashboard-note"><LockKeyhole size={13}/> Device ID is not a password. Incoming sessions require local approval.</p>
+            </section>
+
+            <section className="dashboard-panel connect-panel">
+              <div className="dashboard-panel-title"><div className="dashboard-icon"><Signal size={20}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown on the remote computer.</p></div></div>
+              <form onSubmit={event => { event.preventDefault(); void connect() }}>
+                <label className="sr-only" htmlFor="remote-id">Remote device ID</label>
+                <div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Enter remote device ID"/></div>
+                <button className="primary dashboard-connect-button" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={16}/></button>
+              </form>
+              <div className="permission-request-row dashboard-permissions"><span>Optional permissions</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> Clipboard</label><label><input type="checkbox" checked={requestInput} onChange={event => setRequestInput(event.target.checked)}/> Keyboard & mouse</label><label><input type="checkbox" checked={requestAudio} disabled={remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32'} onChange={event => setRequestAudio(event.target.checked)}/> Audio{remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32' ? ' (Windows only)' : ''}</label></div>
+            </section>
+          </div>
+
+          <aside className="dashboard-side">
+            <section className="dashboard-panel recent-devices-panel">
+              <div className="dashboard-section-heading"><h2>Known devices</h2><button className="text-action" onClick={() => setPage('Devices')}>View all <ArrowRight size={13}/></button></div>
+              {openDesk.knownDevices.length ? <div className="dashboard-device-list">{openDesk.knownDevices.slice(0,5).map(device => <article className="dashboard-device-row" key={device.id}><div className="dashboard-device-icon">{device.platform.toLowerCase().includes('mac') || device.platform === 'darwin' ? <Laptop size={18}/> : <Monitor size={18}/>}</div><div className="dashboard-device-copy"><strong>{device.name}</strong><small>{device.platform} · {device.online ? 'Online at last lookup' : 'Last status may be stale'}</small></div><button className="device-row-connect" aria-label={'Request access to ' + device.name} onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}><ArrowRight size={15}/></button></article>)}</div> : <EmptyInline icon={Monitor} title="No known devices yet" description="Enter a device ID to request access. Devices will appear here when actually discovered or saved."/>}
+            </section>
+            <section className="dashboard-panel network-panel">
+              <div className="dashboard-section-heading"><h2>Connection status</h2><span className={'connection-state-dot ' + (openDesk.serviceState === 'online' ? 'is-online' : '')}/></div>
+              <div className="network-status-copy"><strong>{statusLabel}</strong><p>{openDesk.serviceError || (openDesk.serviceState === 'online' ? 'Signaling service is reachable.' : 'Check your signaling endpoint and network connection in Settings.')}</p></div>
+              <div className="network-endpoint"><span>Signaling endpoint</span><code>{openDesk.signalingUrl || 'Not configured'}</code></div>
+              <button className="subtle network-settings-button" onClick={() => setPage('Settings')}><Settings size={13}/> Connection settings</button>
+            </section>
+          </aside>
         </section>
 
-        <section className="section"><div className="section-head"><div><h2>Connection status</h2><p>Live state from the configured signaling service.</p></div><span className={`status-text status-text-${openDesk.serviceState}`}><i/>{statusLabel}</span></div>
-          <div className="service-card"><div className="service-icon"><Signal size={20}/></div><div><strong>{openDesk.serviceState === 'online' ? 'Signaling service reachable' : openDesk.serviceState === 'blocked' ? 'Secure device identity required' : 'No active signaling connection'}</strong><p>{openDesk.serviceError || `Configured endpoint: ${openDesk.signalingUrl}`}</p></div><button className="subtle" onClick={() => setPage('Settings')}><Settings size={13}/> Configure</button></div>
+        <section className="dashboard-benefits">
+          <article className="benefit-card"><div className="benefit-icon benefit-speed"><Activity size={22}/></div><div><strong>Built for responsiveness</strong><p>WebRTC media transport with connection-quality diagnostics.</p></div></article>
+          <article className="benefit-card"><div className="benefit-icon benefit-secure"><ShieldCheck size={22}/></div><div><strong>Consent comes first</strong><p>Remote access requires approval and scoped session permissions.</p></div></article>
+          <article className="benefit-card"><div className="benefit-icon benefit-platform"><Monitor size={22}/></div><div><strong>Cross-platform foundation</strong><p>Platform capabilities are reported honestly by each installation.</p></div></article>
+          <article className="benefit-card"><div className="benefit-icon benefit-free"><LockKeyhole size={22}/></div><div><strong>Free and account-free</strong><p>No user login required. Configure your own signaling infrastructure.</p></div></article>
         </section>
-        <section className="section"><div className="section-head"><div><h2>Built around explicit consent</h2><p>Every session request remains visible to the remote user.</p></div></div><div className="feature-grid"><Feature icon={ShieldCheck} title="Approval on the remote device" text="No unattended access exists in this build. Each request must be approved locally."/><Feature icon={Wifi} title="Peer-to-peer transport" text="Screen media uses WebRTC; signaling carries setup only. TURN can be self-hosted for restrictive networks."/><Feature icon={LockKeyhole} title="Narrow capabilities" text="Remote viewing, approved file transfer, one-time clipboard text, and per-session remote keyboard and mouse. System audio is Windows-only."/></div></section>
       </>}
-
       {!openDesk.activeSession && page === 'Devices' && <>
         <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices are located by ID. Trust fingerprints before connecting; every remote session still requires approval." action={<button className="subtle" onClick={() => { void openDesk.refreshTrustedDevices(); setRefresh(value => value + 1) }}><RefreshCw size={13}/> Refresh</button>}/>
         <div className="search"><Search size={15}/><input placeholder="Search known devices" value={query} onChange={event => setQuery(event.target.value)}/></div>
