@@ -1,8 +1,8 @@
 # OpenDesk
 
-OpenDesk is a consent-first desktop remote-viewing prototype built with Electron, React, TypeScript, and a self-hostable Go signaling service. It uses Ed25519 device identities, short-lived signed signaling requests, pinned peer fingerprints, explicit session approval, WebRTC DTLS-SRTP, and a user-selected screen source. Optional WebRTC data-channel features include file transfer and one-time clipboard text.
+OpenDesk is a consent-first desktop remote-viewing prototype built with Electron, React, TypeScript, and a self-hostable Go signaling service. It uses Ed25519 device identities, short-lived signed signaling requests, pinned peer fingerprints, explicit session approval, WebRTC DTLS-SRTP, and a user-selected screen source. Optional features, each granted per session, are file transfer, one-time clipboard text, remote keyboard and mouse control, and system audio (Windows hosts only).
 
-**This is not yet a complete remote desktop product.** It does not send remote keyboard or mouse input, stream system audio, or support unattended access. The current source has not been verified in a real two-computer desktop session. Do not treat a successful build or a simulated data-channel test as proof of working end-to-end remote access.
+**This is not yet a complete remote desktop product.** It does not support unattended access. Remote keyboard and mouse control and Windows system-audio sharing are implemented but have not been verified on real desktops; the two-client end-to-end test uses the real signaling broker and renderer services with substituted capture and native input. Do not treat a successful build or a simulated test as proof of working remote access on your hardware.
 
 ## Capability status
 
@@ -11,8 +11,8 @@ OpenDesk is a consent-first desktop remote-viewing prototype built with Electron
 | Device identity and authenticated signaling | Implemented; Ed25519 key is encrypted with Electron safeStorage and Linux basic-text storage is refused |
 | Consent and peer identity | Implemented; remote user approves each session, optional permissions are separately granted, first-use fingerprints should be checked out of band |
 | Screen sharing | Electron `getDisplayMedia` + WebRTC video path implemented; OS permission/source selection applies; real cross-device streaming is not verified |
-| Remote keyboard and mouse | **Unavailable**; no input injection is implemented |
-| Audio | **Unavailable**; no system-audio capture or playback is implemented |
+| Remote keyboard and mouse | Implemented, per session, after the host separately enables control; X11 Linux, Windows, and macOS (macOS needs Accessibility access); Wayland is refused; the Linux native library needs `libXtst`; not verified on real desktops |
+| Audio | Implemented for Windows hosts only (Electron loopback capture, requires the audio permission); macOS and Linux hosts refuse it; not verified on real desktops |
 | Unattended access | **Unavailable**; no background access or hidden persistence is implemented |
 | File transfer | WebRTC data-channel protocol and main-process storage are implemented with bounded chunks, explicit destination choice, SHA-256 checks, and no-overwrite publication; tested with simulated channels, not real clients |
 | Clipboard | One-time text only; sender and receiver each confirm locally; continuous synchronization is unavailable |

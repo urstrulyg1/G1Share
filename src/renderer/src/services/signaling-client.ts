@@ -1,5 +1,6 @@
 import type { DeviceInfo, DeviceSummary, EventBatch, IceConfiguration, OpenDeskBridge, RemoteSession, SessionPermission, SignalingEvent, SessionDecisionRequest } from '../../../shared/types'
 import { isValidDeviceId, normalizeDeviceId } from '../../../shared/device-id'
+import { isSessionPermission } from '../../../shared/permissions'
 
 type SignalingBridge = Pick<OpenDeskBridge, 'signalingRequest' | 'decideSession'>
 
@@ -39,7 +40,7 @@ export class SignalingClient {
 
   async decideSession(sessionId: string, accepted: boolean, permissions: SessionPermission[] = []): Promise<RemoteSession> {
     this.validateSessionId(sessionId)
-    if (typeof accepted !== 'boolean' || permissions.some(permission => !['view', 'files', 'clipboard'].includes(permission))) throw new TypeError('Session decision is invalid.')
+    if (typeof accepted !== 'boolean' || permissions.some(permission => !isSessionPermission(permission))) throw new TypeError('Session decision is invalid.')
     const uniquePermissions = [...new Set(permissions)]
     if (uniquePermissions.length !== permissions.length || (!accepted && permissions.length > 0) || (accepted && !permissions.includes('view'))) {
       throw new TypeError('Session permission selection is invalid.')

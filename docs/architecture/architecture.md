@@ -46,7 +46,9 @@ Session requests expire after 90 seconds. Accepted server sessions have a 24-hou
 
 ## Data channels
 
-File protocol metadata and binary chunks are validated in the renderer service. Files are limited to 1 GiB each, 16 files per batch, 16 KiB WebRTC chunks, and bounded in-flight data. The main process independently limits IPC chunks, serializes writes per destination, verifies size and SHA-256, and exclusively publishes into the selected path without replacing an existing destination. Interrupted transfers use hidden `.opendesk-*.part` files until final verification.
+Two ordered data channels are used. `opendesk-input-v1` (high priority) carries remote keyboard, pointer, quality, and notice messages; they are small, validated on both ends, and never queue behind file data. `opendesk-data-v1` carries file and clipboard chunks. Input messages are rejected above 512 bytes or with unknown fields. Viewer quality requests are accepted by the host at most once per 500 ms.
+
+File protocol metadata and binary chunks are validated in the renderer service. Files are limited to 1 GiB each, 16 files per batch, 16 KiB WebRTC chunks, and a 128 KiB send-queue ceiling (the sender waits above it). The latency benchmark measured the effect of the lower ceiling: see `docs/performance/README.md`. The main process independently limits IPC chunks, serializes writes per destination, verifies size and SHA-256, and exclusively publishes into the selected path without replacing an existing destination. Interrupted transfers use hidden `.opendesk-*.part` files until final verification.
 
 Clipboard transfer is a one-time text message limited to 32 KiB for peer transport. The sender sees a native confirmation before clipboard read; the receiver sees a native confirmation before local clipboard replacement. No content is logged by the app.
 
@@ -60,4 +62,4 @@ Clipboard transfer is a one-time text message limited to 32 KiB for peer transpo
 
 ## Current architectural gaps
 
-Remote input, audio, unattended access, an account/enrollment layer, push signaling, trickle ICE, session persistence across service restart, signed release/update infrastructure, and an independently reviewed native capture/input engine are not implemented. The Electron signaling protocol, screen capture, and WebRTC session path have not yet been validated between independently installed desktop clients.
+Unattended access, an account/enrollment layer, push signaling, trickle ICE, session persistence across service restart, signed release/update infrastructure, and an independently reviewed native capture/input engine are not implemented. The Electron signaling protocol, screen capture, and WebRTC session path have not yet been validated between independently installed desktop clients.

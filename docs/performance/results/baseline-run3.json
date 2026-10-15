@@ -1,0 +1,375 @@
+{
+  "environment": {
+    "label": "baseline-run3",
+    "recordedAt": "2026-10-15T05:30:42.389Z",
+    "commit": "772bb94",
+    "workingTreeChanged": true,
+    "node": "v22.22.3",
+    "chrome": "HeadlessChrome/153.0.8010.0",
+    "cpuCount": 2,
+    "cpuModel": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+    "quick": false,
+    "sizes": {
+      "idleMs": 3000,
+      "moves": 300,
+      "taps": 40,
+      "tapPeriodMs": 150,
+      "fileMiB": 48
+    },
+    "capture": "canvas stream; frame rate follows the requested frameRate constraint (default 15 fps)",
+    "network": "loopback (no shaping: tc netem/tbf are not available in this sandbox)"
+  },
+  "hostControllerDispatchMicros": {
+    "count": 463,
+    "p50": 0,
+    "p95": 100,
+    "p99": 100,
+    "max": 17200
+  },
+  "senderQualityNotices": null,
+  "scenarios": {
+    "idle-video": {
+      "pointer": {
+        "dispatched": 0,
+        "sent": 0,
+        "injected": 0,
+        "unsent": 0,
+        "coalesceMs": null,
+        "viewerToHostMs": null,
+        "dispatchToHostMs": null
+      },
+      "keys": {
+        "keyDownsDispatched": 0,
+        "keyDownsInjected": 0,
+        "missed": 0,
+        "viewerToHostMs": null,
+        "inputToVisibleMs": null
+      },
+      "presentation": {
+        "framesPresented": 82,
+        "presentedFps": 15.19,
+        "captureToScreenMs": {
+          "count": 35,
+          "p50": 24.5,
+          "p95": 33.2,
+          "p99": 35.3,
+          "max": 35.3
+        },
+        "frameIntervalMs": {
+          "count": 81,
+          "p50": 66.7,
+          "p95": 83.4,
+          "p99": 150.1,
+          "max": 150.1
+        },
+        "droppedFrames": 0
+      },
+      "viewerMetrics": {
+        "framesPerSecond": 15,
+        "width": 800,
+        "height": 450,
+        "bitrateKbps": 237.84,
+        "roundTripTimeMs": 0,
+        "packetLossPercent": 0,
+        "jitterBufferMs": 8.55,
+        "decodeMs": 1.55,
+        "droppedFrames": 0,
+        "transport": "Direct (same network)"
+      },
+      "hostMetrics": {
+        "encodeMs": 3.55,
+        "bitrateKbps": 242.47,
+        "availableBitrateKbps": 4416.57,
+        "qualityLimitation": "none",
+        "transport": "Direct (same network)"
+      },
+      "transfer": null
+    },
+    "pointer-sweep": {
+      "pointer": {
+        "dispatched": 300,
+        "sent": 223,
+        "injected": 223,
+        "unsent": 0,
+        "coalesceMs": {
+          "count": 300,
+          "p50": 16.2,
+          "p95": 16.6,
+          "p99": 17.8,
+          "max": 19.3
+        },
+        "viewerToHostMs": {
+          "count": 223,
+          "p50": 0.5,
+          "p95": 0.9,
+          "p99": 1.1,
+          "max": 1.4
+        },
+        "dispatchToHostMs": {
+          "count": 300,
+          "p50": 16.7,
+          "p95": 17.3,
+          "p99": 18.5,
+          "max": 19.5
+        }
+      },
+      "keys": {
+        "keyDownsDispatched": 0,
+        "keyDownsInjected": 0,
+        "missed": 0,
+        "viewerToHostMs": null,
+        "inputToVisibleMs": null
+      },
+      "presentation": {
+        "framesPresented": 168,
+        "presentedFps": 15.13,
+        "captureToScreenMs": {
+          "count": 121,
+          "p50": 23.8,
+          "p95": 35.1,
+          "p99": 37.4,
+          "max": 37.9
+        },
+        "frameIntervalMs": {
+          "count": 167,
+          "p50": 66.7,
+          "p95": 83.4,
+          "p99": 133.2,
+          "max": 150.1
+        },
+        "droppedFrames": 0
+      },
+      "viewerMetrics": {
+        "framesPerSecond": 15,
+        "width": 800,
+        "height": 450,
+        "bitrateKbps": 178.9,
+        "roundTripTimeMs": 0,
+        "packetLossPercent": 0,
+        "jitterBufferMs": 7.48,
+        "decodeMs": 1.44,
+        "droppedFrames": 0,
+        "transport": "Direct (same network)"
+      },
+      "hostMetrics": {
+        "encodeMs": 3.32,
+        "bitrateKbps": 184.66,
+        "availableBitrateKbps": 4077.14,
+        "qualityLimitation": "none",
+        "transport": "Direct (same network)"
+      },
+      "transfer": null
+    },
+    "key-taps": {
+      "pointer": {
+        "dispatched": 0,
+        "sent": 0,
+        "injected": 0,
+        "unsent": 0,
+        "coalesceMs": null,
+        "viewerToHostMs": null,
+        "dispatchToHostMs": null
+      },
+      "keys": {
+        "keyDownsDispatched": 40,
+        "keyDownsInjected": 40,
+        "missed": 0,
+        "viewerToHostMs": {
+          "count": 40,
+          "p50": 0.5,
+          "p95": 0.6,
+          "p99": 0.7,
+          "max": 0.7
+        },
+        "inputToVisibleMs": {
+          "count": 40,
+          "p50": 53.7,
+          "p95": 93.8,
+          "p99": 134.3,
+          "max": 134.3
+        }
+      },
+      "presentation": {
+        "framesPresented": 271,
+        "presentedFps": 15.19,
+        "captureToScreenMs": {
+          "count": 224,
+          "p50": 23.8,
+          "p95": 35.1,
+          "p99": 37.4,
+          "max": 37.9
+        },
+        "frameIntervalMs": {
+          "count": 270,
+          "p50": 66.7,
+          "p95": 83.4,
+          "p99": 133.2,
+          "max": 150.1
+        },
+        "droppedFrames": 0
+      },
+      "viewerMetrics": {
+        "framesPerSecond": 15,
+        "width": 800,
+        "height": 450,
+        "bitrateKbps": 221.86,
+        "roundTripTimeMs": 1,
+        "packetLossPercent": 0,
+        "jitterBufferMs": 7.12,
+        "decodeMs": 1.62,
+        "droppedFrames": 0,
+        "transport": "Direct (same network)"
+      },
+      "hostMetrics": {
+        "encodeMs": 3.33,
+        "bitrateKbps": 222.25,
+        "availableBitrateKbps": 4253.71,
+        "qualityLimitation": "none",
+        "transport": "Direct (same network)"
+      },
+      "transfer": null
+    },
+    "key-taps-cpu-load": {
+      "pointer": {
+        "dispatched": 0,
+        "sent": 0,
+        "injected": 0,
+        "unsent": 0,
+        "coalesceMs": null,
+        "viewerToHostMs": null,
+        "dispatchToHostMs": null
+      },
+      "keys": {
+        "keyDownsDispatched": 40,
+        "keyDownsInjected": 40,
+        "missed": 0,
+        "viewerToHostMs": {
+          "count": 40,
+          "p50": 0.4,
+          "p95": 3,
+          "p99": 6.9,
+          "max": 6.9
+        },
+        "inputToVisibleMs": {
+          "count": 40,
+          "p50": 49,
+          "p95": 81,
+          "p99": 92,
+          "max": 92
+        }
+      },
+      "presentation": {
+        "framesPresented": 374,
+        "presentedFps": 15.19,
+        "captureToScreenMs": {
+          "count": 327,
+          "p50": 23.4,
+          "p95": 34.4,
+          "p99": 37.5,
+          "max": 41.3
+        },
+        "frameIntervalMs": {
+          "count": 373,
+          "p50": 66.7,
+          "p95": 83.4,
+          "p99": 133.2,
+          "max": 150.1
+        },
+        "droppedFrames": 0
+      },
+      "viewerMetrics": {
+        "framesPerSecond": 15,
+        "width": 800,
+        "height": 450,
+        "bitrateKbps": 225.29,
+        "roundTripTimeMs": 2,
+        "packetLossPercent": 0,
+        "jitterBufferMs": 8.26,
+        "decodeMs": 1.47,
+        "droppedFrames": 0,
+        "transport": "Direct (same network)"
+      },
+      "hostMetrics": {
+        "encodeMs": 3.13,
+        "bitrateKbps": 237,
+        "availableBitrateKbps": 4374.86,
+        "qualityLimitation": "none",
+        "transport": "Direct (same network)"
+      },
+      "transfer": null
+    },
+    "key-taps-during-file-transfer": {
+      "pointer": {
+        "dispatched": 0,
+        "sent": 0,
+        "injected": 0,
+        "unsent": 0,
+        "coalesceMs": null,
+        "viewerToHostMs": null,
+        "dispatchToHostMs": null
+      },
+      "keys": {
+        "keyDownsDispatched": 40,
+        "keyDownsInjected": 40,
+        "missed": 0,
+        "viewerToHostMs": {
+          "count": 40,
+          "p50": 4.8,
+          "p95": 24.4,
+          "p99": 30.6,
+          "max": 30.6
+        },
+        "inputToVisibleMs": {
+          "count": 40,
+          "p50": 62.9,
+          "p95": 84.7,
+          "p99": 119.8,
+          "max": 119.8
+        }
+      },
+      "presentation": {
+        "framesPresented": 478,
+        "presentedFps": 15.19,
+        "captureToScreenMs": {
+          "count": 431,
+          "p50": 23.3,
+          "p95": 34.4,
+          "p99": 37.8,
+          "max": 41.3
+        },
+        "frameIntervalMs": {
+          "count": 477,
+          "p50": 66.7,
+          "p95": 83.4,
+          "p99": 133.2,
+          "max": 150.1
+        },
+        "droppedFrames": 0
+      },
+      "viewerMetrics": {
+        "framesPerSecond": 15,
+        "width": 800,
+        "height": 450,
+        "bitrateKbps": 251.13,
+        "roundTripTimeMs": 1,
+        "packetLossPercent": 0,
+        "jitterBufferMs": 7.82,
+        "decodeMs": 1.61,
+        "droppedFrames": 0,
+        "transport": "Direct (same network)"
+      },
+      "hostMetrics": {
+        "encodeMs": 3.5,
+        "bitrateKbps": 248.05,
+        "availableBitrateKbps": 4009.23,
+        "qualityLimitation": "none",
+        "transport": "Direct (same network)"
+      },
+      "transfer": {
+        "mebibytes": 48,
+        "seconds": 4.35,
+        "mebibytesPerSecond": 11.03
+      }
+    }
+  }
+}

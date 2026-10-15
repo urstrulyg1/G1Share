@@ -1,22 +1,35 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
 
+// healthHandler reports liveness: the process is serving HTTP.
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
+	writeHealth(w, http.StatusOK, "ok")
+}
+
+// readinessHandler reports readiness: the broker can persist its registry.
+func readinessHandler(broker *Broker) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if err := broker.readiness(); err != nil {
+			writeHealth(w, http.StatusServiceUnavailable, "not_ready")
+			return
+		}
+		writeHealth(w, http.StatusOK, "ready")
+	}
+}
+
+func writeHealth(w http.ResponseWriter, status int, state string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(healthResponse{Status: "ok", Service: "opendesk-signaling", Version: serviceVersion})
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(healthResponse{Status: state, Service: "opendesk-signaling", Version: serviceVersion})
 }
 
 func newServer(addr string) *http.Server {
@@ -27,7 +40,7 @@ func newServer(addr string) *http.Server {
 func newServerWithBroker(addr string, broker *Broker) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler)
-	mux.HandleFunc("GET /readyz", healthHandler)
+	mux.HandleFunc("GET /readyz", readinessHandler(broker))
 	mux.HandleFunc("POST /api/v1/challenge", handleChallenge(broker))
 	mux.HandleFunc("/api/v1/", handleAPI(broker))
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
@@ -91,39 +104,10 @@ func splitURLs(value string, allowed ...string) []string {
 	return urls
 }
 
-func serverAddress() string {
-	address := strings.TrimSpace(os.Getenv("OPENDESK_SIGNALING_ADDR"))
-	if address == "" {
-		return "127.0.0.1:8787"
-	}
-	if _, _, err := net.SplitHostPort(address); err != nil {
-		return "127.0.0.1:8787"
-	}
-	return address
-}
-
 func dataDirectory() string {
 	path := strings.TrimSpace(os.Getenv("OPENDESK_DATA_DIR"))
 	if path != "" {
 		return path
 	}
 	return "./data"
-}
-
-func listenAndServe(server *http.Server, broker *Broker, shutdownTimeout time.Duration) error {
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
-	go broker.cleanupLoop(ctx)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return err
-	}
-	return nil
-}
-
-func parsePositiveInt(value string, fallback int) int {
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed < 1 {
-		return fallback
-	}
-	return parsed
 }
