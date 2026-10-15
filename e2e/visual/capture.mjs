@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createRequire } from 'node:module'
@@ -92,6 +92,11 @@ try {
     }
   }
   await page.screenshot({ path: resolve(out, 'opendesk-after.png'), fullPage: false })
+  await page.screenshot({ path: resolve(out, 'opendesk-preview.jpg'), type: 'jpeg', quality: 72, fullPage: false })
+  const previewBase64 = (await readFile(resolve(out, 'opendesk-preview.jpg'))).toString('base64')
+  console.log('VISUAL_PREVIEW_BASE64_START')
+  console.log(previewBase64)
+  console.log('VISUAL_PREVIEW_BASE64_END')
   await writeFile(resolve(out, 'layout-measurements.json'), JSON.stringify({
     viewport: { width: 1536, height: 1024 },
     note: 'Renderer screenshot uses a visual-only bridge. Device identity, signaling, sessions, and native capabilities are intentionally unavailable; sample rows are not live devices.',
