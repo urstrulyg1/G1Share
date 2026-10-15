@@ -696,3 +696,52 @@ button, input, select{touch-action:manipulation}
     font-size: 12px;
   }
 }
+
+
+/* Screenshot-level typography and spacing for the 1536×1024 desktop target. */
+@media (min-width: 1321px) and (min-height: 821px) {
+  .window-header { padding-inline: 24px; }
+  .window-brand { gap: 34px; }
+  .brand-home { gap: 13px; }
+  .brand-mark { width: 42px; height: 42px; border-radius: 13px; }
+  .brand-glyph { width: 36px; height: 36px; }
+  .brand-name { font-size: 26px; letter-spacing: -.8px; }
+  .brand-tagline { font-size: 16px; color: #c0cde0; }
+  .window-actions { gap: 17px; }
+  .window-status { min-height: 32px; padding: 0 10px 0 0; border: 0; border-radius: 0; background: transparent; font-size: 14px; gap: 10px; }
+  .window-status i { width: 10px; height: 10px; }
+  .window-settings, .window-control { width: 36px; height: 36px; }
+  .window-settings svg, .window-control svg { width: 21px; height: 21px; }
+  .window-control-divider { height: 28px; margin-inline: 2px; }
+  .sidebar { padding: 22px 12px 14px 13px; }
+  .sidebar .nav-label { display: none; }
+  .sidebar nav { gap: 6px; }
+  .nav-item { height: 54px; min-height: 54px; padding-inline: 16px; gap: 17px; border-radius: 11px; font-size: 16px; }
+  .nav-item svg { width: 25px; height: 25px; }
+  .local-device-card { width: 209px; }
+  .dashboard-panel-title { gap: 13px; margin-bottom: 20px; }
+  .dashboard-icon { width: 48px; height: 48px; flex-basis: 48px; }
+  .dashboard-panel-title h2, .dashboard-section-heading h2 { font-size: 16px; }
+  .dashboard-panel-title p { font-size: 14px; }
+  .device-id-display { min-height: 72px; }
+  .device-id-display code { font-size: 38px; letter-spacing: .1px; white-space: nowrap; overflow-wrap: normal; }
+  .alias-action { min-height: 45px; font-size: 13px; }
+  .access-state { font-size: 14px; }
+  .dashboard-side .dashboard-section-heading { margin-bottom: 10px; }
+  .recent-devices-panel .reference-data-note { margin: -2px 0 4px; }
+  .dashboard-device-row { gap: 8px; padding: 10px 0; }
+  .recent-device-main { gap: 12px; }
+  .dashboard-device-icon { width: 50px; height: 50px; flex-basis: 50px; border-radius: 15px; }
+  .dashboard-device-icon svg { width: 27px; height: 27px; }
+  .dashboard-device-copy strong { font-size: 16px; font-weight: 500; }
+  .dashboard-device-copy small { font-size: 13px; margin-top: 5px; }
+  .device-status-indicator { width: 8px; height: 8px; flex-basis: 8px; }
+  .dashboard-device-row { min-height: 70px; }
+  .dashboard-benefits { gap: 14px; }
+  .benefit-card { gap: 16px; padding: 16px; }
+  .benefit-icon { width: 76px; height: 76px; flex-basis: 76px; }
+  .benefit-card strong { font-size: 16px; }
+  .benefit-card p { font-size: 14px; line-height: 1.5; }
+}
+html[data-visual-validation="true"] .reference-data-note { display: none; }
+html[data-visual-validation="true"] .device-status-indicator.is-example { background: #35ef63; box-shadow: 0 0 8px rgba(53, 239, 99, .42); }
