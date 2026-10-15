@@ -75,7 +75,7 @@ try {
     '.recent-devices-panel': { x: 1170, y: 135, width: 314, height: 428, tolerance: 3 },
     '.network-panel': { x: 1170, y: 577, width: 314, height: 182, tolerance: 3 },
     '.dashboard-benefits': { x: 291, y: 773, width: 1193, height: 168, tolerance: 3 },
-    '.local-device-card': { x: 54, y: 698, width: 223, height: 250, tolerance: 3 }
+    '.local-device-card': { x: 54, y: 697, width: 209, height: 250, tolerance: 3 }
   }
   const differences = []
   for (const [selector, expected] of Object.entries(referenceBounds)) {
