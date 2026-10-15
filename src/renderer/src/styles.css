@@ -25,3 +25,67 @@ progress.transfer-progress{width:100%;height:4px;display:block;appearance:none;b
 
 /* Interactive dashboard tiles */
 .clickable-tile{cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}.clickable-tile:hover{border-color:#438ed2;box-shadow:0 8px 28px #1678d51a}.clickable-tile:focus-visible{outline:2px solid var(--accent);outline-offset:3px}.dashboard-hero.clickable-tile:hover{border-color:#4b9be9}.dashboard-device-row.clickable-row{cursor:pointer;border-radius:8px;padding-left:5px;padding-right:5px;transition:background .15s ease}.dashboard-device-row.clickable-row:hover,.dashboard-device-row.clickable-row:focus-visible{background:var(--panel2);outline:none}.dashboard-device-row.clickable-row:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}.benefit-card.clickable-tile:hover{transform:translateY(-2px)}
+
+
+/* Interaction, accessibility, and responsive polish */
+.dashboard-device-row{display:flex;align-items:center;gap:10px;min-width:0}
+.dashboard-device-row .dashboard-device-copy{flex:1;min-width:0}
+.device-row-arrow{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;border:1px solid var(--border);border-radius:8px;color:var(--muted)}
+.dashboard-device-row:hover .device-row-arrow{color:var(--accent);border-color:var(--accent)}
+.network-panel-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.network-panel-actions .subtle{min-width:0}
+.nav-item[aria-current="page"]{outline:none}
+.benefit-card.clickable-tile:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.dashboard-hero .hero-cta:focus-visible,.text-action:focus-visible,.subtle:focus-visible,.device-row-connect:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+button, input, select{touch-action:manipulation}
+@media (max-width: 1100px){
+  .main{padding-left:24px;padding-right:24px}
+  .dashboard-main-grid{grid-template-columns:minmax(0,1fr)}
+  .dashboard-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .dashboard-side>.dashboard-panel{min-width:0}
+  .dashboard-benefits{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 760px){
+  .app-shell{display:block}
+  .sidebar{width:100%;height:auto;min-height:0;padding:12px;display:block;border-right:0;border-bottom:1px solid var(--border)}
+  .brand{padding:0 5px 12px}
+  .sidebar .nav-label,.sidebar-bottom{display:none}
+  .sidebar nav{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px}
+  .nav-item{flex:0 0 auto;height:38px;padding:0 10px}
+  .main{padding:0 16px 20px;max-width:none}
+  .topbar{height:58px;gap:10px}
+  .top-actions{gap:7px}
+  .status-pill{max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+  .dashboard-hero{padding:22px;min-height:0}
+  .hero-art{transform:scale(.78);transform-origin:center right;margin-left:-35px}
+  .dashboard-side{grid-template-columns:minmax(0,1fr)}
+  .dashboard-benefits{grid-template-columns:minmax(0,1fr)}
+  .dashboard-main-grid,.dashboard-primary{gap:12px}
+  .dashboard-panel{min-width:0}
+  .dashboard-panel form{flex-wrap:wrap}
+  .dashboard-panel form .input-wrap{flex:1 1 100%}
+  .dashboard-connect-button{width:100%}
+  .permission-request-row{gap:10px}
+  .page-heading{padding:24px 0 18px;align-items:flex-start;flex-direction:column}
+  .device-card{align-items:flex-start;flex-wrap:wrap}
+  .device-actions{width:100%;flex-direction:row;justify-content:space-between;align-items:center}
+  .settings-form-row{flex-wrap:wrap}
+  .settings-form-row input{min-width:0;flex:1 1 100%}
+  .remote-view-layout{grid-template-columns:minmax(0,1fr)}
+  .session-details{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width: 420px){
+  body{min-width:320px}
+  .main{padding-left:10px;padding-right:10px}
+  .brand strong{font-size:17px}
+  .nav-item{font-size:10px;gap:6px;padding:0 8px}
+  .dashboard-hero{padding:18px}
+  .hero-art{display:none}
+  .device-id-display{gap:5px}
+  .device-id-display code{overflow-wrap:anywhere;min-width:0}
+  .top-actions{gap:5px}
+  .status-pill{font-size:9px;padding:6px 7px}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
