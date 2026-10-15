@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 560" preserveAspectRatio="xMidYMid slice">
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#26375f"/><stop offset=".38" stop-color="#dc8c91"/><stop offset=".64" stop-color="#f7b99b"/><stop offset="1" stop-color="#253e5b"/></linearGradient>
+ <linearGradient id="lake" x2="0" y2="1"><stop stop-color="#344e70"/><stop offset="1" stop-color="#081a2c"/></linearGradient>
+ <linearGradient id="screen" x2="1" y2="1"><stop stop-color="#0876d9"/><stop offset=".5" stop-color="#00a5ff"/><stop offset="1" stop-color="#082b6e"/></linearGradient>
+ <linearGradient id="mount" x2="0" y2="1"><stop stop-color="#1c2c48"/><stop offset="1" stop-color="#0c1a2b"/></linearGradient>
+ <filter id="blur"><feGaussianBlur stdDeviation="14"/></filter>
+ <linearGradient id="glass" x2="0" y2="1"><stop stop-color="#ffffff" stop-opacity=".15"/><stop offset="1" stop-color="#000" stop-opacity=".1"/></linearGradient>
+</defs>
+<rect width="1600" height="560" fill="url(#sky)"/>
+<ellipse cx="720" cy="160" rx="430" ry="110" fill="#ffb8a5" opacity=".34" filter="url(#blur)"/>
+<path d="M0 295 120 214 195 244 318 116 410 237 520 165 630 247 750 95 870 232 990 160 1110 257 1245 140 1360 244 1460 170 1600 260V370H0Z" fill="#17243c"/>
+<path d="M0 322 132 255 214 286 335 153 410 253 525 211 630 274 754 131 870 268 987 201 1112 286 1240 182 1362 274 1468 217 1600 290V385H0Z" fill="url(#mount)"/>
+<path d="m278 214 57-61 43 55-27-15-17 7-14-10-18 24zM710 188l44-57 43 54-26-15-19 9-15-8-12 17zM1200 238l39-56 43 52-26-14-17 8-15-8-12 18z" fill="#b4c4d4" opacity=".72"/>
+<path d="M0 346 Q300 318 520 352 T1000 345 T1600 335V560H0Z" fill="url(#lake)"/>
+<path d="M0 365 Q250 344 470 368T900 361T1300 350T1600 360" fill="none" stroke="#efb8a8" stroke-opacity=".45" stroke-width="3"/>
+<g opacity=".3" stroke="#93b9d7"><path d="M80 405h400M210 430h300M20 468h500M120 506h340M610 395h250M560 448h320M660 494h260"/></g>
+<!-- monitor -->
+<g transform="translate(1010 76)">
+ <rect x="0" y="0" width="490" height="300" rx="15" fill="#050d17" stroke="#182c40" stroke-width="8"/>
+ <rect x="13" y="13" width="464" height="270" rx="5" fill="url(#screen)"/>
+ <path d="M25 265 Q120 150 205 195T470 80V283H25Z" fill="#061d50" opacity=".72"/>
+ <path d="M35 270 Q170 120 250 198T460 60" fill="none" stroke="#60d2ff" stroke-width="34" opacity=".65"/>
+ <path d="M100 270 Q240 120 310 178T470 120" fill="none" stroke="#0c59d0" stroke-width="46" opacity=".78"/>
+ <rect x="225" y="300" width="55" height="46" fill="#172a3b"/>
+ <path d="M160 348h190l55 13H110Z" fill="#26394b" stroke="#0b1725" stroke-width="5"/>
+</g>
+<!-- laptop -->
+<g transform="translate(780 270)">
+ <rect x="0" y="0" width="310" height="180" rx="10" fill="#050c15" stroke="#1d344b" stroke-width="7"/>
+ <rect x="10" y="10" width="290" height="160" rx="4" fill="#052b61"/>
+ <path d="M15 160 Q110 40 160 100T295 45V170H15Z" fill="#0755a9"/>
+ <path d="M20 165 Q130 45 180 112T295 60" fill="none" stroke="#128eff" stroke-width="23" opacity=".85"/>
+ <path d="M-30 182H340L300 205H10Z" fill="#506478" stroke="#091522" stroke-width="6"/>
+ <path d="M0 185h310" stroke="#9ab3c7" stroke-width="2" opacity=".5"/>
+</g>
+<rect width="1600" height="560" fill="url(#glass)"/>
+</svg>
