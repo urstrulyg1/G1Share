@@ -98,7 +98,7 @@ try {
   console.log(previewBase64)
   console.log('VISUAL_PREVIEW_BASE64_END')
 
-  const referenceBase64 = (await readFile(resolve(here, 'reference-96.jpg'))).toString('base64')
+  const referenceBase64 = (await readFile(resolve(here, 'reference-32.jpg'))).toString('base64')
   const pixelComparison = await page.evaluate(async (currentPngDataUrl, referenceDataUrl) => {
     const loadImage = (src) => new Promise((resolve, reject) => {
       const image = new Image()
@@ -110,8 +110,8 @@ try {
       loadImage(currentPngDataUrl),
       loadImage(referenceDataUrl)
     ])
-      const width = 96
-      const height = 64
+      const width = 32
+      const height = 21
       const currentCanvas = document.createElement('canvas')
       const referenceCanvas = document.createElement('canvas')
       const diffCanvas = document.createElement('canvas')
@@ -156,7 +156,7 @@ try {
   await writeFile(resolve(out, 'pixel-diff-192.png'), Buffer.from(diffBase64, 'base64'))
   delete pixelComparison.diffPngDataUrl
   await writeFile(resolve(out, 'pixel-comparison.json'), JSON.stringify({
-    method: 'Downsample current and supplied reference screenshots to 96×64, compare every RGB pixel, and report mean absolute channel error plus the fraction of pixels whose average channel difference exceeds 32.',
+    method: 'Downsample current and supplied reference screenshots to 32×21, compare every RGB pixel, and report mean absolute channel error plus the fraction of pixels whose average channel difference exceeds 32.',
     ...pixelComparison
   }, null, 2) + '\n')
   await writeFile(resolve(out, 'layout-measurements.json'), JSON.stringify({
