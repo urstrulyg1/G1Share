@@ -8,6 +8,7 @@ import { ActiveSessionView } from './components/ActiveSessionView'
 
 // UI fixtures live in this test only; production App always calls the real useOpenDesk hook.
 let runtime: Record<string, unknown>
+let bridge: Partial<OpenDeskBridge>
 vi.mock('./hooks/useOpenDesk', () => ({ useOpenDesk: () => runtime }))
 
 const local: DeviceInfo = {
@@ -46,7 +47,17 @@ function initialState(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   localStorage.clear()
-  Object.defineProperty(window, 'openDesk', { configurable: true, value: { copyText: vi.fn(), openProjectPage: vi.fn() } as Partial<OpenDeskBridge> })
+  bridge = {
+    copyText: vi.fn().mockResolvedValue(undefined),
+    readText: vi.fn().mockResolvedValue('AABBCCDD-EEFF0011-22334455-66778899'),
+    openProjectPage: vi.fn().mockResolvedValue(undefined),
+    minimizeWindow: vi.fn().mockResolvedValue(undefined),
+    toggleWindowMaximize: vi.fn().mockResolvedValue(true),
+    getWindowMaximized: vi.fn().mockResolvedValue(false),
+    onWindowMaximizedChange: vi.fn().mockReturnValue(() => undefined),
+    closeWindow: vi.fn().mockResolvedValue(undefined)
+  }
+  Object.defineProperty(window, 'openDesk', { configurable: true, value: bridge as OpenDeskBridge })
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
@@ -54,12 +65,14 @@ describe('account-free application UI', () => {
   it('starts on the dashboard with honest empty state and no login/signup route', () => {
     initialState()
     render(<App />)
-    expect(screen.getByRole('heading', { name: 'Connect to a device' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Access Your Devices Anywhere' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Connect to a Device' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /log in|sign up|create account|reset password/i })).toBeNull()
     expect(screen.queryByRole('link', { name: /log in|sign up|create account|reset password/i })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Request access' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Connect to remote device' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByText(/No signaling server configured/)).toBeTruthy()
-    expect(screen.getByText(local.deviceId!)).toBeTruthy()
+    expect(screen.getAllByText(local.deviceId!).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('EXAMPLE DATA · NOT VERIFIED')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Devices' }))
     expect(screen.getByText('No looked-up devices yet')).toBeTruthy()
@@ -68,7 +81,7 @@ describe('account-free application UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Recent sessions' }))
     expect(screen.getByRole('heading', { name: 'No recent sessions' })).toBeTruthy()
     expect(screen.queryByText(/Connected to/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'File transfer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'File Transfer' }))
     expect(screen.getByText(/Connect and request file transfer/)).toBeTruthy()
     expect(screen.queryByRole('progressbar')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
@@ -82,7 +95,7 @@ describe('account-free application UI', () => {
     render(<App />)
     expect(screen.getByText(/Status unknown — refresh/)).toBeTruthy()
     expect(screen.queryByText('Online at last lookup')).toBeNull()
-    expect(screen.getByRole('button', { name: `Request access to ${peer.name}` })).toBeTruthy()
+    expect(screen.getByRole('button', { name: `Connect to ${peer.name}` })).toBeTruthy()
   })
 
   it('shows an unavailable device ID rather than a fabricated fallback when secure storage fails', () => {
@@ -98,11 +111,11 @@ describe('account-free application UI', () => {
     initialState({ serviceState: 'online', serviceError: '', signalingUrl: 'https://signaling.example.test', requestSession })
     render(<App />)
     fireEvent.change(screen.getByLabelText('Remote device ID'), { target: { value: peer.id } })
-    fireEvent.click(screen.getByRole('button', { name: 'Request access' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect to remote device' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Unable to reach the signaling server.'))
     expect(requestSession).toHaveBeenCalledWith(peer.id, [])
     expect(screen.queryByText(/Session request sent/)).toBeNull()
-    expect(screen.getByRole('heading', { name: 'Connect to a device' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Connect to a Device' })).toBeTruthy()
   })
 
   it('leaves optional permissions off and grants each extra independently', async () => {
@@ -120,6 +133,60 @@ describe('account-free application UI', () => {
     fireEvent.click(file)
     fireEvent.click(screen.getByRole('button', { name: 'Approve selected' }))
     await waitFor(() => expect(approveSession).toHaveBeenCalledWith(session.id, ['view', 'files']))
+  })
+
+  it('copies and pastes the real device ID and saves aliases through the existing device service', async () => {
+    const renameLocalDevice = vi.fn().mockResolvedValue(undefined)
+    initialState({ serviceState: 'online', serviceError: '', renameLocalDevice })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy device ID' }))
+    await waitFor(() => expect(bridge.copyText).toHaveBeenCalledWith(local.deviceId))
+    fireEvent.click(screen.getByRole('button', { name: 'Paste device ID from clipboard' }))
+    await waitFor(() => expect(screen.getByLabelText('Remote device ID')).toHaveProperty('value', peer.id))
+    expect(bridge.readText).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set Custom Alias (Optional)' }))
+    fireEvent.change(screen.getByLabelText('Device alias'), { target: { value: 'Studio workstation' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(renameLocalDevice).toHaveBeenCalledWith('Studio workstation'))
+    expect(screen.getByText(/Device alias saved as/)).toBeTruthy()
+  })
+
+  it('rejects incoming session requests when the incoming-request switch is turned off', async () => {
+    const rejectSession = vi.fn().mockResolvedValue(undefined)
+    const incoming: IncomingSessionRequest = { session, peer }
+    initialState({ serviceState: 'online', serviceError: '', incomingRequests: [incoming], rejectSession })
+    render(<App />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow incoming session requests' }))
+    await waitFor(() => expect(rejectSession).toHaveBeenCalledWith(session.id))
+    expect(localStorage.getItem('opendesk.incomingRequests.v1')).toBe('false')
+    expect(screen.queryByText('Incoming session requests')).toBeNull()
+  })
+
+  it('opens example-device details and routes safely to a real ID form instead of connecting a fake device', async () => {
+    initialState()
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for My Desktop' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
+    expect(screen.getByRole('dialog', { name: 'My Desktop' })).toBeTruthy()
+    expect(screen.getByText(/has no device identity and has never been checked/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enter a real ID' }))
+    expect(screen.getByRole('button', { name: 'Connect' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByLabelText('Remote device ID')).toBeTruthy()
+    expect(runtime.requestSession).not.toHaveBeenCalled()
+  })
+
+  it('uses native window APIs for minimize, maximize, and close controls', async () => {
+    initialState()
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize window' }))
+    await waitFor(() => expect(bridge.minimizeWindow).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize window' }))
+    await waitFor(() => expect(bridge.toggleWindowMaximize).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Restore window' })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Close window' }))
+    await waitFor(() => expect(bridge.closeWindow).toHaveBeenCalledOnce())
   })
 })
 

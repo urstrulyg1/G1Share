@@ -26,6 +26,16 @@ const bridge: OpenDeskBridge = {
   listTrustedDevices: () => ipcRenderer.invoke('devices:list-trusted') as Promise<TrustedDevice[]>,
   forgetTrustedDevice: (deviceId) => ipcRenderer.invoke('devices:forget-trusted', deviceId) as Promise<boolean>,
   copyText: (text) => ipcRenderer.invoke('system:copy-text', text) as Promise<void>,
+  readText: () => ipcRenderer.invoke('system:read-text') as Promise<string>,
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
+  toggleWindowMaximize: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<boolean>,
+  getWindowMaximized: () => ipcRenderer.invoke('window:get-maximized') as Promise<boolean>,
+  onWindowMaximizedChange: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, maximized: unknown) => listener(maximized === true)
+    ipcRenderer.on('window:maximized-changed', handler)
+    return () => ipcRenderer.removeListener('window:maximized-changed', handler)
+  },
+  closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
   shareClipboardText: () => ipcRenderer.invoke('clipboard:share-text') as Promise<string | null>,
   receiveClipboardText: (text) => ipcRenderer.invoke('clipboard:receive-text', text) as Promise<boolean>,
   prepareIncomingFile: (request: IncomingFileRequest) => ipcRenderer.invoke('files:prepare-incoming', request) as Promise<IncomingFileHandle | null>,
