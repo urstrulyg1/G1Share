@@ -136,6 +136,12 @@ export interface OpenDeskBridge {
   listTrustedDevices: () => Promise<TrustedDevice[]>
   forgetTrustedDevice: (deviceId: string) => Promise<boolean>
   copyText: (text: string) => Promise<void>
+  readText: () => Promise<string>
+  minimizeWindow: () => Promise<void>
+  toggleWindowMaximize: () => Promise<boolean>
+  getWindowMaximized: () => Promise<boolean>
+  onWindowMaximizedChange: (listener: (maximized: boolean) => void) => () => void
+  closeWindow: () => Promise<void>
   shareClipboardText: () => Promise<string | null>
   receiveClipboardText: (text: string) => Promise<boolean>
   prepareIncomingFile: (request: IncomingFileRequest) => Promise<IncomingFileHandle | null>

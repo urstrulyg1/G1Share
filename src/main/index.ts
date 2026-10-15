@@ -866,6 +866,33 @@ function registerIpcHandlers(): void {
     assertTrustedIPC(event)
     clipboard.writeText(assertString(value, 'Clipboard text', 10000))
   })
+  ipcMain.handle('system:read-text', async event => {
+    assertTrustedIPC(event)
+    // This read is reached only from the explicit Paste button in the renderer.
+    return (await clipboard.readText()).slice(0, 10000)
+  })
+  ipcMain.handle('window:minimize', event => {
+    assertTrustedIPC(event)
+    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    mainWindow.minimize()
+  })
+  ipcMain.handle('window:toggle-maximize', event => {
+    assertTrustedIPC(event)
+    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+    return mainWindow.isMaximized()
+  })
+  ipcMain.handle('window:get-maximized', event => {
+    assertTrustedIPC(event)
+    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    return mainWindow.isMaximized()
+  })
+  ipcMain.handle('window:close', event => {
+    assertTrustedIPC(event)
+    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    mainWindow.close()
+  })
   ipcMain.handle('clipboard:share-text', async event => {
     assertTrustedIPC(event)
     return shareClipboardText()
@@ -943,13 +970,20 @@ function registerIpcHandlers(): void {
 }
 
 function createWindow(): void {
+  const { size } = screen.getPrimaryDisplay()
+  const width = Math.min(1536, size.width)
+  const height = Math.min(1024, size.height)
   mainWindow = new BrowserWindow({
-    width: 1240,
-    height: 820,
-    minWidth: 900,
-    minHeight: 640,
+    width,
+    height,
+    minWidth: Math.min(900, width),
+    minHeight: Math.min(640, height),
+    center: true,
+    frame: false,
+    resizable: true,
+    autoHideMenuBar: true,
     show: false,
-    backgroundColor: '#0b1020',
+    backgroundColor: '#09111d',
     title: 'OpenDesk',
     webPreferences: {
       preload: join(currentDir, '../preload/index.cjs'),
@@ -961,6 +995,8 @@ function createWindow(): void {
     }
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximized-changed', true))
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximized-changed', false))
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event, targetURL) => {
     const devURL = process.env.ELECTRON_RENDERER_URL
