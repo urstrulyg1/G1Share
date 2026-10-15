@@ -98,22 +98,18 @@ try {
   console.log(previewBase64)
   console.log('VISUAL_PREVIEW_BASE64_END')
 
-  const pixelComparison = await page.evaluate(async currentPngDataUrl => {
+  const referenceBase64 = (await readFile(resolve(here, 'reference-192.jpg'))).toString('base64')
+  const pixelComparison = await page.evaluate(async (currentPngDataUrl, referenceDataUrl) => {
     const loadImage = (src) => new Promise((resolve, reject) => {
       const image = new Image()
       image.onload = () => resolve(image)
       image.onerror = reject
       image.src = src
     })
-    const referenceResponse = await fetch('/e2e/visual/reference-192.jpg')
-    if (!referenceResponse.ok) throw new Error('Could not load the committed screenshot reference.')
-    const referenceBlob = await referenceResponse.blob()
-    const referenceUrl = URL.createObjectURL(referenceBlob)
-    try {
-      const [currentImage, referenceImage] = await Promise.all([
-        loadImage(currentPngDataUrl),
-        loadImage(referenceUrl)
-      ])
+    const [currentImage, referenceImage] = await Promise.all([
+      loadImage(currentPngDataUrl),
+      loadImage(referenceDataUrl)
+    ])
       const width = 192
       const height = 128
       const currentCanvas = document.createElement('canvas')
@@ -155,10 +151,7 @@ try {
         changedPixelRatio: Number((changedPixels / (width * height)).toFixed(4)),
         diffPngDataUrl: diffCanvas.toDataURL('image/png')
       }
-    } finally {
-      URL.revokeObjectURL(referenceUrl)
-    }
-  }, 'data:image/png;base64,' + screenshotBuffer.toString('base64'))
+  }, 'data:image/png;base64,' + screenshotBuffer.toString('base64'), 'data:image/jpeg;base64,' + referenceBase64)
   const diffBase64 = pixelComparison.diffPngDataUrl.split(',')[1]
   await writeFile(resolve(out, 'pixel-diff-192.png'), Buffer.from(diffBase64, 'base64'))
   delete pixelComparison.diffPngDataUrl
