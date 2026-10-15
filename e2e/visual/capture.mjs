@@ -65,13 +65,41 @@ try {
       }]
     }))
   })
+  const referenceBounds = {
+    '.application-window': { x: 40, y: 62, width: 1456, height: 900, tolerance: 2 },
+    '.window-header': { x: 41, y: 63, width: 1454, height: 72, tolerance: 2 },
+    '.sidebar': { x: 41, y: 135, width: 250, height: 826, tolerance: 2 },
+    '.dashboard-hero': { x: 291, y: 135, width: 868, height: 298, tolerance: 3 },
+    '.access-panel': { x: 291, y: 448, width: 427, height: 310, tolerance: 4 },
+    '.connect-panel': { x: 732, y: 448, width: 427, height: 310, tolerance: 4 },
+    '.recent-devices-panel': { x: 1170, y: 135, width: 314, height: 428, tolerance: 3 },
+    '.network-panel': { x: 1170, y: 577, width: 314, height: 182, tolerance: 3 },
+    '.dashboard-benefits': { x: 291, y: 773, width: 1193, height: 168, tolerance: 3 },
+    '.local-device-card': { x: 54, y: 698, width: 223, height: 250, tolerance: 3 }
+  }
+  const differences = []
+  for (const [selector, expected] of Object.entries(referenceBounds)) {
+    const actual = result[selector]
+    if (!actual) {
+      differences.push({ selector, issue: 'element missing' })
+      continue
+    }
+    for (const key of ['x', 'y', 'width', 'height']) {
+      const delta = Math.abs(actual[key] - expected[key])
+      if (delta > expected.tolerance) differences.push({
+        selector, property: key, expected: expected[key], actual: actual[key], delta, tolerance: expected.tolerance
+      })
+    }
+  }
   await page.screenshot({ path: resolve(out, 'opendesk-after.png'), fullPage: false })
   await writeFile(resolve(out, 'layout-measurements.json'), JSON.stringify({
     viewport: { width: 1536, height: 1024 },
     note: 'Renderer screenshot uses a visual-only bridge. Device identity, signaling, sessions, and native capabilities are intentionally unavailable; sample rows are not live devices.',
+    comparison: { reference: referenceBounds, differences, passed: differences.length === 0 },
     elements: result
-  }, null, 2) + '\n')
-  console.log(JSON.stringify({ screenshot: 'artifacts/visual-validation/opendesk-after.png', measurements: result }, null, 2))
+  }, null, 2) + '\\n')
+  console.log(JSON.stringify({ screenshot: 'artifacts/visual-validation/opendesk-after.png', comparison: { passed: differences.length === 0, differences }, measurements: result }, null, 2))
+  if (differences.length) process.exitCode = 1
 } finally {
   if (browser) await browser.close()
   server.kill('SIGTERM')
