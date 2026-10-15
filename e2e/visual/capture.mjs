@@ -103,7 +103,7 @@ try {
     const loadImage = (src) => new Promise((resolve, reject) => {
       const image = new Image()
       image.onload = () => resolve(image)
-      image.onerror = reject
+      image.onerror = () => reject(new Error(`Image decode failed for ${src.slice(0, 32)} (source length ${src.length}).`))
       image.src = src
     })
     const [currentImage, referenceImage] = await Promise.all([
