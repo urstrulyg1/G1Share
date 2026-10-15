@@ -876,9 +876,21 @@ function registerIpcHandlers(): void {
     if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
     mainWindow.minimize()
   })
-  ipcMain.handle('window:toggle-maximize', event => {
+  ipcMain.handle('window:toggle-maximize', (event, options?: unknown) => {
     assertTrustedIPC(event)
     if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    const altKey = Boolean(options && typeof options === 'object' && (options as { altKey?: boolean }).altKey)
+    if (process.platform === 'darwin') {
+      if (altKey) {
+        if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false)
+        if (mainWindow.isMaximized()) mainWindow.unmaximize()
+        else mainWindow.maximize()
+        return mainWindow.isMaximized()
+      }
+      const nextFullScreen = !mainWindow.isFullScreen()
+      mainWindow.setFullScreen(nextFullScreen)
+      return nextFullScreen || mainWindow.isMaximized()
+    }
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
     return mainWindow.isMaximized()
@@ -886,7 +898,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('window:get-maximized', event => {
     assertTrustedIPC(event)
     if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
-    return mainWindow.isMaximized()
+    return mainWindow.isFullScreen() || mainWindow.isMaximized()
   })
   ipcMain.handle('window:close', event => {
     assertTrustedIPC(event)
@@ -994,9 +1006,14 @@ function createWindow(): void {
       allowRunningInsecureContent: false
     }
   })
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+    mainWindow?.maximize()
+  })
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximized-changed', true))
-  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximized-changed', false))
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximized-changed', mainWindow?.isFullScreen() ?? false))
+  mainWindow.on('enter-full-screen', () => mainWindow?.webContents.send('window:maximized-changed', true))
+  mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send('window:maximized-changed', mainWindow?.isMaximized() ?? false))
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event, targetURL) => {
     const devURL = process.env.ELECTRON_RENDERER_URL

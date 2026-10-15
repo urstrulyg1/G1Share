@@ -138,7 +138,7 @@ export interface OpenDeskBridge {
   copyText: (text: string) => Promise<void>
   readText: () => Promise<string>
   minimizeWindow: () => Promise<void>
-  toggleWindowMaximize: () => Promise<boolean>
+  toggleWindowMaximize: (options?: { altKey?: boolean }) => Promise<boolean>
   getWindowMaximized: () => Promise<boolean>
   onWindowMaximizedChange: (listener: (maximized: boolean) => void) => () => void
   closeWindow: () => Promise<void>

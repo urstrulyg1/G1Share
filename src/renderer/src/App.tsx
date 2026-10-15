@@ -196,10 +196,10 @@ export default function App() {
     } catch (error) { reportError(error instanceof Error ? error.message : 'Could not minimize the OpenDesk window.') }
   }
 
-  async function toggleWindowSize() {
+  async function toggleWindowSize(options?: { altKey?: boolean }) {
     try {
       if (typeof window.openDesk.toggleWindowMaximize !== 'function') throw new Error('Native window controls are unavailable in this runtime.')
-      setWindowMaximized(await window.openDesk.toggleWindowMaximize())
+      setWindowMaximized(await window.openDesk.toggleWindowMaximize(options))
     } catch (error) { reportError(error instanceof Error ? error.message : 'Could not resize the OpenDesk window.') }
   }
 
@@ -223,7 +223,7 @@ export default function App() {
   return <div className={`app-shell desktop-surface theme-${theme} platform-${osPlatform}`}>
     <div className="application-window">
       <header className={`window-header header-${isMac ? 'mac' : isWin ? 'win' : 'default'}`} onDoubleClick={event => {
-        if (!(event.target instanceof HTMLElement) || !event.target.closest('button')) void toggleWindowSize()
+        if (!(event.target instanceof HTMLElement) || !event.target.closest('button')) void toggleWindowSize({ altKey: true })
       }}>
         {isMac && (
           <div className="mac-traffic-lights" aria-label="Window controls">
@@ -233,7 +233,12 @@ export default function App() {
             <button className="mac-traffic-light mac-minimize" aria-label="Minimize window" title="Minimize" onClick={() => void minimizeWindow()}>
               <Minus size={8} strokeWidth={2.6}/>
             </button>
-            <button className="mac-traffic-light mac-maximize" aria-label={windowMaximized ? 'Restore window' : 'Maximize window'} title={windowMaximized ? 'Restore' : 'Maximize'} onClick={() => void toggleWindowSize()}>
+            <button
+              className="mac-traffic-light mac-maximize"
+              aria-label={windowMaximized ? 'Restore window' : 'Maximize window'}
+              title={windowMaximized ? 'Exit Full Screen' : 'Enter Full Screen'}
+              onClick={event => void toggleWindowSize({ altKey: event.altKey })}
+            >
               {windowMaximized ? <Minus size={8} strokeWidth={2.6}/> : <Maximize2 size={7} strokeWidth={2.6}/>}
             </button>
           </div>

@@ -28,7 +28,7 @@ const bridge: OpenDeskBridge = {
   copyText: (text) => ipcRenderer.invoke('system:copy-text', text) as Promise<void>,
   readText: () => ipcRenderer.invoke('system:read-text') as Promise<string>,
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
-  toggleWindowMaximize: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<boolean>,
+  toggleWindowMaximize: (options?: { altKey?: boolean }) => ipcRenderer.invoke('window:toggle-maximize', options) as Promise<boolean>,
   getWindowMaximized: () => ipcRenderer.invoke('window:get-maximized') as Promise<boolean>,
   onWindowMaximizedChange: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, maximized: unknown) => listener(maximized === true)
