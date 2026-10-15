@@ -50,7 +50,7 @@ npm audit --audit-level=high
 CHROME_PATH=/path/to/chrome npm run test:e2e  # also requires Go
 ```
 
-For this change, local `npm run typecheck`, `npm test` (16 files, 120 tests), `npm run build`, and `npm audit --audit-level=high` passed, with zero vulnerabilities reported. Go and Chrome/Chromium were not available in the initial local environment; Go race and two-client E2E results should be recorded after CI rather than assumed. The two-client suite drives separate browser clients against a real Go broker but uses simulated screen capture and native-input hooks: it cannot certify real OS capture or injection. The linked data-channel tests use stand-ins. Main-process storage tests use real temporary files.
+For this change, local `npm run typecheck`, `npm test` (16 files, 121 tests), `npm run build`, and `npm audit --audit-level=high` passed, with zero vulnerabilities reported. Go and Chrome/Chromium were not available in the initial local environment; Go race and two-client E2E results should be recorded after CI rather than assumed. The two-client suite drives separate browser clients against a real Go broker but uses simulated screen capture and native-input hooks: it cannot certify real OS capture or injection. The linked data-channel tests use stand-ins. Main-process storage tests use real temporary files.
 
 ## Required next verification
 

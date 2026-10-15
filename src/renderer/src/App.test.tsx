@@ -55,7 +55,8 @@ describe('account-free application UI', () => {
     initialState()
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Connect to a device' })).toBeTruthy()
-    expect(screen.queryByText(/login|sign up|create account|reset password/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /log in|sign up|create account|reset password/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: /log in|sign up|create account|reset password/i })).toBeNull()
     expect(screen.getByRole('button', { name: 'Request access' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByText(/No signaling server configured/)).toBeTruthy()
     expect(screen.getByText(local.deviceId!)).toBeTruthy()
@@ -75,6 +76,15 @@ describe('account-free application UI', () => {
     expect(screen.queryByText(/account profile/i)).toBeNull()
   })
 
+  it('never treats stale or unreachable devices as online in the redesigned dashboard', () => {
+    initialState({ serviceState: 'online', serviceError: '', signalingUrl: 'https://signaling.example.test',
+      knownDevices: [{ ...peer, checkedAt: new Date(Date.now() - 90_000).toISOString() }] })
+    render(<App />)
+    expect(screen.getByText(/Status unknown — refresh/)).toBeTruthy()
+    expect(screen.queryByText('Online at last lookup')).toBeNull()
+    expect(screen.getByRole('button', { name: `Request access to ${peer.name}` })).toBeTruthy()
+  })
+
   it('shows an unavailable device ID rather than a fabricated fallback when secure storage fails', () => {
     initialState({ device: { ...local, deviceId: null, identityReady: false, identityMessage: 'Unlock your keyring.' }, serviceState: 'blocked', serviceError: 'Unlock your keyring.' })
     render(<App />)
@@ -89,7 +99,7 @@ describe('account-free application UI', () => {
     render(<App />)
     fireEvent.change(screen.getByLabelText('Remote device ID'), { target: { value: peer.id } })
     fireEvent.click(screen.getByRole('button', { name: 'Request access' }))
-    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Unable to reach the signaling server.'))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Unable to reach the signaling server.'))
     expect(requestSession).toHaveBeenCalledWith(peer.id, [])
     expect(screen.queryByText(/Session request sent/)).toBeNull()
     expect(screen.getByRole('heading', { name: 'Connect to a device' })).toBeTruthy()

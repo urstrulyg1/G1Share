@@ -38,11 +38,13 @@ export default function App() {
   const [requestAudio, setRequestAudio] = useState(false)
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
+  const [refreshingDevices, setRefreshingDevices] = useState(false)
+  const [refreshingTrustedDevices, setRefreshingTrustedDevices] = useState(false)
   const [clock, setClock] = useState(() => Date.now())
 
   useEffect(() => { localStorage.setItem('opendesk.theme', theme) }, [theme])
   useEffect(() => {
-    if (page !== 'Devices' || openDesk.activeSession) return
+    if ((page !== 'Devices' && page !== 'Home') || openDesk.activeSession) return
     setClock(Date.now())
     const timer = setInterval(() => setClock(Date.now()), 10_000)
     return () => clearInterval(timer)
@@ -114,9 +116,23 @@ export default function App() {
   }
 
   async function refreshDevices() {
+    if (refreshingDevices) return
+    setRefreshingDevices(true)
     try {
       await Promise.all([openDesk.refreshKnownDevices(), openDesk.refreshTrustedDevices()])
+      setNotice({ kind: 'success', message: 'Looked-up devices and trusted fingerprints refreshed.' })
     } catch (error) { reportError(error instanceof Error ? error.message : 'Could not refresh device information.') }
+    finally { setRefreshingDevices(false) }
+  }
+
+  async function refreshTrustedDevices() {
+    if (refreshingTrustedDevices) return
+    setRefreshingTrustedDevices(true)
+    try {
+      await openDesk.refreshTrustedDevices()
+      setNotice({ kind: 'success', message: 'Trusted-device list refreshed.' })
+    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not refresh trusted devices.') }
+    finally { setRefreshingTrustedDevices(false) }
   }
 
   const remoteTargetPlatform = useMemo(() => {
@@ -137,7 +153,7 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><ArrowLeftRight size={20}/></div><div><strong>OpenDesk</strong><small>REMOTE, WITHOUT LIMITS</small></div></div>
       <div className="nav-label">WORKSPACE</div>
-      <nav>{nav.map(({ label, icon: Icon }) => <button key={label} className={'nav-item ' + (page === label && !openDesk.activeSession ? 'active' : '')} onClick={() => setPage(label)} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect the session to open another page.' : undefined}><Icon size={17}/><span>{label}</span>{label === 'Devices' && openDesk.incomingRequests.length > 0 && <b className="nav-badge">{openDesk.incomingRequests.length}</b>}</button>)}</nav>
+      <nav>{nav.map(({ label, icon: Icon }) => <button key={label} className={'nav-item ' + (page === label && !openDesk.activeSession ? 'active' : '')} aria-current={currentPage === label ? 'page' : undefined} onClick={() => setPage(label)} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect the session to open another page.' : undefined}><Icon size={17}/><span>{label}</span>{label === 'Devices' && openDesk.incomingRequests.length > 0 && <b className="nav-badge">{openDesk.incomingRequests.length}</b>}</button>)}</nav>
       <div className="sidebar-bottom">
         <div className="free-card"><ShieldCheck size={19}/><strong>Free by design.</strong><p>Self-hosted signaling and standard WebRTC. Your devices, your choice.</p><button onClick={() => setPage('Settings')} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect the session to change settings.' : undefined}>Connection settings <ArrowRight size={13}/></button></div>
         <button className="github-link" onClick={() => void window.openDesk.openProjectPage().catch(error => reportError(error instanceof Error ? error.message : 'Could not open the project page.'))}><Github size={16}/> Open-source project <ExternalLink size={13}/></button>
@@ -148,10 +164,10 @@ export default function App() {
     <main className="main">
       <header className="topbar">
         <div className="crumb">Workspace <span>/</span> <strong>{currentPage}</strong></div>
-        <div className="top-actions"><span className={`status-pill status-${openDesk.serviceState}`}><i/>{statusLabel}</span><button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button><button className="icon-button" aria-label="Diagnostics" onClick={() => setPage('Diagnostics')} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect to open diagnostics.' : undefined}><CircleHelp size={16}/></button></div>
+        <div className="top-actions"><span className={`status-pill status-${openDesk.serviceState}`} role="status" aria-live="polite"><i/>{statusLabel}</span><button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button><button className="icon-button" aria-label="Diagnostics" onClick={() => setPage('Diagnostics')} disabled={!!openDesk.activeSession} title={openDesk.activeSession ? 'Disconnect to open diagnostics.' : undefined}><CircleHelp size={16}/></button></div>
       </header>
 
-      {notice && <div className={`notice notice-${notice.kind}`} role="status"><span>{notice.kind === 'success' ? <Check size={15}/> : notice.kind === 'error' ? <X size={15}/> : <CircleHelp size={15}/>}</span><p>{notice.message}</p><button aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14}/></button></div>}
+      {notice && <div className={`notice notice-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'} aria-live={notice.kind === 'error' ? 'assertive' : 'polite'}><span>{notice.kind === 'success' ? <Check size={15}/> : notice.kind === 'error' ? <X size={15}/> : <CircleHelp size={15}/>}</span><p>{notice.message}</p><button aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14}/></button></div>}
       {openDesk.incomingRequests.length > 0 && <IncomingRequests requests={openDesk.incomingRequests} busy={busy} hasActiveSession={!!openDesk.activeSession} approve={approve} reject={reject} capabilities={openDesk.capabilities}/>}
 
       {openDesk.activeSession && openDesk.device && <>
@@ -160,33 +176,72 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Home' && <>
-        <section className="welcome"><div><div className="eyebrow"><Sparkles size={13}/> YOUR REMOTE WORKSPACE</div><h1>Good to see you.</h1><p>Connect to another computer. Screen sharing starts only after the remote user approves.</p></div><div className="orbit"><span><Monitor size={16}/></span><b><ArrowLeftRight size={28}/></b><i><Laptop size={15}/></i></div></section>
-        <section className="connect-card">
-          <div className="connect-title"><div className="section-icon"><Radio size={19}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown in the other OpenDesk installation.</p></div><span className="consent"><LockKeyhole size={12}/> Approval required</span></div>
-          <form onSubmit={event => { event.preventDefault(); void connect() }}><label className="sr-only" htmlFor="remote-id">Remote device ID</label><div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Enter the other device’s ID"/></div><button className="primary" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={15}/></button></form>
-          <div className="permission-request-row"><span>Request additional permissions (optional)</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> One-time clipboard text</label><label><input type="checkbox" checked={requestInput} onChange={event => setRequestInput(event.target.checked)}/> Remote keyboard and mouse</label><label><input type="checkbox" checked={requestAudio} disabled={remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32'} onChange={event => setRequestAudio(event.target.checked)}/> System audio{remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32' ? ' (Windows hosts only)' : ''}</label></div>
-          <div className="connect-foot"><span><LockKeyhole size={13}/> Device IDs locate devices; they never grant access.</span><button onClick={() => setPage('Diagnostics')}>View connection diagnostics <ArrowRight size={13}/></button></div>
+        <section className="dashboard-hero">
+          <div className="hero-copy">
+            <div className="eyebrow"><Sparkles size={13}/> FREE · PRIVATE · ACCOUNT-FREE</div>
+            <h1>Your devices.<br/>Your connection.</h1>
+            <p>No account required. Configure a shared signaling service, then approve each remote session on the host.</p>
+            <button className="hero-cta" onClick={() => document.getElementById('remote-id')?.focus()}>Connect to a device <ArrowRight size={15}/></button>
+          </div>
+          <div className="hero-art" aria-hidden="true"><div className="hero-screen hero-screen-back"><span/><i/><b/></div><div className="hero-screen hero-screen-front"><span/><i/><b/></div><div className="hero-link"><ArrowLeftRight size={25}/></div></div>
         </section>
 
-        <section className="section"><div className="section-head"><div><h2>Your device</h2><p>This identity authenticates signaling requests and does not authorize incoming sessions.</p></div><button className="subtle" onClick={() => void copyId()} disabled={!openDesk.device?.identityReady || !openDesk.device.deviceId}><Copy size={13}/> Copy ID</button></div>
-          <div className="device-card"><div className="device-icon"><MonitorCheck size={24}/></div><div className="device-main"><strong>{platform} device <em>THIS DEVICE</em></strong><small>{openDesk.device ? `${openDesk.device.platform} · ${openDesk.device.architecture}` : 'Loading local identity'}</small><div className="id-row"><code>{openDesk.device ? openDesk.device.deviceId || 'Unavailable — unlock your OS credential store' : 'Generating secure device identity…'}</code><button aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device?.identityReady || !openDesk.device.deviceId}><Copy size={13}/></button></div></div><div className="local-only"><span className={openDesk.device?.identityReady ? '' : 'dot-warning'}/>{openDesk.device?.identityReady ? 'Key ready' : openDesk.device ? 'Key unavailable' : 'Loading identity'}<small>{openDesk.device?.secureStorageBackend || 'checking secure storage'}</small></div></div>
-          {!openDesk.device?.identityReady && openDesk.device && <div className="inline-warning"><ShieldAlert size={15}/><span>{openDesk.device.identityMessage}</span><button onClick={() => setPage('Diagnostics')}>Details</button></div>}
+        <section className="dashboard-main-grid">
+          <div className="dashboard-primary">
+            <section className="dashboard-panel access-panel">
+              <div className="dashboard-panel-title"><div className="dashboard-icon"><Radio size={20}/></div><div><h2>Your device ID</h2><p>Share this ID with someone you trust to identify your computer.</p></div></div>
+              <div className="device-id-display"><code>{openDesk.device ? openDesk.device.identityReady && openDesk.device.deviceId ? openDesk.device.deviceId : 'Unavailable — unlock your OS credential store' : 'Generating secure device identity…'}</code><button className="icon-button" aria-label="Copy device ID" onClick={() => void copyId()} disabled={!openDesk.device?.identityReady || !openDesk.device.deviceId}><Copy size={17}/></button></div>
+              <div className="access-state"><i className={openDesk.device?.identityReady ? 'state-dot-ready' : 'state-dot-waiting'}/><span>{openDesk.device?.identityReady ? 'Secure device identity ready' : openDesk.device?.identityMessage || 'Preparing secure device identity'}</span><span className="access-platform">{platform}</span></div>
+              <p className="dashboard-note"><LockKeyhole size={13}/> Device ID is not a password. Incoming sessions require local approval.</p>
+            </section>
+
+            <section className="dashboard-panel connect-panel">
+              <div className="dashboard-panel-title"><div className="dashboard-icon"><Signal size={20}/></div><div><h2>Connect to a device</h2><p>Enter the ID shown on the remote computer.</p></div></div>
+              <form onSubmit={event => { event.preventDefault(); void connect() }}>
+                <label className="sr-only" htmlFor="remote-id">Remote device ID</label>
+                <div className="input-wrap"><Monitor size={16}/><input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false} onChange={event => setRemoteId(event.target.value)} placeholder="Enter remote device ID"/></div>
+                <button className="primary dashboard-connect-button" type="submit" disabled={busy || openDesk.serviceState !== 'online'}>{busy ? 'Requesting…' : 'Request access'} <ArrowRight size={16}/></button>
+              </form>
+              <div className="permission-request-row dashboard-permissions"><span>Optional permissions</span><label><input type="checkbox" checked={requestFiles} onChange={event => setRequestFiles(event.target.checked)}/> File transfer</label><label><input type="checkbox" checked={requestClipboard} onChange={event => setRequestClipboard(event.target.checked)}/> Clipboard</label><label><input type="checkbox" checked={requestInput} onChange={event => setRequestInput(event.target.checked)}/> Keyboard & mouse</label><label><input type="checkbox" checked={requestAudio} disabled={remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32'} onChange={event => setRequestAudio(event.target.checked)}/> Audio{remoteTargetPlatform !== undefined && remoteTargetPlatform !== 'win32' ? ' (Windows only)' : ''}</label></div>
+            </section>
+          </div>
+
+          <aside className="dashboard-side">
+            <section className="dashboard-panel recent-devices-panel">
+              <div className="dashboard-section-heading"><h2>Known devices</h2><button className="text-action" onClick={() => setPage('Devices')}>View all <ArrowRight size={13}/></button></div>
+              {openDesk.knownDevices.length ? <div className="dashboard-device-list">{openDesk.knownDevices.slice(0, 5).map(device => {
+                const presence = devicePresence(device, openDesk.serviceState === 'online', clock)
+                return <button className="dashboard-device-row device-row-action" type="button" key={device.id} aria-label={`Request access to ${device.name}`} onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}>
+                  <div className="dashboard-device-icon">{device.platform.toLowerCase().includes('mac') || device.platform === 'darwin' ? <Laptop size={18}/> : <Monitor size={18}/>}</div>
+                  <div className="dashboard-device-copy"><strong>{device.name}</strong><small>{device.platform} · {presence.label}</small></div>
+                  <span className="device-row-arrow" aria-hidden="true"><ArrowRight size={15}/></span>
+                </button>
+              })}</div> : <EmptyInline icon={Monitor} title="No looked-up devices yet" description="Enter a device ID on Home to look it up. No devices or online states are simulated."/>}
+            </section>
+            <section className="dashboard-panel network-panel">
+              <div className="dashboard-section-heading"><h2>Connection status</h2><span className={'connection-state-dot ' + (openDesk.serviceState === 'online' ? 'is-online' : '')}/></div>
+              <div className="network-status-copy"><strong>{statusLabel}</strong><p>{openDesk.serviceError || (openDesk.serviceState === 'online' ? 'Signaling service is reachable.' : 'Check your signaling endpoint and network connection in Settings.')}</p></div>
+              <div className="network-endpoint"><span>Signaling endpoint</span><code>{openDesk.signalingUrl || 'Not configured'}</code></div>
+              <div className="network-panel-actions"><button className="subtle" onClick={() => setPage('Diagnostics')}><Activity size={13}/> Diagnostics</button><button className="subtle network-settings-button" onClick={() => setPage('Settings')}><Settings size={13}/> Connection settings</button></div>
+            </section>
+          </aside>
         </section>
 
-        <section className="section"><div className="section-head"><div><h2>Connection status</h2><p>Live state from the configured signaling service.</p></div><span className={`status-text status-text-${openDesk.serviceState}`}><i/>{statusLabel}</span></div>
-          <div className="service-card"><div className="service-icon"><Signal size={20}/></div><div><strong>{openDesk.serviceState === 'online' ? 'Signaling service reachable' : openDesk.serviceState === 'blocked' ? 'Secure device identity required' : 'No active signaling connection'}</strong><p>{openDesk.serviceError || `Configured endpoint: ${openDesk.signalingUrl}`}</p></div><button className="subtle" onClick={() => setPage('Settings')}><Settings size={13}/> Configure</button></div>
+        <section className="dashboard-benefits">
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open performance diagnostics" onClick={() => setPage('Diagnostics')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Diagnostics') } }}><div className="benefit-icon benefit-speed"><Activity size={22}/></div><div><strong>Built for responsiveness</strong><p>WebRTC media transport with connection-quality diagnostics.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open security settings" onClick={() => setPage('Settings')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Settings') } }}><div className="benefit-icon benefit-secure"><ShieldCheck size={22}/></div><div><strong>Consent comes first</strong><p>Remote access requires approval and scoped session permissions.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open platform diagnostics" onClick={() => setPage('Diagnostics')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Diagnostics') } }}><div className="benefit-icon benefit-platform"><Monitor size={22}/></div><div><strong>Cross-platform foundation</strong><p>Platform capabilities are reported honestly by each installation.</p></div></article>
+          <article className="benefit-card clickable-tile" role="button" tabIndex={0} aria-label="Open connection settings" onClick={() => setPage('Settings')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setPage('Settings') } }}><div className="benefit-icon benefit-free"><LockKeyhole size={22}/></div><div><strong>Free and account-free</strong><p>No user login required. Configure your own signaling infrastructure.</p></div></article>
         </section>
-        <section className="section"><div className="section-head"><div><h2>Built around explicit consent</h2><p>Every session request remains visible to the remote user.</p></div></div><div className="feature-grid"><Feature icon={ShieldCheck} title="Approval on the remote device" text="No unattended access exists in this build. Each request must be approved locally."/><Feature icon={Wifi} title="Peer-to-peer transport" text="Screen media uses WebRTC; signaling carries setup only. TURN can be self-hosted for restrictive networks."/><Feature icon={LockKeyhole} title="Narrow capabilities" text="Remote viewing, approved file transfer, one-time clipboard text, and per-session remote keyboard and mouse. System audio is Windows-only."/></div></section>
       </>}
-
       {!openDesk.activeSession && page === 'Devices' && <>
-        <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices appear only after an actual ID lookup in this app run. Presence expires quickly; trust pins do not grant access." action={<button className="subtle" onClick={() => void refreshDevices()} disabled={openDesk.serviceState !== 'online'} title={openDesk.serviceState === 'online' ? undefined : 'Connect to the signaling server before refreshing.'}><RefreshCw size={13}/> Refresh</button>}/>
-        <div className="search"><Search size={15}/><input placeholder="Search looked-up devices" value={query} onChange={event => setQuery(event.target.value)}/></div>
+        <Heading title="Devices" eyebrow="DEVICE MANAGEMENT" description="Devices appear only after an actual ID lookup in this app run. Presence expires quickly; trust pins do not grant access." action={<button className="subtle" onClick={() => void refreshDevices()} disabled={refreshingDevices || openDesk.serviceState !== 'online'} title={openDesk.serviceState === 'online' ? undefined : 'Connect to the signaling server before refreshing.'}><RefreshCw size={13}/>{refreshingDevices ? 'Refreshing…' : 'Refresh'}</button>}/>
+        <div className="search"><Search size={15}/><label className="sr-only" htmlFor="device-search">Search looked-up devices</label><input id="device-search" placeholder="Search looked-up devices" value={query} onChange={event => setQuery(event.target.value)}/></div>
         {filteredDevices.length > 0 ? <div className="device-list">{filteredDevices.map(device => {
           const presence = devicePresence(device, openDesk.serviceState === 'online', clock)
           return <article className="device-card" key={device.id}><div className="device-icon"><Monitor size={22}/></div><div className="device-main"><strong>{device.name}<em>{device.platform}</em></strong><small>{device.appVersion} · {device.checkedAt ? `Checked ${new Date(device.checkedAt).toLocaleString()}` : 'Lookup failed — retry to check presence'}</small><div className="id-row"><code>{device.id}</code></div></div><div className="device-actions"><span className={presence.fresh && device.online ? 'online-label' : 'offline-label'}><i/>{presence.label}</span><button className="subtle" onClick={() => void connect(device.id)} disabled={busy || openDesk.serviceState !== 'online'}>Request access <ArrowRight size={13}/></button></div></article>
         })}</div> : <EmptyInline icon={HardDrive} title={query ? 'No matching devices' : 'No looked-up devices yet'} description="Enter a device ID on Home to look it up. There is no simulated device discovery; trusted fingerprints are listed below."/>}
-        <TrustedDevices devices={openDesk.trustedDevices} loadingError={openDesk.trustedDevicesError} forget={openDesk.forgetTrustedDevice} refresh={() => void openDesk.refreshTrustedDevices().catch(reason => reportError(reason instanceof Error ? reason.message : 'Could not refresh trusted devices.'))} error={reportError}/>
+        <TrustedDevices devices={openDesk.trustedDevices} loadingError={openDesk.trustedDevicesError} forget={openDesk.forgetTrustedDevice} refresh={() => void refreshTrustedDevices()} refreshing={refreshingTrustedDevices} error={reportError}/>
       </>}
 
       {!openDesk.activeSession && page === 'Recent sessions' && <>
@@ -263,8 +318,8 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof Clock3; t
   return <div className="empty-state"><div><Icon size={27}/></div><h2>{title}</h2><p>{description}</p></div>
 }
 
-function TrustedDevices({ devices, loadingError, forget, refresh, error }: { devices: TrustedDevice[]; loadingError: string; forget: (id: string) => Promise<boolean>; refresh: () => void; error: (message: string) => void }) {
-  return <section className="section trusted-section"><div className="section-head"><div><h2>Trusted device fingerprints</h2><p>Public-key pins are stored locally. A changed key blocks connection until you remove the old pin and verify the new fingerprint.</p></div><button className="subtle" onClick={refresh}><RefreshCw size={13}/> Refresh</button></div>{loadingError ? <div className="inline-warning"><ShieldAlert size={15}/><span>Unable to read local trust records: {loadingError}</span></div> : devices.length === 0 ? <div className="empty-inline compact"><ShieldCheck size={18}/><span>No device fingerprints are trusted yet. The first connection flow asks you to verify and trust one.</span></div> : <div className="trusted-list">{devices.map(device => <div className="trusted-row" key={device.id}><div className="trusted-icon"><LockKeyhole size={15}/></div><div><strong>{device.name}</strong><small>{device.id} · Trusted {new Date(device.trustedAt).toLocaleString()}</small><code>{device.fingerprint}</code></div><button className="subtle" onClick={() => void forget(device.id).catch(reason => error(reason instanceof Error ? reason.message : 'Could not remove device trust.'))}><Trash2 size={13}/> Forget</button></div>)}</div>}</section>
+function TrustedDevices({ devices, loadingError, forget, refresh, refreshing, error }: { devices: TrustedDevice[]; loadingError: string; forget: (id: string) => Promise<boolean>; refresh: () => void; refreshing: boolean; error: (message: string) => void }) {
+  return <section className="section trusted-section"><div className="section-head"><div><h2>Trusted device fingerprints</h2><p>Public-key pins are stored locally. A changed key blocks connection until you remove the old pin and verify the new fingerprint.</p></div><button className="subtle" onClick={refresh} disabled={refreshing}><RefreshCw size={13}/>{refreshing ? 'Refreshing…' : 'Refresh'}</button></div>{loadingError ? <div className="inline-warning"><ShieldAlert size={15}/><span>Unable to read local trust records: {loadingError}</span></div> : devices.length === 0 ? <div className="empty-inline compact"><ShieldCheck size={18}/><span>No device fingerprints are trusted yet. The first connection flow asks you to verify and trust one.</span></div> : <div className="trusted-list">{devices.map(device => <div className="trusted-row" key={device.id}><div className="trusted-icon"><LockKeyhole size={15}/></div><div><strong>{device.name}</strong><small>{device.id} · Trusted {new Date(device.trustedAt).toLocaleString()}</small><code>{device.fingerprint}</code></div><button className="subtle" onClick={() => void forget(device.id).catch(reason => error(reason instanceof Error ? reason.message : 'Could not remove device trust.'))}><Trash2 size={13}/> Forget</button></div>)}</div>}</section>
 }
 
 function RecentSessionRow({ session }: { session: RecentSession }) {
