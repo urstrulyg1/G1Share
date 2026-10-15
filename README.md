@@ -17,7 +17,7 @@ OpenDesk is a consent-first desktop remote-viewing prototype built with Electron
 | File transfer | WebRTC data-channel protocol and main-process storage are implemented with bounded chunks, explicit destination choice, SHA-256 checks, and no-overwrite publication; tested with simulated channels, not real clients |
 | Clipboard | One-time text only; sender and receiver each confirm locally; continuous synchronization is unavailable |
 | Signaling | Go HTTP service with authenticated requests, pairing/session approval, signed WebRTC setup messages, event polling, and optional ephemeral TURN credentials |
-| Installers | electron-builder targets are configured; no signed release has been published. Package generation still needs validation on Windows, macOS, and Linux |
+| Installers | Unsigned Linux AppImage/DEB, Windows NSIS, and macOS DMG targets built in GitHub CI; installation/runtime validation and signed releases remain outstanding |
 
 Platform-specific observations and verification status are in [the feature matrix](docs/testing/feature-matrix.md).
 

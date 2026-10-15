@@ -36,7 +36,7 @@ npm audit --audit-level=high
 (cd services/signaling && go test -race -cover ./... && go vet ./...)
 ```
 
-`npm run package:dir` builds an unpacked package for the current OS; `npm run dist` invokes configured electron-builder targets. Native package generation needs the Electron binary, platform packaging tools, and (for distribution) an operator's signing/notarization setup. Do not infer that a target platform is supported merely because TypeScript compiles on Linux.
+`npm run package:dir` builds an unpacked package for the current OS; `npm run dist` invokes configured electron-builder targets. The CI workflow successfully built unsigned Linux AppImage/DEB, Windows NSIS, and macOS DMG artifacts, but none has been install/launch-tested. Local package generation needs the Electron binary and platform tools; distribution still requires operator signing/notarization. Do not infer runtime support merely from a successful package build.
 
 ## Architecture during development
 

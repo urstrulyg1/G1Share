@@ -8,7 +8,7 @@ The screen-capture and peer-connection implementation has not yet been verified 
 
 ## First run
 
-1. Install OpenDesk on two separate desktop devices. A release installer is not yet validated; for development use `npm ci` followed by `npm run dev` on each device.
+1. Install OpenDesk on two separate desktop devices. Unsigned installer targets are available as GitHub Actions artifacts, but install/launch behavior is not yet validated; for development use `npm ci` followed by `npm run dev` on each device.
 2. Confirm both devices have an unlocked OS credential store. Linux must use GNOME Keyring/libsecret or KWallet; basic-text fallback is intentionally refused.
 3. Configure both apps to use the same reachable **HTTPS** signaling origin. `http://127.0.0.1:8787` is for same-computer development only.
 4. Wait for **Signaling connected** on both clients. Copy the host's device ID to the requester over a trusted channel.
