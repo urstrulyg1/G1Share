@@ -1,43 +1,41 @@
 # Feature and platform verification matrix
 
-This matrix separates implemented source from exercised end-to-end behavior. **No real two-computer desktop session has been demonstrated yet.** Do not interpret a configured API, test fake, or successful build as an end-to-end pass.
+This matrix separates implemented source from exercised end-to-end behavior. **No real two-computer desktop session has been demonstrated yet.** A configured API, test fake, or successful build does not establish an end-to-end pass.
 
 ## Capabilities
 
 | Capability | Source status | Evidence / remaining validation |
 |---|---|---|
-| Electron + React desktop shell | Implemented | Typecheck and Vite/Electron bundle build; running packaged Electron app still needs platform validation |
-| Isolated renderer and narrow preload | Implemented | Static configuration and IPC validation paths reviewed; generic signaling cannot approve/revoke; session approval re-fetches and prompts natively; no dedicated Electron security integration test |
-| Ed25519 local device identity | Implemented | `safeStorage`, key-derived ID, Linux basic-text refusal, main-process identity reset/revocation; no OS keyring matrix test |
-| Authenticated signaling requests | Implemented | Go integration tests exercise registration, pairing, consent, signed WebRTC setup, replay/tampering, and close with independent Ed25519 test identities; TypeScript SignalingClient unit tests cover route/permission validation |
-| Peer fingerprint trust | Implemented | Main-process fingerprint pinning/changed-key dialogs; requires real UI/keyring validation |
-| Go signaling broker | Implemented prototype | HTTP health/API, bounded requests, auth challenges, permission approval, long-poll events, rate limits, persistent device registry; current PR CI passed Go race tests/coverage and `go vet`. Go is not installed locally. |
-| STUN/TURN configuration | Implemented as operator-provided ICE settings | Go emits configured STUN endpoints and expiring TURN REST credentials; Coturn/reverse-proxy/firewall interoperability not tested here |
-| Screen capture and WebRTC video | Implemented source path | Native source picker, `getDisplayMedia`, signed SDP, DTLS-SRTP; **no actual cross-device stream verified** |
-| Latency and responsiveness | Measured on loopback only | `npm run bench:latency`, three full runs per configuration: pointer dispatch-to-host, key input-to-visible, presented frame rate and capture-to-screen, file transfer during input. No traffic shaping, real capture, libnut injection, TURN, or LAN/internet peers. See `docs/performance/README.md` |
-| Remote keyboard/mouse | Implemented; hardware unverified | Shared protocol with strict validation and key allowlist; host-side `RemoteInputController` tested with a fake native backend; the two-client E2E checks move/click/key delivery, revocation and disconnect releases, and rejection while disabled (`npm run test:e2e`). Native libnut injection and the OS permission flows are not verified on a real desktop.
-| Audio capture/playback | Implemented for Windows hosts; hardware unverified | Loopback capture is requested only when the audio permission is approved on a Windows host; no real audio path was tested. Viewer playback relies on the remote stream's audio track.
-| Unattended access | Not implemented | No hidden persistence or background capture |
-| File-transfer protocol | Implemented | Vitest uses paired simulated data channels to transfer >300 KiB, sequence/ack handling, permission check, refusal, cancellation, and SHA-256 mismatch cleanup |
-| Main-process file storage | Implemented | Node filesystem tests exercise temp writes, serial concurrent IPC writes, hash verification, cancellation, existing-destination rejection, and destination-creation race |
-| Clipboard | Implemented, one-time text only | Native confirm-before-read/replace code; no real cross-device clipboard test |
-| Local device/history UI | Implemented | UI source; no visual/browser/electron interaction test |
-| Diagnostics | Implemented | Shows actual app/signaling/session capabilities; no fabricated WebRTC metrics |
-| Self-host deployment | Configured | Go Dockerfile, Caddy Compose, optional Coturn overlay and docs; Docker deployment not run in this sandbox |
-| Linux/Windows/macOS installers | Unsigned builds passed in CI; runtime unverified | GitHub Actions built Linux AppImage/DEB, Windows NSIS, and macOS DMG targets and uploaded `opendesk-ubuntu-latest`, `opendesk-windows-latest`, and `opendesk-macos-latest` artifacts (14-day retention). No install/launch test or signed release was produced. Local `npm run package:dir` could not fetch Electron in this sandbox. |
-| CI | Passed for this PR | Node/Go verification plus unsigned Linux/Windows/macOS package jobs all passed; installers were uploaded as workflow artifacts |
+| Account-free dashboard | Implemented | Starts on Home without login/signup; no server configured by default. UI tests cover honest unconfigured, unavailable-identity, empty/error, and session-consent states. |
+| Isolated renderer and narrow preload | Implemented | Static configuration and IPC validation paths reviewed; generic signaling cannot approve/revoke; session approval re-fetches and prompts natively; no dedicated Electron security integration test. |
+| Ed25519 local device identity | Implemented | OS `safeStorage`, key-derived ID, Linux basic-text refusal, main-process identity reset/revocation. Unavailable key means unavailable ID, not a dummy ID. No OS keyring matrix test. |
+| Authenticated signaling | Implemented | Go integration tests cover registration without accounts, pairing, per-session consent, signed WebRTC setup, replay/tampering, and close with independent keys; TypeScript client unit tests cover route/permission validation. |
+| Peer fingerprint trust | Implemented | Explicit local fingerprint pinning, changed-key refusal, revocation, malformed trust-store fail-closed behavior. Requires real UI/keyring validation. |
+| Go signaling broker | Implemented prototype | HTTP health/API, bounded requests, auth challenges, permission approval, long-poll events, rate limits, persistent public-key registry; Go race tests/coverage and vet passed in PR #4 CI; Go was unavailable locally. |
+| STUN/TURN configuration | Operator-provided ICE settings | Go emits configured STUN endpoints and expiring TURN REST credentials; Coturn/reverse-proxy/firewall interoperability not tested here. |
+| Screen capture and WebRTC video | Implemented source path | Native source picker, `getDisplayMedia`, signed SDP, DTLS-SRTP; **no actual cross-device stream verified**. |
+| Remote keyboard/mouse | Implemented; hardware unverified | Shared protocol with strict validation and key allowlist; host-side controller tested with a fake native backend. Two-client browser E2E covers move/click/key delivery, revocation and disconnect releases, rejection while disabled. Native libnut injection and OS permission flows need real desktop testing. |
+| Audio capture/playback | Implemented for Windows hosts; hardware unverified | Loopback capture requested only when approved on a Windows host; missing OS audio tracks are reported. No real audio path tested. Viewer playback uses a real remote audio track. |
+| Unattended access | Not implemented | No hidden persistence or background capture. |
+| File-transfer protocol | Implemented | Vitest tests linked simulated data channels for >300 KiB transfer, sequence/ack, permission, refusal, cancellation, and SHA-256 mismatch cleanup. |
+| Main-process file storage | Implemented | Node filesystem tests cover temp writes, concurrent IPC, hashes, cancellation, collision rejection, and destination-creation race. |
+| Clipboard | Implemented, one-time text only | Native confirm-before-read/replace code; no real cross-device clipboard test. |
+| Local devices and history | Implemented | Device rows come from this run's actual lookups; presence expires and server gaps show unknown. History records real requests, with connected time only after WebRTC connects; legacy unverified cache is discarded. Unit and UI tests cover both. |
+| Diagnostics | Implemented | Actual app/signaling/session capabilities and browser statistics; missing counters or inactive streams show unavailable rather than a made-up number or live state. |
+| Self-host deployment | Configured | Go Dockerfile, Caddy Compose, optional Coturn overlay and docs; Docker deployment not run in this sandbox. |
+| Linux/Windows/macOS installers | Built unsigned in PR #4 CI; runtime unverified | Linux AppImage/DEB, Windows NSIS, and macOS DMG targets built and uploaded successfully. Install/launch and platform runtime validation remain outstanding. No signed release. |
 
 ## Platform support statement
 
 | Platform | Electron shell/build | Screen capture path | Credential storage | Remote input/audio |
 |---|---|---|---|---|
-| Windows | Unsigned NSIS target built in CI; install/launch not tested | Electron display capture path is implemented; OS-specific verification pending | Electron safeStorage/DPAPI path is implemented; not tested on Windows here | Remote input via libnut and loopback audio implemented; not tested on Windows here |
-| macOS | Unsigned DMG target built in CI; install/launch not tested | Screen Recording permission and native picker path is present; actual permission flow not tested here | Electron safeStorage/Keychain path is implemented; not tested on macOS here | Remote input requires Accessibility access (implemented, untested); audio unavailable |
-| Linux X11 | Unsigned AppImage/DEB targets built in CI; install/launch not tested | Electron capture path is present; X11 session required; actual stream not tested | Requires a real GNOME Keyring/libsecret or KWallet backend; `basic_text` is blocked | Remote input via libnut needs `libXtst` at runtime; untested; audio unavailable |
-| Linux Wayland | Unsigned Linux targets built in CI; install/launch not tested | Requires a working desktop portal/PipeWire source picker; distro/compositor combinations vary and remain unverified | Same OS keyring requirement as Linux X11 | Remote input refused (unsupported); audio unavailable |
+| Windows | Unsigned NSIS target built in PR #4 CI; install/launch not tested | Electron display capture path; OS-specific verification pending | safeStorage/DPAPI path; not tested on Windows here | libnut input and loopback audio implemented; not tested on Windows here |
+| macOS | Unsigned DMG target built in PR #4 CI; install/launch not tested | Screen Recording permission and native picker path present; flow untested | safeStorage/Keychain path; not tested on macOS here | input requires Accessibility access (implemented, untested); audio unavailable |
+| Linux X11 | Unsigned AppImage/DEB targets built in PR #4 CI; install/launch not tested | Electron capture path; X11 session required; actual stream untested | Requires GNOME Keyring/libsecret or KWallet; `basic_text` blocked | libnut input needs `libXtst` at runtime; untested; audio unavailable |
+| Linux Wayland | Unsigned Linux targets built in PR #4 CI; install/launch not tested | Requires desktop portal/PipeWire source picker; unverified across compositors | Same keyring requirement | Input refused; audio unavailable |
 | iOS / Android | Not supported | Not supported | Not supported | Not supported |
 
-The matrix does not certify a platform merely because source code compiles. Screen capture, credential storage, packaging, code signing, accessibility/input permissions, and real peer connectivity must be tested on each OS/compositor combination.
+Compilation does not certify screen capture, credential storage, packaging, code signing, accessibility permissions, or peer connectivity on any platform.
 
 ## Test commands and evidence
 
@@ -48,17 +46,15 @@ npm run typecheck
 npm test
 npm run build
 npm audit --audit-level=high
-(cd services/signaling && go test -race -cover ./...)
-(cd services/signaling && go vet ./...)
+(cd services/signaling && go test ./... && go test -race -cover ./... && go vet ./...)
+CHROME_PATH=/path/to/chrome npm run test:e2e  # also requires Go
 ```
 
-The latest local desktop validation passed `npm run typecheck`, `npm test` (**5 files, 26 tests**), `npm run build`, and both full and production-only npm audits (zero reported vulnerabilities). For PR #2, GitHub Actions also passed Go race tests/coverage, `go vet`, and unsigned Linux AppImage/DEB, Windows NSIS, and macOS DMG builds. The local sandbox has no Go or Docker executable; Compose files parse as YAML, but an actual Compose deployment was not run. A local `npm run package:dir` attempt could not fetch Electron under the sandbox's outbound-host restrictions; no local package artifact was produced.
-
-The automated tests use unit-level Node/Vitest and Go `httptest` integration; the Go test creates two independent cryptographic identities and exercises authenticated HTTP signaling, but does **not** start Electron, WebRTC, OS screen capture, or a real TURN relay. File-transfer channel tests use an in-memory linked `RTCDataChannel` stand-in. Main-process filesystem tests use actual temporary files on the current host.
+For this change, local `npm run typecheck`, `npm test` (16 files, 121 tests), `npm run build`, and `npm audit --audit-level=high` passed, with zero vulnerabilities reported. Go and Chrome/Chromium were not available locally. [PR #4 CI](https://github.com/urstrulyg1/G1Share/actions/runs/38690955194) passed Go race tests/coverage, Go vet, the headless two-client E2E suite, and the three unsigned packaging jobs on Linux, Windows, and macOS. The CI workflow runs the Go race suite rather than a separate plain `go test ./...`; local plain Go tests could not run. The two-client suite drives separate browser clients against a real Go broker but uses simulated screen capture and native-input hooks: it cannot certify real OS capture or injection. The linked data-channel tests use stand-ins. Main-process storage tests use real temporary files.
 
 ## Required next verification
 
-1. Build and install unsigned/signature-configured packages on Windows, macOS, Linux X11, and representative Wayland desktops.
-2. With two independent user-data profiles/devices and a production-like HTTPS signaling+TURN deployment, verify first-contact fingerprint checks, session approval/rejection, screen streaming, reconnect/disconnect, file transfer and partial cleanup, and one-time clipboard consent.
-3. Verify firewalls and TURN relay behavior from at least two different NATs, including restrictive TCP/TLS-only networks if those are claimed as supported.
+1. Build and install packages on Windows, macOS, Linux X11, and representative Wayland desktops; test actual OS keyrings and permission prompts.
+2. Use two independent profiles/devices and a production-like HTTPS signaling+TURN deployment to verify fingerprint checks, consent/rejection, screen streaming, reconnect/disconnect, files/cleanup, and one-time clipboard consent.
+3. Verify TURN relay from distinct NATs and restrictive networks before claiming Internet interoperability.
 4. Review release signing/notarization, updater design, backup/restore, incident handling, and the threat model before calling the product production-ready.

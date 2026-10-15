@@ -17,7 +17,6 @@ import {
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
-  randomBytes,
   randomUUID,
   sign as signMessage,
   verify as verifySignature
@@ -26,7 +25,7 @@ import { readFile, rename, unlink, writeFile, mkdir, chmod } from 'node:fs/promi
 import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { hostname } from 'node:os'
-import type { DeviceInfo, DeviceSummary, DesktopCapabilities, IncomingFileHandle, IncomingFileRequest, OpenDeskBridge, PeerSignalVerification, RemoteSession, SessionDecisionRequest, SessionPermission, SignalingRequest, TrustedDevice } from '../shared/types'
+import type { DeviceInfo, DeviceSummary, DesktopCapabilities, EventBatch, IncomingFileHandle, IncomingFileRequest, OpenDeskBridge, PeerSignalVerification, RemoteSession, SessionDecisionRequest, SessionPermission, SignalingRequest, TrustedDevice } from '../shared/types'
 import { isSessionPermission, permissionLabel, SESSION_PERMISSIONS } from '../shared/permissions'
 import { parseRemoteInputMessage } from '../shared/remote-input'
 import { loadLibnutBackend, RemoteInputController, remoteInputSupport } from './remote-input'
@@ -42,7 +41,6 @@ const MAX_SIGNALING_RESPONSE = 1024 * 1024
 const MAX_CLIPBOARD_TEXT = 64 * 1024
 const settingsPath = () => join(app.getPath('userData'), 'settings.json')
 const identityPath = () => join(app.getPath('userData'), 'identity', 'device.json')
-const legacyIdentityPath = () => join(app.getPath('userData'), 'identity', 'device-id')
 const trustedDevicesPath = () => join(app.getPath('userData'), 'trusted-devices.json')
 
 interface StoredIdentity {
@@ -58,6 +56,8 @@ interface SecureIdentity extends StoredIdentity {
 
 interface AppSettings {
   signalingUrl: string
+  /** An optional local device label, never a user profile or account. */
+  deviceName?: string
 }
 
 interface SignalingErrorResponse {
@@ -175,26 +175,9 @@ async function loadSecureIdentity(): Promise<SecureIdentity> {
       encryptedPrivateKey: safeStorage.encryptString(privatePem).toString('base64')
     }
     await atomicWrite(path, JSON.stringify(identity, null, 2) + '\n')
-    const legacyPath = legacyIdentityPath()
-    await writeFile(legacyPath, identity.deviceId + '\n', { encoding: 'utf8', mode: 0o600 }).catch(() => undefined)
     return { ...identity, privateKey: pair.privateKey }
   })()
   return identityPromise
-}
-
-async function fallbackDeviceId(): Promise<string> {
-  try {
-    const identity: unknown = JSON.parse(await readFile(identityPath(), 'utf8'))
-    if (identity && typeof identity === 'object' && 'deviceId' in identity && typeof identity.deviceId === 'string' && isValidDeviceId(identity.deviceId)) return identity.deviceId
-  } catch { /* Continue with the older ID file or create a display-only ID. */ }
-  try {
-    const legacyId = (await readFile(legacyIdentityPath(), 'utf8')).trim().toUpperCase()
-    if (isValidDeviceId(legacyId)) return legacyId
-  } catch { /* A keyring-less device can still display a non-authorizing local identifier. */ }
-  const id = formatDeviceId(randomBytes(16).toString('hex'))
-  await mkdir(dirname(legacyIdentityPath()), { recursive: true, mode: 0o700 })
-  await writeFile(legacyIdentityPath(), id + '\n', { encoding: 'utf8', mode: 0o600 }).catch(() => undefined)
-  return id
 }
 
 function cleanDeviceName(value: string): string {
@@ -203,11 +186,12 @@ function cleanDeviceName(value: string): string {
 }
 
 async function getDeviceInfo(): Promise<DeviceInfo> {
+  const name = cleanDeviceName((await loadSettings().catch(() => null))?.deviceName ?? hostname())
   try {
     const identity = await loadSecureIdentity()
     return {
       deviceId: identity.deviceId,
-      deviceName: cleanDeviceName(hostname()),
+      deviceName: name,
       appVersion: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
@@ -216,9 +200,10 @@ async function getDeviceInfo(): Promise<DeviceInfo> {
       secureStorageBackend: secureStorageBackend()
     }
   } catch (error) {
+    // Do not invent a display-only ID or present an undecryptable/stale key as usable.
     return {
-      deviceId: await fallbackDeviceId(),
-      deviceName: cleanDeviceName(hostname()),
+      deviceId: null,
+      deviceName: name,
       appVersion: app.getVersion(),
       platform: process.platform,
       architecture: process.arch,
@@ -245,22 +230,51 @@ function validateSignalingURL(input: string): string {
 async function loadSettings(): Promise<AppSettings> {
   if (settingsPromise) return settingsPromise
   settingsPromise = (async () => {
-    const fallback = process.env.OPENDESK_SIGNALING_URL || 'http://127.0.0.1:8787'
+    let contents: string
     try {
-      const data = JSON.parse(await readFile(settingsPath(), 'utf8')) as { signalingUrl?: unknown }
-      if (typeof data.signalingUrl === 'string') return { signalingUrl: validateSignalingURL(data.signalingUrl) }
-    } catch { /* First launch uses the loopback development default. */ }
-    return { signalingUrl: validateSignalingURL(fallback) }
+      contents = await readFile(settingsPath(), 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      // No cloud default. Development can opt in via OPENDESK_SIGNALING_URL or Settings.
+      const configured = process.env.OPENDESK_SIGNALING_URL?.trim()
+      return { signalingUrl: configured ? validateSignalingURL(configured) : '' }
+    }
+    try {
+      const data: unknown = JSON.parse(contents)
+      if (!data || typeof data !== 'object' || typeof (data as AppSettings).signalingUrl !== 'string') throw new Error('missing signaling URL')
+      const { signalingUrl, deviceName } = data as AppSettings
+      if (deviceName !== undefined && (typeof deviceName !== 'string' || !deviceName.trim() || Buffer.byteLength(deviceName, 'utf8') > 80)) throw new Error('invalid device name')
+      return { signalingUrl: signalingUrl ? validateSignalingURL(signalingUrl) : '', ...(deviceName === undefined ? {} : { deviceName }) }
+    } catch {
+      throw new Error('Local settings are invalid. Enter a signaling server URL in Settings to replace them.')
+    }
   })()
   return settingsPromise
 }
 
 async function setSignalingURL(value: string): Promise<string> {
   const signalingUrl = validateSignalingURL(value)
-  const settings = await loadSettings()
-  settings.signalingUrl = signalingUrl
-  await atomicWrite(settingsPath(), JSON.stringify(settings, null, 2) + '\n')
+  // The settings screen must be able to repair a corrupt settings file without erasing an identity.
+  const settings = await loadSettings().catch(() => ({ signalingUrl: '' }))
+  const updated = { ...settings, signalingUrl }
+  await atomicWrite(settingsPath(), JSON.stringify(updated, null, 2) + '\n')
+  settingsPromise = Promise.resolve(updated)
   return signalingUrl
+}
+
+async function renameLocalDevice(value: string): Promise<DeviceSummary> {
+  const name = value.trim()
+  if (!name || Buffer.byteLength(name, 'utf8') > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
+    throw new TypeError('The device name must contain 1 to 80 bytes without control characters.')
+  }
+  const identity = await loadSecureIdentity()
+  const summary = await authenticatedSignalingRequest({ method: 'POST', path: '/api/v1/devices/rename', body: { name } }, true) as DeviceSummary
+  if (!summary || summary.id !== identity.deviceId || summary.name !== name) throw new Error('The signaling service did not confirm the new device name.')
+  const settings = await loadSettings()
+  const updated = { ...settings, deviceName: name }
+  await atomicWrite(settingsPath(), JSON.stringify(updated, null, 2) + '\n')
+  settingsPromise = Promise.resolve(updated)
+  return summary
 }
 
 async function fetchJSON(url: string, init: RequestInit, timeoutMs = 15_000): Promise<{ status: number; value: unknown }> {
@@ -321,13 +335,14 @@ async function verifyPeerSignal(input: PeerSignalVerification): Promise<boolean>
 
 async function authenticatedSignalingRequest(input: SignalingRequest, allowPrivileged = false): Promise<unknown> {
   const path = input && typeof input.path === 'string' ? input.path : ''
-  const privilegedPath = path === '/api/v1/devices/revoke' || /\/api\/v1\/sessions\/[a-f0-9]{32}\/decision$/.test(path)
+  const privilegedPath = path === '/api/v1/devices/revoke' || path === '/api/v1/devices/rename' || /\/api\/v1\/sessions\/[a-f0-9]{32}\/decision$/.test(path)
   if (!input || (input.method !== 'GET' && input.method !== 'POST') || typeof input.path !== 'string' || !requestPathIsAllowed(input.path) || (privilegedPath && !allowPrivileged)) {
     throw new TypeError('The requested signaling operation is not allowed.')
   }
   if (input.method === 'GET' && input.body !== undefined) throw new TypeError('GET signaling requests cannot include a body.')
   const identity = await loadSecureIdentity()
   const settings = await loadSettings()
+  if (!settings.signalingUrl) throw new Error('Signaling server not configured. Set a self-hosted HTTPS origin in Settings before connecting.')
   let bodyText = input.body === undefined ? '' : JSON.stringify(input.body)
   if (bodyText === undefined) bodyText = ''
 
@@ -384,6 +399,14 @@ async function authenticatedSignalingRequest(input: SignalingRequest, allowPrivi
     const message = typeof error?.error?.message === 'string' ? error.error.message : `Signaling request failed with HTTP ${result.status}.`
     throw new SignalingRequestError(message, code, result.status)
   }
+  const closed = input.path.match(/^\/api\/v1\/sessions\/([a-f0-9]{32})\/close$/)
+  if (closed) forgetApprovedSession(closed[1])
+  if (input.path.startsWith('/api/v1/events?')) {
+    const events = (result.value as EventBatch | null)?.events
+    if (Array.isArray(events)) for (const event of events) {
+      if (event.sessionId && ['session.closed', 'session.rejected', 'session.expired'].includes(event.type)) forgetApprovedSession(event.sessionId)
+    }
+  }
   return result.value
 }
 
@@ -406,12 +429,24 @@ function trustedFingerprint(encodedPublicKey: string): string {
 }
 
 async function loadTrustedDevices(): Promise<TrustedDevice[]> {
+  let contents: string
+  try { contents = await readFile(trustedDevicesPath(), 'utf8') }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  }
   try {
-    const parsed: unknown = JSON.parse(await readFile(trustedDevicesPath(), 'utf8'))
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((entry): entry is TrustedDevice => !!entry && typeof entry === 'object' && typeof entry.id === 'string' && typeof entry.name === 'string' && typeof entry.fingerprint === 'string' && typeof entry.trustedAt === 'string')
+    const parsed: unknown = JSON.parse(contents)
+    if (!Array.isArray(parsed) || !parsed.every((entry: unknown) => {
+      if (!entry || typeof entry !== 'object') return false
+      const device = entry as TrustedDevice
+      return typeof device.id === 'string' && isValidDeviceId(device.id) && typeof device.name === 'string' &&
+        typeof device.fingerprint === 'string' && /^[A-F0-9]{4}(?::[A-F0-9]{4}){15}$/.test(device.fingerprint) && typeof device.trustedAt === 'string'
+    })) throw new Error('invalid trust records')
+    return parsed as TrustedDevice[]
   } catch {
-    return []
+    // Treat corruption as an error, not as an empty trust store that permits silent re-pairing.
+    throw new Error('Local trusted-device records are invalid. Restore the trust store or resolve the issue before pairing.')
   }
 }
 
@@ -503,6 +538,12 @@ function rememberApprovedSession(sessionId: string, permissions: readonly Sessio
 function stopRemoteInputFor(sessionId: string): void {
   if (inputController?.activeSessionId === sessionId) inputController.stop()
   if (activeCapture?.sessionId === sessionId) activeCapture = null
+}
+
+function forgetApprovedSession(sessionId: string): void {
+  approvedSessions.delete(sessionId)
+  if (captureArm?.sessionId === sessionId) captureArm = null
+  stopRemoteInputFor(sessionId)
 }
 
 function releaseRemoteInput(): void {
@@ -622,14 +663,18 @@ async function resetDeviceIdentity(): Promise<DeviceInfo | null> {
   }
 
   await unlink(backupPath).catch(error => console.error('Could not remove the encrypted backup of the revoked device key.', error))
-  await unlink(legacyIdentityPath()).catch(() => undefined)
+  // Previous builds wrote a display-only ID file. Remove it on reset; it is never an identity key.
+  await unlink(join(dirname(path), 'device-id')).catch(() => undefined)
+  approvedSessions.clear()
+  captureArm = null
+  releaseRemoteInput()
   identityPromise = null
   return getDeviceInfo()
 }
 
 function safeIncomingFilename(value: string): string {
   const name = basename(value.replace(/[\\/]/g, '_')).replace(/[\u0000-\u001f\u007f<>:"|?*]/g, '_').trim()
-  if (!name || name === '.' || name === '..') return 'received-file'
+  if (!name || name === '.' || name === '..') throw new TypeError('Incoming file name is invalid; the transfer was not accepted.')
   return name.slice(0, 240)
 }
 
@@ -690,7 +735,7 @@ async function receiveClipboardText(text: string): Promise<boolean> {
 }
 
 async function getCapabilities(): Promise<DesktopCapabilities> {
-  let screenCapture = 'Electron screen capture API available; permission and source selection are required per session.'
+  let screenCapture = 'Electron screen capture is configured; OS permission and source selection are required. Availability is confirmed when sharing starts.'
   if (process.platform === 'darwin') {
     try {
       const status = systemPreferences.getMediaAccessStatus('screen')
@@ -699,7 +744,7 @@ async function getCapabilities(): Promise<DesktopCapabilities> {
       screenCapture = 'Screen Recording requires macOS privacy permission; status is not available from this OS version.'
     }
   } else if (process.platform === 'linux') {
-    screenCapture = 'Electron capture is available; Wayland requires an active desktop portal/PipeWire picker, while X11 uses the active display session.'
+    screenCapture = 'Electron capture requires an active display. Wayland needs a working desktop portal/PipeWire picker; X11 uses the display session. Availability is confirmed when sharing starts.'
   }
   const input = inputSupport()
   const audioSupported = audioLoopbackSupported()
@@ -780,6 +825,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle('settings:set-signaling-url', async (event, value: unknown) => {
     assertTrustedIPC(event)
     return setSignalingURL(assertString(value, 'Signaling URL', 512))
+  })
+  ipcMain.handle('device:rename', async (event, value: unknown) => {
+    assertTrustedIPC(event)
+    return renameLocalDevice(assertString(value, 'Device name', 80))
   })
   ipcMain.handle('signaling:request', async (event, value: unknown) => {
     assertTrustedIPC(event)
@@ -880,7 +929,8 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle('capture:open-settings', async event => {
     assertTrustedIPC(event)
-    if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+    if (process.platform !== 'darwin') throw new Error('Open screen-capture permissions in your operating system settings. This shortcut is available on macOS only.')
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
   })
   ipcMain.handle('system:get-capabilities', event => {
     assertTrustedIPC(event)
@@ -924,10 +974,15 @@ function createWindow(): void {
   if (process.env.ELECTRON_RENDERER_URL) void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void mainWindow.loadFile(join(currentDir, '../renderer/index.html'))
   // Keys and buttons held through OpenDesk must never outlive the window that is driving them.
-  mainWindow.webContents.on('render-process-gone', () => releaseRemoteInput())
+  mainWindow.webContents.on('render-process-gone', () => {
+    releaseRemoteInput()
+    captureArm = null
+    approvedSessions.clear()
+  })
   mainWindow.on('closed', () => {
     releaseRemoteInput()
     captureArm = null
+    approvedSessions.clear()
     mainWindow = null
   })
 }
@@ -942,6 +997,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', event => {
   captureArm = null
+  approvedSessions.clear()
   releaseRemoteInput()
   if (quitCleanupComplete) return
   event.preventDefault()

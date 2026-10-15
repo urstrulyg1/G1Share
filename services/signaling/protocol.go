@@ -72,7 +72,7 @@ type DeviceSummary struct {
 	Platform   string    `json:"platform"`
 	AppVersion string    `json:"appVersion"`
 	Online     bool      `json:"online"`
-	LastSeenAt time.Time `json:"lastSeenAt,omitempty"`
+	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
 }
 
 type Session struct {

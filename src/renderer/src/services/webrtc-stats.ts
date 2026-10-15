@@ -12,23 +12,23 @@ export interface PathInfo {
 
 export interface InboundVideoSample {
   timestamp: number
-  width: number
-  height: number
-  bytes: number
-  framesDecoded: number
-  framesDropped: number
-  jitterBufferDelay: number
-  jitterBufferEmittedCount: number
-  totalDecodeTime: number
-  packetsLost: number
-  packetsReceived: number
+  width: number | null
+  height: number | null
+  bytes: number | null
+  framesDecoded: number | null
+  framesDropped: number | null
+  jitterBufferDelay: number | null
+  jitterBufferEmittedCount: number | null
+  totalDecodeTime: number | null
+  packetsLost: number | null
+  packetsReceived: number | null
 }
 
 export interface OutboundVideoSample {
   timestamp: number
-  bytes: number
-  framesEncoded: number
-  totalEncodeTime: number
+  bytes: number | null
+  framesEncoded: number | null
+  totalEncodeTime: number | null
 }
 
 export interface InboundVideoInterval {
@@ -38,7 +38,7 @@ export interface InboundVideoInterval {
   jitterBufferMs: number | null
   /** Average hardware or software decode time per frame during the interval. */
   decodeMs: number | null
-  droppedFrames: number
+  droppedFrames: number | null
   packetLossPercent: number | null
 }
 
@@ -50,23 +50,30 @@ export interface OutboundVideoInterval {
 }
 
 /** Derives interval values from two consecutive inbound samples. Returns an empty interval when time did not advance. */
+function delta(before: number | null, after: number | null): number | null {
+  return before !== null && after !== null && after >= before ? after - before : null
+}
+
 export function inboundInterval(previous: InboundVideoSample | null, current: InboundVideoSample): InboundVideoInterval {
-  const empty: InboundVideoInterval = { framesPerSecond: null, bitrateKbps: null, jitterBufferMs: null, decodeMs: null, droppedFrames: current.framesDropped, packetLossPercent: null }
+  const empty: InboundVideoInterval = { framesPerSecond: null, bitrateKbps: null, jitterBufferMs: null, decodeMs: null, droppedFrames: null, packetLossPercent: null }
   if (!previous) return empty
   const elapsed = current.timestamp - previous.timestamp
   if (!(elapsed > 0)) return empty
-  const frames = current.framesDecoded - previous.framesDecoded
-  const emitted = current.jitterBufferEmittedCount - previous.jitterBufferEmittedCount
-  const lost = current.packetsLost - previous.packetsLost
-  const received = current.packetsReceived - previous.packetsReceived
-  const packetTotal = lost + received
+  const frames = delta(previous.framesDecoded, current.framesDecoded)
+  const emitted = delta(previous.jitterBufferEmittedCount, current.jitterBufferEmittedCount)
+  const lost = delta(previous.packetsLost, current.packetsLost)
+  const received = delta(previous.packetsReceived, current.packetsReceived)
+  const packetTotal = lost !== null && received !== null ? lost + received : null
+  const bytes = delta(previous.bytes, current.bytes)
+  const jitter = delta(previous.jitterBufferDelay, current.jitterBufferDelay)
+  const decode = delta(previous.totalDecodeTime, current.totalDecodeTime)
   return {
-    framesPerSecond: frames >= 0 ? frames * 1000 / elapsed : null,
-    bitrateKbps: current.bytes >= previous.bytes ? (current.bytes - previous.bytes) * 8 / elapsed : null,
-    jitterBufferMs: emitted > 0 ? (current.jitterBufferDelay - previous.jitterBufferDelay) * 1000 / emitted : null,
-    decodeMs: frames > 0 ? (current.totalDecodeTime - previous.totalDecodeTime) * 1000 / frames : null,
-    droppedFrames: Math.max(0, current.framesDropped - previous.framesDropped),
-    packetLossPercent: packetTotal > 0 && lost >= 0 ? lost * 100 / packetTotal : null
+    framesPerSecond: frames === null ? null : frames * 1000 / elapsed,
+    bitrateKbps: bytes === null ? null : bytes * 8 / elapsed,
+    jitterBufferMs: emitted !== null && emitted > 0 && jitter !== null ? jitter * 1000 / emitted : null,
+    decodeMs: frames !== null && frames > 0 && decode !== null ? decode * 1000 / frames : null,
+    droppedFrames: delta(previous.framesDropped, current.framesDropped),
+    packetLossPercent: packetTotal !== null && packetTotal > 0 && lost !== null ? lost * 100 / packetTotal : null
   }
 }
 
@@ -75,11 +82,13 @@ export function outboundInterval(previous: OutboundVideoSample | null, current: 
   if (!previous) return empty
   const elapsed = current.timestamp - previous.timestamp
   if (!(elapsed > 0)) return empty
-  const frames = current.framesEncoded - previous.framesEncoded
+  const frames = delta(previous.framesEncoded, current.framesEncoded)
+  const bytes = delta(previous.bytes, current.bytes)
+  const encode = delta(previous.totalEncodeTime, current.totalEncodeTime)
   return {
-    framesPerSecond: frames >= 0 ? frames * 1000 / elapsed : null,
-    bitrateKbps: current.bytes >= previous.bytes ? (current.bytes - previous.bytes) * 8 / elapsed : null,
-    encodeMs: frames > 0 ? (current.totalEncodeTime - previous.totalEncodeTime) * 1000 / frames : null
+    framesPerSecond: frames === null ? null : frames * 1000 / elapsed,
+    bitrateKbps: bytes === null ? null : bytes * 8 / elapsed,
+    encodeMs: frames !== null && frames > 0 && encode !== null ? encode * 1000 / frames : null
   }
 }
 
@@ -90,8 +99,8 @@ interface StatLike {
   [key: string]: unknown
 }
 
-function num(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+function counter(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 /** Reads the inbound video counters (non-remote, kind video) from a stats report. */
@@ -99,19 +108,19 @@ export function readInboundVideo(report: RTCStatsReport): InboundVideoSample | n
   let found: InboundVideoSample | null = null
   report.forEach(raw => {
     const stat = raw as unknown as StatLike
-    if (stat.type !== 'inbound-rtp' || stat.kind !== 'video' || stat.isRemote === true) return
+    if (stat.type !== 'inbound-rtp' || stat.kind !== 'video' || stat.isRemote === true || counter(stat.timestamp) === null) return
     found = {
-      timestamp: stat.timestamp ?? 0,
-      width: num(stat.frameWidth),
-      height: num(stat.frameHeight),
-      bytes: num(stat.bytesReceived),
-      framesDecoded: num(stat.framesDecoded),
-      framesDropped: num(stat.framesDropped),
-      jitterBufferDelay: num(stat.jitterBufferDelay),
-      jitterBufferEmittedCount: num(stat.jitterBufferEmittedCount),
-      totalDecodeTime: num(stat.totalDecodeTime),
-      packetsLost: num(stat.packetsLost),
-      packetsReceived: num(stat.packetsReceived)
+      timestamp: stat.timestamp!,
+      width: counter(stat.frameWidth),
+      height: counter(stat.frameHeight),
+      bytes: counter(stat.bytesReceived),
+      framesDecoded: counter(stat.framesDecoded),
+      framesDropped: counter(stat.framesDropped),
+      jitterBufferDelay: counter(stat.jitterBufferDelay),
+      jitterBufferEmittedCount: counter(stat.jitterBufferEmittedCount),
+      totalDecodeTime: counter(stat.totalDecodeTime),
+      packetsLost: counter(stat.packetsLost),
+      packetsReceived: counter(stat.packetsReceived)
     }
   })
   return found
@@ -135,19 +144,19 @@ export function readOutboundVideo(report: RTCStatsReport): OutboundVideoReport |
     const stat = raw as unknown as StatLike
     if (stat.type === 'remote-inbound-rtp' && stat.kind === 'video') {
       remote = {
-        packetLossPercent: typeof stat.fractionLost === 'number' && Number.isFinite(stat.fractionLost) ? Math.max(0, stat.fractionLost) * 100 : null,
-        roundTripTimeMs: typeof stat.roundTripTime === 'number' && Number.isFinite(stat.roundTripTime) ? stat.roundTripTime * 1000 : null
+        packetLossPercent: counter(stat.fractionLost) !== null ? (stat.fractionLost as number) * 100 : null,
+        roundTripTimeMs: counter(stat.roundTripTime) !== null ? (stat.roundTripTime as number) * 1000 : null
       }
       return
     }
-    if (stat.type !== 'outbound-rtp' || stat.kind !== 'video' || stat.isRemote === true) return
+    if (stat.type !== 'outbound-rtp' || stat.kind !== 'video' || stat.isRemote === true || counter(stat.timestamp) === null) return
     const reason = typeof stat.qualityLimitationReason === 'string' ? stat.qualityLimitationReason : null
     found = {
       sample: {
-        timestamp: stat.timestamp ?? 0,
-        bytes: num(stat.bytesSent),
-        framesEncoded: num(stat.framesEncoded),
-        totalEncodeTime: num(stat.totalEncodeTime)
+        timestamp: stat.timestamp!,
+        bytes: counter(stat.bytesSent),
+        framesEncoded: counter(stat.framesEncoded),
+        totalEncodeTime: counter(stat.totalEncodeTime)
       },
       qualityLimitation: reason,
       remotePacketLossPercent: null,
@@ -175,7 +184,10 @@ export function readPath(report: RTCStatsReport): PathInfo {
     if (stat.type === 'local-candidate' || stat.type === 'remote-candidate') {
       if (typeof stat.candidateType === 'string') candidates.set(stat.id, stat.candidateType)
     }
-    if (stat.type === 'candidate-pair' && stat.state === 'succeeded' && (stat.selected === true || stat.nominated === true)) selected = stat
+    if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
+      if (stat.selected === true) selected = stat
+      else if (stat.nominated === true && !selected) selected = stat
+    }
   })
   const pair = selected as StatLike | null
   if (!pair) return { kind: 'unknown', localType: null, remoteType: null }
@@ -185,7 +197,8 @@ export function readPath(report: RTCStatsReport): PathInfo {
 }
 
 export function classifyCandidateTypes(localType: string | null, remoteType: string | null): PathKind {
-  if (!localType || !remoteType) return 'unknown'
+  const knownTypes = ['host', 'prflx', 'srflx', 'relay']
+  if (!localType || !remoteType || !knownTypes.includes(localType) || !knownTypes.includes(remoteType)) return 'unknown'
   if (localType === 'relay' || remoteType === 'relay') return 'relayed'
   if (localType === 'host' && remoteType === 'host') return 'direct-lan'
   return 'direct-nat'
@@ -193,7 +206,7 @@ export function classifyCandidateTypes(localType: string | null, remoteType: str
 
 export function describePath(path: PathInfo): string {
   switch (path.kind) {
-    case 'direct-lan': return 'Direct (same network)'
+    case 'direct-lan': return 'Direct (host candidates)'
     case 'direct-nat': return 'Direct (via NAT traversal)'
     case 'relayed': return 'Relayed through TURN'
     case 'unknown': return 'Path not yet confirmed'

@@ -32,7 +32,7 @@ describe('inboundInterval', () => {
     const result = inboundInterval(null, inbound({ framesDropped: 4 }))
     expect(result.framesPerSecond).toBeNull()
     expect(result.bitrateKbps).toBeNull()
-    expect(result.droppedFrames).toBe(4)
+    expect(result.droppedFrames).toBeNull() // A lifetime total is not an interval measurement.
   })
 
   it('computes frame rate, bitrate, jitter buffer, decode time and loss from deltas', () => {
@@ -58,6 +58,18 @@ describe('inboundInterval', () => {
   it('returns no interval for a non-advancing clock', () => {
     const sample = inbound({ timestamp: 1000, framesDecoded: 1 })
     expect(inboundInterval(sample, { ...sample, framesDecoded: 2 }).framesPerSecond).toBeNull()
+  })
+
+  it('does not turn missing counters into fabricated zero fps, bitrate or loss', () => {
+    const previous = inbound({ timestamp: 1000, bytes: null, framesDecoded: null, framesDropped: null, packetsLost: null, packetsReceived: null })
+    const current = inbound({ timestamp: 2000, bytes: null, framesDecoded: null, framesDropped: null, packetsLost: null, packetsReceived: null })
+    expect(inboundInterval(previous, current)).toEqual({
+      framesPerSecond: null, bitrateKbps: null, jitterBufferMs: null,
+      decodeMs: null, droppedFrames: null, packetLossPercent: null
+    })
+    expect(outboundInterval(outbound({ timestamp: 1000, bytes: null, framesEncoded: null, totalEncodeTime: null }), outbound({ timestamp: 2000, bytes: null, framesEncoded: null, totalEncodeTime: null }))).toEqual({
+      framesPerSecond: null, bitrateKbps: null, encodeMs: null
+    })
   })
 })
 
@@ -88,6 +100,15 @@ describe('readInboundVideo', () => {
   it('returns null when no local inbound video stream exists', () => {
     expect(readInboundVideo(reportOf([{ id: 'x', type: 'transport' }]))).toBeNull()
   })
+
+  it('keeps missing per-stream fields unavailable rather than inventing zero values', () => {
+    const sample = readInboundVideo(reportOf([{ id: 'v', type: 'inbound-rtp', kind: 'video', timestamp: 1000 }]))
+    expect(sample?.bytes).toBeNull()
+    expect(sample?.framesDecoded).toBeNull()
+    expect(sample?.width).toBeNull()
+    expect(sample?.packetsLost).toBeNull()
+    expect(readInboundVideo(reportOf([{ id: 'v', type: 'inbound-rtp', kind: 'video' }]))).toBeNull()
+  })
 })
 
 describe('readOutboundVideo', () => {
@@ -104,7 +125,7 @@ describe('readOutboundVideo', () => {
   })
 
   it('reports null receiver values when no receiver report has arrived yet', () => {
-    const report = reportOf([{ id: 'o', type: 'outbound-rtp', kind: 'video', bytesSent: 1 }])
+    const report = reportOf([{ id: 'o', type: 'outbound-rtp', kind: 'video', bytesSent: 1, timestamp: 1000 }])
     const result = readOutboundVideo(report)
     expect(result?.remotePacketLossPercent).toBeNull()
     expect(result?.remoteRoundTripTimeMs).toBeNull()
@@ -127,6 +148,7 @@ describe('classifyCandidateTypes', () => {
   it('stays unknown when either candidate type is missing', () => {
     expect(classifyCandidateTypes(null, 'host')).toBe('unknown')
     expect(classifyCandidateTypes('host', null)).toBe('unknown')
+    expect(classifyCandidateTypes('undocumented', 'host')).toBe('unknown')
   })
 })
 
@@ -161,7 +183,7 @@ describe('readPath', () => {
   })
 
   it('describes each path kind in user-facing words', () => {
-    expect(describePath({ kind: 'direct-lan', localType: 'host', remoteType: 'host' })).toBe('Direct (same network)')
+    expect(describePath({ kind: 'direct-lan', localType: 'host', remoteType: 'host' })).toBe('Direct (host candidates)')
     expect(describePath({ kind: 'direct-nat', localType: 'srflx', remoteType: 'host' })).toBe('Direct (via NAT traversal)')
     expect(describePath({ kind: 'relayed', localType: 'relay', remoteType: 'host' })).toBe('Relayed through TURN')
     expect(describePath({ kind: 'unknown', localType: null, remoteType: null })).toBe('Path not yet confirmed')
