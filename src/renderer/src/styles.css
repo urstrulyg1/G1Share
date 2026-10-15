@@ -1069,3 +1069,279 @@ html:not([data-visual-validation="true"]) .sidebar-version {
   color: #70839a !important;
 }
 
+/* ==========================================================================
+   Full Premium UI Overhaul: Animations, Glassmorphic Depth, Focus Rings & Auras
+   ========================================================================== */
+
+/* Sleek custom scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+/* Breathing pulse micro-animations for live online status */
+@keyframes opendesk-pulse-live {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(53, 239, 99, 0.75);
+  }
+  65% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 6px rgba(53, 239, 99, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(53, 239, 99, 0);
+  }
+}
+@keyframes opendesk-pulse-waiting {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(224, 173, 88, 0.65);
+  }
+  65% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 5px rgba(224, 173, 88, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(224, 173, 88, 0);
+  }
+}
+
+.window-status.status-online i,
+.access-state .state-dot-ready,
+.connection-state-dot.is-online,
+.sidebar-ready-status .is-ready,
+.device-status-indicator.is-online,
+.online-label i {
+  animation: opendesk-pulse-live 2.6s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.window-status.status-connecting i,
+.window-status.status-loading i,
+.access-state .state-dot-waiting {
+  animation: opendesk-pulse-waiting 2.2s infinite ease-in-out;
+}
+
+/* Tactile header settings gear */
+.window-settings {
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.18s ease, background 0.18s ease !important;
+}
+.window-settings:hover {
+  transform: rotate(45deg);
+  color: #55b0ff !important;
+}
+.window-settings:active {
+  transform: rotate(60deg) scale(0.92);
+}
+
+/* Glass pill for live header status in real desktop mode */
+html:not([data-visual-validation="true"]) .window-status {
+  padding: 4px 12px !important;
+  border-radius: 20px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.2px !important;
+  transition: all 0.2s ease !important;
+}
+html:not([data-visual-validation="true"]) .window-status.status-online {
+  background: rgba(53, 239, 99, 0.08) !important;
+  border: 1px solid rgba(53, 239, 99, 0.28) !important;
+  color: #4eed84 !important;
+}
+
+/* Ambient card depth & specular lighting */
+html:not([data-visual-validation="true"]) .dashboard-panel {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 8px 24px -2px rgba(1, 8, 18, 0.3), 0 2px 6px -1px rgba(0, 0, 0, 0.15) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+html:not([data-visual-validation="true"]) .dashboard-panel:hover {
+  border-color: rgba(67, 142, 210, 0.42) !important;
+  box-shadow: 0 12px 32px -4px rgba(1, 8, 18, 0.42), 0 0 0 1px rgba(67, 142, 210, 0.15) !important;
+}
+
+/* Interactive benefit cards with dynamic color aura */
+.benefit-card {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.benefit-card:hover {
+  transform: translateY(-3px) !important;
+}
+.benefit-card:active {
+  transform: translateY(-1px) scale(0.99) !important;
+}
+.benefit-card .benefit-icon {
+  transition: transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.26s ease !important;
+}
+.benefit-card:hover .benefit-icon {
+  transform: scale(1.08) !important;
+}
+
+/* Individual color aura glows */
+.benefit-card:has(.benefit-speed):hover {
+  border-color: rgba(192, 108, 255, 0.45) !important;
+  box-shadow: 0 12px 32px -4px rgba(140, 58, 217, 0.32), 0 0 0 1px rgba(192, 108, 255, 0.22) !important;
+}
+.benefit-card:has(.benefit-secure):hover {
+  border-color: rgba(33, 201, 135, 0.45) !important;
+  box-shadow: 0 12px 32px -4px rgba(24, 183, 121, 0.32), 0 0 0 1px rgba(33, 201, 135, 0.22) !important;
+}
+.benefit-card:has(.benefit-platform):hover {
+  border-color: rgba(255, 157, 98, 0.45) !important;
+  box-shadow: 0 12px 32px -4px rgba(228, 107, 54, 0.32), 0 0 0 1px rgba(255, 157, 98, 0.22) !important;
+}
+.benefit-card:has(.benefit-free):hover {
+  border-color: rgba(53, 182, 255, 0.45) !important;
+  box-shadow: 0 12px 32px -4px rgba(25, 139, 255, 0.32), 0 0 0 1px rgba(53, 182, 255, 0.22) !important;
+}
+
+/* High-end input focus rings and monospace ID styling */
+.device-input-wrap,
+.input-wrap,
+.search,
+.settings-form-row input,
+.alias-editor input {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease !important;
+}
+.device-input-wrap:focus-within,
+.input-wrap:focus-within,
+.search:focus-within,
+.settings-form-row input:focus,
+.alias-editor input:focus {
+  border-color: #2c8cff !important;
+  box-shadow: 0 0 0 3px rgba(44, 140, 255, 0.25), 0 4px 14px rgba(44, 140, 255, 0.14) !important;
+}
+.paste-button {
+  transition: transform 0.16s ease, color 0.16s ease, background 0.16s ease !important;
+}
+.paste-button:hover:not(:disabled) {
+  transform: scale(1.1) !important;
+  color: #55b0ff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+.icon-button {
+  transition: transform 0.16s ease, border-color 0.16s ease, color 0.16s ease, background 0.16s ease !important;
+}
+.icon-button:hover:not(:disabled) {
+  transform: scale(1.06) !important;
+  border-color: #3884d6 !important;
+  color: #55b0ff !important;
+}
+
+/* Tactile primary buttons with luminous hover glow */
+.primary,
+.dashboard-connect-button {
+  background: linear-gradient(135deg, #2c8cff 0%, #0866e2 100%) !important;
+  box-shadow: 0 4px 14px rgba(8, 112, 237, 0.35) !important;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, filter 0.15s ease !important;
+}
+.primary:hover:not(:disabled),
+.dashboard-connect-button:hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(8, 112, 237, 0.5) !important;
+  filter: brightness(1.06) !important;
+}
+.primary:active:not(:disabled),
+.dashboard-connect-button:active:not(:disabled) {
+  transform: translateY(1px) !important;
+  box-shadow: 0 2px 6px rgba(8, 112, 237, 0.3) !important;
+  filter: brightness(0.96) !important;
+}
+.dashboard-connect-button svg {
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+.dashboard-connect-button:hover:not(:disabled) svg {
+  transform: translateX(4px) !important;
+}
+
+/* Animated toggle switch with active aura */
+.access-switch {
+  transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease !important;
+}
+.access-switch.is-on {
+  background: #0d6efd !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 12px rgba(13, 110, 253, 0.5) !important;
+}
+.access-switch span {
+  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease !important;
+}
+
+/* Sidebar navigation polish */
+.nav-item {
+  transition: background 0.16s ease, color 0.16s ease, transform 0.12s ease !important;
+}
+.nav-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(44, 140, 255, 0.18) 0%, rgba(44, 140, 255, 0.05) 100%) !important;
+  box-shadow: inset 3px 0 0 #3292ff !important;
+  color: #ffffff !important;
+  font-weight: 550 !important;
+}
+.nav-badge {
+  box-shadow: 0 0 10px rgba(220, 99, 121, 0.65) !important;
+  font-weight: 650 !important;
+}
+
+/* Secondary views visual harmony */
+.device-card,
+.recent-row {
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease, box-shadow 0.18s ease !important;
+}
+.device-card:hover,
+.recent-row:hover {
+  transform: translateY(-1.5px) !important;
+  border-color: rgba(67, 142, 210, 0.38) !important;
+  box-shadow: 0 6px 20px rgba(1, 8, 18, 0.28) !important;
+}
+.device-card .id-row code {
+  background: rgba(7, 16, 26, 0.6) !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(42, 60, 80, 0.6) !important;
+}
+.health-card {
+  box-shadow: 0 6px 24px rgba(86, 214, 161, 0.09) !important;
+}
+.diag-row {
+  transition: background 0.14s ease !important;
+}
+.diag-row:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+.segmented {
+  padding: 4px !important;
+  border-radius: 9px !important;
+}
+.segmented button {
+  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease !important;
+  border-radius: 6px !important;
+}
+.segmented button.selected {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+
