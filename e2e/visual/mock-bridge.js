@@ -42,6 +42,7 @@
       if (request.path === '/api/v1/devices/register') return { ...localSummary, id: request.body?.id || localSummary.id, name: request.body?.name || localSummary.name }
       if (request.path === '/api/v1/devices/heartbeat') return {}
       if (request.path.startsWith('/api/v1/events')) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
         const after = Number(new URLSearchParams(request.path.split('?')[1] || '').get('after') || 0)
         return { cursor: after, events: [], overflow: false }
       }
