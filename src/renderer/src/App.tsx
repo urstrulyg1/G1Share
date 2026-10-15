@@ -222,7 +222,7 @@ export default function App() {
       }}>
         <div className="window-brand">
           <button className="brand-home" aria-label="Open OpenDesk Home" onClick={() => setPage('Home')}>
-            <span className="brand-mark"><ArrowLeftRight size={19}/></span>
+            <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" className="brand-glyph"><path d="M20 4.5c8.5 0 15.5 6.7 15.5 15.1S28.5 35.1 20 35.1 4.5 28.2 4.5 19.6 11.5 4.5 20 4.5Z" fill="none" stroke="currentColor" strokeWidth="2.3"/><path d="M12 14.5c3.7-5 10.6-5.3 14.4-1.5 3.4 3.4 2.7 8.1-.5 10.8l-7.2 6.1c-2.6 2.2-6.8 1.4-8-1.7-.8-2 .1-4.1 1.8-5.7l4.2-3.7" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 11.4c5.2-.2 8.4 4.7 6.3 8.9-1.4 2.8-4.8 3.8-7.2 5.7" fill="none" stroke="#b9ddff" strokeWidth="2.5" strokeLinecap="round"/></svg></span>
             <span className="brand-name">OpenDesk</span>
           </button>
           <span className="brand-tagline">Free. Fast. Secure. Remote Access.</span>
