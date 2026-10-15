@@ -47,7 +47,7 @@
   "build": {
     "appId": "com.g1viewer.desktop",
     "productName": "G1Viewer",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "${name}_${arch}.${ext}",
     "directories": {
       "output": "release"
     },

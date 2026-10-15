@@ -53,14 +53,12 @@ jobs:
             artifact: g1viewer-release-macos
             artifact_glob: |
               release/*.dmg
-              release/*.blockmap
           - platform: Windows NSIS .exe (x64, arm64)
             os: windows-latest
             build_cmd: npm run dist:win
             artifact: g1viewer-release-windows
             artifact_glob: |
               release/*.exe
-              release/*.blockmap
           - platform: Linux AppImage and deb (x64)
             os: ubuntu-latest
             build_cmd: npm run dist:linux
@@ -68,7 +66,6 @@ jobs:
             artifact_glob: |
               release/*.AppImage
               release/*.deb
-              release/*.blockmap
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
