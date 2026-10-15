@@ -180,7 +180,7 @@ export default function App() {
     return openDesk.knownDevices.filter(device => device.name.toLowerCase().includes(text) || device.id.toLowerCase().includes(text) || device.platform.toLowerCase().includes(text))
   }, [openDesk.knownDevices, query])
   const platform = openDesk.device ? (({ darwin: 'macOS', win32: 'Windows', linux: 'Linux' } as Record<string, string>)[openDesk.device.platform] || openDesk.device.platform) : 'Detecting platform'
-  const statusLabel = openDesk.serviceState === 'online' ? 'Signaling connected' : openDesk.serviceState === 'connecting' ? 'Connecting to signaling' : openDesk.serviceState === 'blocked' ? 'Identity needs attention' : openDesk.serviceState === 'unconfigured' ? 'Signaling not configured' : openDesk.serviceState === 'loading' ? 'Starting OpenDesk' : 'Signaling unavailable'
+  const statusLabel = openDesk.serviceState === 'online' ? 'Signaling connected' : openDesk.serviceState === 'connecting' ? 'Connecting to signaling' : openDesk.serviceState === 'blocked' ? 'Identity needs attention' : openDesk.serviceState === 'unconfigured' ? 'Signaling not configured' : openDesk.serviceState === 'loading' ? 'Starting G1Viewer' : 'Signaling unavailable'
   const currentPage: Page = openDesk.activeSession ? 'Active Session' : page
   const headerStatus = openDesk.serviceState === 'online' && openDesk.device?.identityReady ? 'Ready' : statusLabel
   const connectionCardProps = {
@@ -193,26 +193,26 @@ export default function App() {
     try {
       if (typeof window.openDesk.minimizeWindow !== 'function') throw new Error('Native window controls are unavailable in this runtime.')
       await window.openDesk.minimizeWindow()
-    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not minimize the OpenDesk window.') }
+    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not minimize the G1Viewer window.') }
   }
 
   async function toggleWindowSize(options?: { altKey?: boolean }) {
     try {
       if (typeof window.openDesk.toggleWindowMaximize !== 'function') throw new Error('Native window controls are unavailable in this runtime.')
       setWindowMaximized(await window.openDesk.toggleWindowMaximize(options))
-    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not resize the OpenDesk window.') }
+    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not resize the G1Viewer window.') }
   }
 
   async function closeWindow() {
     try {
       if (typeof window.openDesk.closeWindow !== 'function') throw new Error('Native window controls are unavailable in this runtime.')
       await window.openDesk.closeWindow()
-    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not close the OpenDesk window.') }
+    } catch (error) { reportError(error instanceof Error ? error.message : 'Could not close the G1Viewer window.') }
   }
 
   async function openProjectPage() {
     try { await window.openDesk.openProjectPage() }
-    catch (error) { reportError(error instanceof Error ? error.message : 'Could not open the OpenDesk project page.') }
+    catch (error) { reportError(error instanceof Error ? error.message : 'Could not open the G1Viewer project page.') }
   }
 
   const isVisualValidation = typeof document !== 'undefined' && document.documentElement.dataset.visualValidation === 'true'
@@ -245,9 +245,9 @@ export default function App() {
         )}
 
         <div className="window-brand">
-          <button className="brand-home" aria-label="Open OpenDesk Home" onClick={() => setPage('Home')}>
+          <button className="brand-home" aria-label="Open G1Viewer Home" onClick={() => setPage('Home')}>
             <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" className="brand-glyph"><path d="M20 4.5c8.5 0 15.5 6.7 15.5 15.1S28.5 35.1 20 35.1 4.5 28.2 4.5 19.6 11.5 4.5 20 4.5Z" fill="none" stroke="currentColor" strokeWidth="2.3"/><path d="M12 14.5c3.7-5 10.6-5.3 14.4-1.5 3.4 3.4 2.7 8.1-.5 10.8l-7.2 6.1c-2.6 2.2-6.8 1.4-8-1.7-.8-2 .1-4.1 1.8-5.7l4.2-3.7" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 11.4c5.2-.2 8.4 4.7 6.3 8.9-1.4 2.8-4.8 3.8-7.2 5.7" fill="none" stroke="#b9ddff" strokeWidth="2.5" strokeLinecap="round"/></svg></span>
-            <span className="brand-name">OpenDesk</span>
+            <span className="brand-name">G1Viewer</span>
           </button>
           <span className="brand-tagline">Free. Fast. Secure. Remote Access.</span>
         </div>
@@ -334,7 +334,7 @@ export default function App() {
           />}
 
           {!openDesk.activeSession && page === 'Connect' && <>
-            <Heading eyebrow="REMOTE ACCESS" title="Connect to a Device" description="Enter a real OpenDesk Device ID to request a consent-based remote session."/>
+            <Heading eyebrow="REMOTE ACCESS" title="Connect to a Device" description="Enter a real G1Viewer Device ID to request a consent-based remote session."/>
             <ConnectionCard {...connectionCardProps} standalone/>
           </>}
       {!openDesk.activeSession && page === 'Devices' && <>
@@ -363,7 +363,7 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Clipboard' && <>
-        <Heading eyebrow="ONE-TIME TEXT TRANSFER" title="Clipboard" description="OpenDesk does not continuously synchronize clipboard data. Text transfer is requested and confirmed separately for each active session."/>
+        <Heading eyebrow="ONE-TIME TEXT TRANSFER" title="Clipboard" description="G1Viewer does not continuously synchronize clipboard data. Text transfer is requested and confirmed separately for each active session."/>
         <div className="feature-detail"><div><Clipboard size={24}/></div><h2>Clipboard sharing is session-scoped</h2><p>Connect to a device and request clipboard permission. The remote user must approve it, and each clipboard send or receive requires local confirmation.</p><button className="subtle" onClick={() => setPage('Connect')}>Go to connection <ArrowRight size={13}/></button></div>
       </>}
 
@@ -387,7 +387,7 @@ export default function App() {
       </>}
 
       {!openDesk.activeSession && page === 'Settings' && <SettingsPage state={openDesk} theme={theme} setTheme={setTheme} error={reportError} success={message => setNotice({ kind: 'success', message })}/>}
-      {page !== 'Home' && <footer><span>OpenDesk · {openDesk.device?.appVersion ? `v${openDesk.device.appVersion}` : 'Version unavailable'}</span><span><LockKeyhole size={12}/> Consent-first · Unattended access is not available</span></footer>}
+      {page !== 'Home' && <footer><span>G1Viewer · {openDesk.device?.appVersion ? `v${openDesk.device.appVersion}` : 'Version unavailable'}</span><span><LockKeyhole size={12}/> Consent-first · Unattended access is not available</span></footer>}
         </main>
       </div>
     </div>
@@ -482,7 +482,7 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
     try {
       const url = await state.setServerURL(urlInput)
       setUrlInput(url)
-      success('Signaling server saved. OpenDesk is reconnecting to the new endpoint.')
+      success('Signaling server saved. G1Viewer is reconnecting to the new endpoint.')
     } catch (reason) { error(reason instanceof Error ? reason.message : 'Could not save the signaling server URL.') }
     finally { setSavingURL(false) }
   }
@@ -523,7 +523,7 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
 
 async function copyDiagnostics(device: ReturnType<typeof useOpenDesk>['device'], signalingUrl: string, serviceState: string, serviceError: string, capabilities: ReturnType<typeof useOpenDesk>['capabilities'], connectionState: string | undefined, error: (message: string) => void, success: (notice: Notice) => void) {
   const sanitized = [
-    'OpenDesk sanitized diagnostics',
+    'G1Viewer sanitized diagnostics',
     `Version: ${device?.appVersion || 'unknown'}`,
     `Platform: ${device?.platform || 'unknown'} ${device?.architecture || ''}`,
     `Identity ready: ${device ? device.identityReady ? 'yes' : 'no' : 'unavailable'}`,

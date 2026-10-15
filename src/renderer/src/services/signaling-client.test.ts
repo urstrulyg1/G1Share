@@ -49,7 +49,7 @@ describe('SignalingClient', () => {
     const bridge = { signalingRequest: vi.fn(async () => peer), decideSession: vi.fn() }
     const client = new SignalingClient(bridge, local)
     await expect(client.createSession(peer.id, ['files'])).rejects.toThrow('Screen viewing permission is required')
-    await expect(client.lookupDevice('not-an-id')).rejects.toThrow('valid OpenDesk device ID')
+    await expect(client.lookupDevice('not-an-id')).rejects.toThrow('valid G1Viewer device ID')
     expect(bridge.signalingRequest).not.toHaveBeenCalled()
   })
 

@@ -8,7 +8,7 @@
 progress.transfer-progress{width:100%;height:4px;display:block;appearance:none;border:0;margin:7px 0;background:var(--border);border-radius:4px;overflow:hidden}progress.transfer-progress::-webkit-progress-bar{background:var(--border);border-radius:4px}progress.transfer-progress::-webkit-progress-value{background:linear-gradient(90deg,#7d8aff,#5fcfa5);border-radius:4px;transition:width .15s}progress.transfer-progress::-moz-progress-bar{background:linear-gradient(90deg,#7d8aff,#5fcfa5);border-radius:4px}
 .quality-line select{font-size:9px;max-width:60%;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 5px}
 
-/* OpenDesk reference dashboard refresh */
+/* G1Viewer reference dashboard refresh */
 .app-shell{--bg:#09111d;--sidebar:#0b1420;--panel:#111d2b;--panel2:#172638;--border:#26384b;--text:#f2f6ff;--muted:#a3b3c9;--faint:#7588a2;--accent:#3292ff;min-height:100vh;background:radial-gradient(ellipse at 70% -10%,#1d3b60 0,transparent 38%),var(--bg)}
 .theme-light{--bg:#edf3fb;--sidebar:#f8fbff;--panel:#fff;--panel2:#edf3fa;--border:#d7e2ef;--text:#17273a;--muted:#5f7188;--faint:#7c8da2;--accent:#1676ed;background:var(--bg)}
 .sidebar{width:244px;flex-basis:244px;background:linear-gradient(180deg,#0c1725,#09121d);padding:22px 13px 14px;border-right-color:#23354a}.theme-light .sidebar{background:var(--sidebar)}
@@ -501,8 +501,8 @@ button, input, select{touch-action:manipulation}
 .page-heading-actions { display: flex; align-items: center; gap: 8px; }
 .connect-panel-standalone { width: min(100%, 620px); height: auto; min-height: 250px; }
 .connect-panel-standalone .dashboard-panel-title h2 { font-size: 14px; }
-.mini-spinner { width: 13px; height: 13px; border: 2px solid #ffffff60; border-top-color: #fff; border-radius: 50%; animation: opendesk-spin .7s linear infinite; }
-@keyframes opendesk-spin { to { transform: rotate(360deg); } }
+.mini-spinner { width: 13px; height: 13px; border: 2px solid #ffffff60; border-top-color: #fff; border-radius: 50%; animation: g1viewer-spin .7s linear infinite; }
+@keyframes g1viewer-spin { to { transform: rotate(360deg); } }
 
 .app-shell.desktop-surface.theme-light { --bg: #eef2f7; --sidebar: #f7f9fc; --panel: #fff; --panel2: #f1f5fa; --border: #d4deea; --text: #142336; --muted: #566980; --faint: #73869c; --accent: #126bd2; --good: #168d5b; }
 .theme-light .application-window { background: #eef2f7; border-color: rgba(255,255,255,.8); }
@@ -1267,7 +1267,7 @@ html:not([data-visual-validation="true"]) .sidebar-version {
 }
 
 /* Breathing pulse micro-animations for live online status */
-@keyframes opendesk-pulse-live {
+@keyframes g1viewer-pulse-live {
   0% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(53, 239, 99, 0.75);
@@ -1281,7 +1281,7 @@ html:not([data-visual-validation="true"]) .sidebar-version {
     box-shadow: 0 0 0 0 rgba(53, 239, 99, 0);
   }
 }
-@keyframes opendesk-pulse-waiting {
+@keyframes g1viewer-pulse-waiting {
   0% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(224, 173, 88, 0.65);
@@ -1302,13 +1302,13 @@ html:not([data-visual-validation="true"]) .sidebar-version {
 .sidebar-ready-status .is-ready,
 .device-status-indicator.is-online,
 .online-label i {
-  animation: opendesk-pulse-live 2.6s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  animation: g1viewer-pulse-live 2.6s infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .window-status.status-connecting i,
 .window-status.status-loading i,
 .access-state .state-dot-waiting {
-  animation: opendesk-pulse-waiting 2.2s infinite ease-in-out;
+  animation: g1viewer-pulse-waiting 2.2s infinite ease-in-out;
 }
 
 /* Tactile header settings gear */

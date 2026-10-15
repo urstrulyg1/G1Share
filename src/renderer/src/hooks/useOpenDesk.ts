@@ -222,7 +222,7 @@ export function useOpenDesk() {
             setState(current => ({ ...current, cursor }))
             for (const event of batch.events) processEvent(event)
             setState(current => ({ ...current, serviceState: 'online', serviceError: batch.overflow
-              ? 'Some signaling events expired before OpenDesk read them. Reconnect any pending request.' : '' }))
+              ? 'Some signaling events expired before G1Viewer read them. Reconnect any pending request.' : '' }))
           }
         } catch (error) {
           if (stopped) return
@@ -249,7 +249,7 @@ export function useOpenDesk() {
     setState(current => ({ ...current, serviceError: '' }))
     const peer = await client.lookupDevice(deviceId)
     saveKnownDevice(peer)
-    if (!peer.online) throw new Error('That device is currently offline. Ask its user to open OpenDesk and check the signaling server URL.')
+    if (!peer.online) throw new Error('That device is currently offline. Ask its user to open G1Viewer and check the signaling server URL.')
     const trusted = await window.openDesk.trustPeer({ id: peer.id, name: peer.name, publicKey: peer.publicKey })
     if (!trusted) throw new Error('Device identity was not trusted. No session request was sent.')
     const permissions = ['view', ...extraPermissions] as SessionPermission[]
@@ -266,7 +266,7 @@ export function useOpenDesk() {
 
   const approveSession = useCallback(async (sessionId: string, permissions: SessionPermission[]) => {
     const client = clientRef.current
-    if (!client) throw new Error('OpenDesk is not connected to a signaling service.')
+    if (!client) throw new Error('G1Viewer is not connected to a signaling service.')
     const incoming = stateRef.current.incomingRequests.find(request => request.session.id === sessionId)
     if (!incoming) throw new Error('This session request is no longer available.')
     const trusted = await window.openDesk.trustPeer({ id: incoming.peer.id, name: incoming.peer.name, publicKey: incoming.peer.publicKey })
@@ -285,7 +285,7 @@ export function useOpenDesk() {
 
   const rejectSession = useCallback(async (sessionId: string) => {
     const client = clientRef.current
-    if (!client) throw new Error('OpenDesk is not connected to a signaling service.')
+    if (!client) throw new Error('G1Viewer is not connected to a signaling service.')
     await client.decideSession(sessionId, false)
     setState(current => ({ ...current, incomingRequests: current.incomingRequests.filter(request => request.session.id !== sessionId) }))
   }, [])
@@ -430,3 +430,6 @@ export function useOpenDesk() {
     updateConnectionState
   }
 }
+
+export const useG1Viewer = useOpenDesk
+export type UseG1ViewerState = UseOpenDeskState

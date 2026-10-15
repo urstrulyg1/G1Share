@@ -1,6 +1,6 @@
-# OpenDesk
+# G1Viewer
 
-OpenDesk is an account-free, consent-first desktop remote-viewing prototype built with Electron, React, TypeScript, and a self-hostable Go signaling service. It launches directly into the dashboard—no login, signup, cloud account, or identity provider. It uses a locally generated Ed25519 device identity, short-lived signed signaling requests, pinned peer fingerprints, explicit session approval, WebRTC DTLS-SRTP, and a user-selected screen source. Optional file transfer, one-time clipboard text, remote keyboard/mouse control, and Windows-only system audio are requested and approved independently per session.
+G1Viewer is an account-free, consent-first desktop remote-viewing prototype built with Electron, React, TypeScript, and a self-hostable Go signaling service. It launches directly into the dashboard—no login, signup, cloud account, or identity provider. It uses a locally generated Ed25519 device identity, short-lived signed signaling requests, pinned peer fingerprints, explicit session approval, WebRTC DTLS-SRTP, and a user-selected screen source. Optional file transfer, one-time clipboard text, remote keyboard/mouse control, and Windows-only system audio are requested and approved independently per session.
 
 **This is not yet a complete remote desktop product.** It does not support unattended access. Remote keyboard and mouse control and Windows system-audio sharing are implemented but have not been verified on real desktops; the two-client end-to-end test uses the real signaling broker and renderer services with substituted capture and native input. Do not treat a successful build or a simulated test as proof of working remote access on your hardware.
 
@@ -35,7 +35,7 @@ npm ci
 npm run dev
 ```
 
-On first launch, the Home dashboard appears with **Signaling not configured**. For same-computer development, open **Settings → Signaling service** and enter `http://127.0.0.1:8787`; the local Go service listens there by default. Alternatively set `OPENDESK_SIGNALING_URL=http://127.0.0.1:8787` in the desktop process environment before first launch. You do **not** need a user account. Unlock your OS credential store so the app can generate its actual device key/ID; if it cannot, it shows **Unavailable** and blocks connections instead of displaying a fake identifier. The same loopback address on two computers refers to two different services. See [local development](docs/development/local-development.md) and [the two-client checklist](docs/user/getting-started.md).
+On first launch, the Home dashboard appears with **Signaling not configured**. For same-computer development, open **Settings → Signaling service** and enter `http://127.0.0.1:8787`; the local Go service listens there by default. Alternatively set `G1VIEWER_SIGNALING_URL=http://127.0.0.1:8787` (or `OPENDESK_SIGNALING_URL=http://127.0.0.1:8787`) in the desktop process environment before first launch. You do **not** need a user account. Unlock your OS credential store so the app can generate its actual device key/ID; if it cannot, it shows **Unavailable** and blocks connections instead of displaying a fake identifier. The same loopback address on two computers refers to two different services. See [local development](docs/development/local-development.md) and [the two-client checklist](docs/user/getting-started.md).
 
 ## Self-hosting
 

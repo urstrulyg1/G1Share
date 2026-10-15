@@ -199,7 +199,7 @@ describe('account-free application UI', () => {
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
 
     // Header brand logo returns to Home
-    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open G1Viewer Home' }))
     expect(screen.getByRole('heading', { name: 'Access Your Devices Anywhere' })).toBeTruthy()
 
     // Header status pill opens Diagnostics
@@ -207,7 +207,7 @@ describe('account-free application UI', () => {
     expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
 
     // Return to Home
-    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open G1Viewer Home' }))
 
     // Sidebar navigation
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
@@ -267,7 +267,7 @@ describe('account-free application UI', () => {
     // Network details link -> Diagnostics
     fireEvent.click(screen.getByRole('button', { name: /Network details/ }))
     expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open G1Viewer Home' }))
 
     // See All -> Devices
     fireEvent.click(screen.getByRole('button', { name: /See All/ }))

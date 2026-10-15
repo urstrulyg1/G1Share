@@ -25,7 +25,7 @@ export interface SessionForHistory {
   connectionState: string
 }
 
-export const RECENT_STORAGE_KEY = 'opendesk.recentSessions.v2'
+export const RECENT_STORAGE_KEY = 'g1viewer.recentSessions.v2'
 const OUTCOMES: SessionOutcome[] = ['Rejected', 'Expired', 'Cancelled', 'Closed before approval', 'Closed before connecting', 'Connection failed', 'Disconnected']
 
 function isIsoDate(value: unknown): value is string {
@@ -50,7 +50,8 @@ function validRecord(value: unknown): value is RecentSession {
 
 export function loadRecentSessions(storage: Pick<Storage, 'getItem'>): RecentSession[] {
   try {
-    const parsed: unknown = JSON.parse(storage.getItem(RECENT_STORAGE_KEY) || '[]')
+    const raw = storage.getItem(RECENT_STORAGE_KEY) || storage.getItem('opendesk.recentSessions.v2') || '[]'
+    const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.filter(validRecord).slice(0, 50)
   } catch {

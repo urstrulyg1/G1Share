@@ -78,7 +78,7 @@ jobs:
           - platform: Linux AppImage/deb (x64)
             os: ubuntu-latest
             build_cmd: npm run dist:linux
-            artifact: opendesk-linux
+            artifact: g1viewer-linux
             artifact_glob: |
               release/*.AppImage
               release/*.deb
@@ -86,14 +86,14 @@ jobs:
           - platform: Windows NSIS .exe (x64, arm64)
             os: windows-latest
             build_cmd: npm run dist:win
-            artifact: opendesk-windows
+            artifact: g1viewer-windows
             artifact_glob: |
               release/*.exe
               release/*.blockmap
           - platform: macOS DMG (x64, arm64)
             os: macos-latest
             build_cmd: npm run dist:mac
-            artifact: opendesk-macos
+            artifact: g1viewer-macos
             artifact_glob: |
               release/*.dmg
               release/*.blockmap
@@ -146,7 +146,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: opendesk-visual-validation
+          name: g1viewer-visual-validation
           path: artifacts/visual-validation/
           if-no-files-found: warn
           retention-days: 14

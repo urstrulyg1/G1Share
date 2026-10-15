@@ -67,15 +67,22 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+func getEnv(primary, fallback string) string {
+	if val := strings.TrimSpace(os.Getenv(primary)); val != "" {
+		return val
+	}
+	return strings.TrimSpace(os.Getenv(fallback))
+}
+
 func turnSettingsFromEnvironment() turnSettings {
 	turn := turnSettings{
-		STUNURLs:      splitURLs(os.Getenv("OPENDESK_STUN_URLS"), "stun:", "stuns:"),
-		TURNURLs:      splitURLs(os.Getenv("OPENDESK_TURN_URLS"), "turn:", "turns:"),
-		SharedSecret:  strings.TrimSpace(os.Getenv("OPENDESK_TURN_SHARED_SECRET")),
-		Realm:         strings.TrimSpace(os.Getenv("OPENDESK_TURN_REALM")),
+		STUNURLs:      splitURLs(getEnv("G1VIEWER_STUN_URLS", "OPENDESK_STUN_URLS"), "stun:", "stuns:"),
+		TURNURLs:      splitURLs(getEnv("G1VIEWER_TURN_URLS", "OPENDESK_TURN_URLS"), "turn:", "turns:"),
+		SharedSecret:  getEnv("G1VIEWER_TURN_SHARED_SECRET", "OPENDESK_TURN_SHARED_SECRET"),
+		Realm:         getEnv("G1VIEWER_TURN_REALM", "OPENDESK_TURN_REALM"),
 		CredentialTTL: 10 * time.Minute,
 	}
-	if value := strings.TrimSpace(os.Getenv("OPENDESK_TURN_CREDENTIAL_TTL")); value != "" {
+	if value := getEnv("G1VIEWER_TURN_CREDENTIAL_TTL", "OPENDESK_TURN_CREDENTIAL_TTL"); value != "" {
 		if duration, err := time.ParseDuration(value); err == nil && duration >= time.Minute && duration <= time.Hour {
 			turn.CredentialTTL = duration
 		}
@@ -105,7 +112,7 @@ func splitURLs(value string, allowed ...string) []string {
 }
 
 func dataDirectory() string {
-	path := strings.TrimSpace(os.Getenv("OPENDESK_DATA_DIR"))
+	path := getEnv("G1VIEWER_DATA_DIR", "OPENDESK_DATA_DIR")
 	if path != "" {
 		return path
 	}

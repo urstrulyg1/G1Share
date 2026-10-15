@@ -1,4 +1,4 @@
-{$OPENDESK_DOMAIN} {
+{$G1VIEWER_DOMAIN:{$OPENDESK_DOMAIN}} {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

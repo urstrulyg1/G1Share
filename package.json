@@ -1,10 +1,10 @@
 {
-  "name": "opendesk",
+  "name": "g1viewer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "A free-first, privacy-focused remote desktop platform",
-  "author": "OpenDesk contributors",
+  "author": "G1Viewer contributors",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -45,8 +45,8 @@
     "@electron/get": "^5.1.0"
   },
   "build": {
-    "appId": "org.opendesk.desktop",
-    "productName": "OpenDesk",
+    "appId": "com.g1viewer.desktop",
+    "productName": "G1Viewer",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"

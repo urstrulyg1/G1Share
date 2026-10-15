@@ -22,7 +22,7 @@ chmod 600 .env
 $EDITOR .env
 ```
 
-Set `OPENDESK_DOMAIN` to the DNS name users will enter in the app. Leave the STUN/TURN values empty until you have configured a compatible service. Choose a non-overlapping private subnet if `172.30.10.0/24` is already in use, and update the fixed Caddy/signaling addresses and `OPENDESK_TRUSTED_PROXIES` together in `docker-compose.yml`.
+Set `G1VIEWER_DOMAIN` (or `OPENDESK_DOMAIN`) to the DNS name users will enter in the app. Leave the STUN/TURN values empty until you have configured a compatible service. Choose a non-overlapping private subnet if `172.30.10.0/24` is already in use, and update the fixed Caddy/signaling addresses and `G1VIEWER_TRUSTED_PROXIES` together in `docker-compose.yml`.
 
 Prepare the persistent bind mount with the service's unprivileged UID/GID (10001):
 
@@ -37,10 +37,10 @@ Bring up the HTTPS gateway and signaling service:
 ```sh
 docker compose up -d --build
 docker compose ps
-curl -fsS "https://$OPENDESK_DOMAIN/healthz"
+curl -fsS "https://${G1VIEWER_DOMAIN:-$OPENDESK_DOMAIN}/healthz"
 ```
 
-Caddy obtains and renews the certificate. OpenDesk's Go service listens only inside the Compose network; Caddy is the only public path. `OPENDESK_TRUSTED_PROXIES` is set to Caddy's fixed container IP so challenge rate limits use the client address supplied by that trusted proxy. Do not widen this range to untrusted containers. Registry JSON is stored at `./data/signaling/device-registry.json`; keep the data directory private and include it in encrypted backups.
+Caddy obtains and renews the certificate. G1Viewer's Go service listens only inside the Compose network; Caddy is the only public path. `G1VIEWER_TRUSTED_PROXIES` is set to Caddy's fixed container IP so challenge rate limits use the client address supplied by that trusted proxy. Do not widen this range to untrusted containers. Registry JSON is stored at `./data/signaling/device-registry.json`; keep the data directory private and include it in encrypted backups.
 
 The signaling service has no user account or administrator approval system. Anyone can register a new key; a session still requires the target user to approve it. Share device IDs only with intended peers and keep the service patched and monitored.
 
@@ -81,7 +81,7 @@ The Go service issues Coturn REST credentials from the shared secret with a conf
 
 ## Connecting desktop clients
 
-On first launch OpenDesk has no configured server. In Settings, set **Signaling server** to `https://<your-domain>` on every client. Confirm the green signaling state before attempting a session. For LAN use, put the shared service behind a locally trusted HTTPS gateway and configure its hostname on both devices; direct ICE host candidates can then carry media, but a server is still needed to authenticate device requests and exchange setup messages. There is no automatic LAN discovery or account enrollment. For first-time peers, compare the displayed public-key fingerprint through a separate trusted channel. An HTTPS endpoint alone does not replace user approval or key verification.
+On first launch G1Viewer has no configured server. In Settings, set **Signaling server** to `https://<your-domain>` on every client. Confirm the green signaling state before attempting a session. For LAN use, put the shared service behind a locally trusted HTTPS gateway and configure its hostname on both devices; direct ICE host candidates can then carry media, but a server is still needed to authenticate device requests and exchange setup messages. There is no automatic LAN discovery or account enrollment. For first-time peers, compare the displayed public-key fingerprint through a separate trusted channel. An HTTPS endpoint alone does not replace user approval or key verification.
 
 A STUN/TURN response only makes ICE endpoints available; it does not guarantee NAT traversal. Test from the actual networks you intend to support. Restrictive corporate firewalls may require TURN/TLS on port 443 and a relay configuration designed for that environment.
 
@@ -94,4 +94,4 @@ go vet ./...
 go run .
 ```
 
-By default this binds to `127.0.0.1:8787`. For a local container or reverse proxy, set `OPENDESK_SIGNALING_ADDR` explicitly. Never expose this development HTTP listener directly to the public internet.
+By default this binds to `127.0.0.1:8787`. For a local container or reverse proxy, set `G1VIEWER_SIGNALING_ADDR` (or `OPENDESK_SIGNALING_ADDR`) explicitly. Never expose this development HTTP listener directly to the public internet.

@@ -1,9 +1,9 @@
-# OpenDesk latency and responsiveness: measurements, causes, and changes
+# G1Viewer latency and responsiveness: measurements, causes, and changes
 
 **Scope of this report.** Everything here was measured on one sandbox: two headless Chromium pages on loopback,
 two vCPUs, a fake canvas as the display source, and a recording stub in place of OS input injection. These are
 pipeline measurements. They are not photon-to-photon latency, not Electron screen-capture numbers, not libnut
-injection numbers, and not internet or LAN results. OpenDesk does not claim zero latency, and these numbers do not
+injection numbers, and not internet or LAN results. G1Viewer does not claim zero latency, and these numbers do not
 show that the desktop feels "instant."
 
 ## 1. Summary

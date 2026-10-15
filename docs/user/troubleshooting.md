@@ -2,22 +2,22 @@
 
 ## Identity says unavailable or key storage is blocked
 
-- Linux: unlock GNOME Keyring/libsecret or KWallet before starting OpenDesk. `safeStorage` using the `basic_text` backend is refused.
-- Restart after unlocking the credential store. OpenDesk will show **Device ID unavailable** rather than generating a display-only or stale ID when no cryptographic key can be used.
+- Linux: unlock GNOME Keyring/libsecret or KWallet before starting G1Viewer. `safeStorage` using the `basic_text` backend is refused.
+- Restart after unlocking the credential store. G1Viewer will show **Device ID unavailable** rather than generating a display-only or stale ID when no cryptographic key can be used.
 - If an encrypted key cannot be decrypted, restore access to the original OS credential store. Do not delete the identity file as a first step; losing it changes the device identity and can strand its server registration.
 
 ## Signaling says offline
 
 - Confirm both devices use the exact same HTTPS origin and that its certificate is valid in the OS trust store.
-- OpenDesk configures no server automatically. In **Settings → Signaling service**, enter your self-hosted HTTPS origin. For one-computer development only, start the Go service then enter `http://127.0.0.1:8787`; the same loopback address on another computer is a different machine. A LAN still needs a shared signaling service and trusted TLS certificate; there is no automatic peer discovery.
+- G1Viewer configures no server automatically. In **Settings → Signaling service**, enter your self-hosted HTTPS origin. For one-computer development only, start the Go service then enter `http://127.0.0.1:8787`; the same loopback address on another computer is a different machine. A LAN still needs a shared signaling service and trusted TLS certificate; there is no automatic peer discovery.
 - Check `/healthz` and `/readyz` from the client network. Check Caddy/service logs and host firewall rules.
-- Device presence uses heartbeats; a device with OpenDesk closed or disconnected becomes offline.
+- Device presence uses heartbeats; a device with G1Viewer closed or disconnected becomes offline.
 - The service stores device registrations on disk but sessions/events/presence are in memory. After a service restart, wait for both clients to register and send a new request.
 
 ## Peer is offline or the session request disappears
 
 - Verify both IDs and that both clients use the same signaling service.
-- Incoming requests expire after 90 seconds. The receiver must leave OpenDesk open and approve promptly.
+- Incoming requests expire after 90 seconds. The receiver must leave G1Viewer open and approve promptly.
 - If the receiver is already in a session, disconnect it before approving another request.
 - A device ID is not a password. The target user must approve each request.
 
@@ -30,7 +30,7 @@
 ## WebRTC stays negotiating or shows no remote display
 
 - Confirm the host approved view and clicked **Choose screen & share**.
-- Grant OS capture permission. On macOS, enable OpenDesk under Screen Recording and restart/retry as directed by macOS. On Linux Wayland, verify the desktop portal and PipeWire picker; X11 uses the active display session.
+- Grant OS capture permission. On macOS, enable G1Viewer under Screen Recording and restart/retry as directed by macOS. On Linux Wayland, verify the desktop portal and PipeWire picker; X11 uses the active display session.
 - Test whether both peers can establish direct ICE on their actual networks. The signaling API can return an empty ICE list if STUN/TURN was not configured; same-LAN connections may still work, while NAT/firewall traversal can fail.
 - Configure a compatible STUN server and preferably authenticated TURN relay for restrictive networks. TURN URLs, shared secret, advertised public IP, relay ports, and firewall must all agree.
 - The implementation currently waits for gathered ICE candidates rather than trickling them. Slow candidate gathering or restrictive networks can cause failure.
@@ -41,7 +41,7 @@
 - Confirm file permission was requested and approved and that the peer data channel is open.
 - The receiver must approve every file and choose a destination. Existing destinations are never overwritten; choose a different filename and retry.
 - Maximum file size is 1 GiB; maximum batch is 16 files. Files publish only after byte-count and SHA-256 checks.
-- If disconnected/cancelled, incomplete bytes are deleted when possible. A forced crash/power loss can leave a hidden `.opendesk-*.part` file in the destination directory. Verify OpenDesk is closed, inspect it, and delete only that temporary file.
+- If disconnected/cancelled, incomplete bytes are deleted when possible. A forced crash/power loss can leave a hidden `.opendesk-*.part` file in the destination directory. Verify G1Viewer is closed, inspect it, and delete only that temporary file.
 - Some filesystems do not support same-directory hard links. In that case final publication fails safely rather than overwriting; choose a destination on a filesystem that supports hard links.
 
 ## Clipboard transfer does nothing

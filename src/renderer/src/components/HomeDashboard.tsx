@@ -292,7 +292,7 @@ export function HomeDashboard(props: HomeDashboardProps) {
         </section>
       </aside>
 
-      <section className="dashboard-benefits" aria-label="OpenDesk features">
+      <section className="dashboard-benefits" aria-label="G1Viewer features">
         <FeatureCard icon={<Zap size={21}/>} iconClass="benefit-speed" title="Ultra Fast" description="Optimized for low latency and smooth performance." onClick={() => setFeatureDetail('speed')} ariaLabel="Open Ultra Fast performance details"/>
         <FeatureCard icon={<ShieldCheck size={21}/>} iconClass="benefit-secure" title="Secure" description="End-to-end encrypted peer-to-peer connection." onClick={() => setFeatureDetail('secure')} ariaLabel="Open Secure encryption details"/>
         <FeatureCard icon={<Laptop size={21}/>} iconClass="benefit-platform" title="Cross Platform" description="Windows, macOS, Linux and more." onClick={() => setFeatureDetail('platform')} ariaLabel="Open Cross Platform information"/>
@@ -543,7 +543,7 @@ export function HomeDashboard(props: HomeDashboardProps) {
               <span className="feature-modal-bullet feature-bullet-free"/>
               <div className="feature-modal-text">
                 <strong>Zero Tracking &amp; Advertising</strong>
-                <span>OpenDesk does not track users, log connections, display advertising, or collect telemetry data.</span>
+                <span>G1Viewer does not track users, log connections, display advertising, or collect telemetry data.</span>
               </div>
             </div>
             <div className="feature-modal-item">

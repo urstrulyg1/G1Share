@@ -1,4 +1,4 @@
-# OpenDesk threat model
+# G1Viewer threat model
 
 Status: implementation prototype, not an independent security audit. This document describes controls present in source and known gaps; it does not certify production readiness.
 

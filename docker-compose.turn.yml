@@ -8,12 +8,12 @@ services:
       - --no-cli
       - --fingerprint
       - --use-auth-secret
-      - --static-auth-secret=${OPENDESK_TURN_SHARED_SECRET:?Generate OPENDESK_TURN_SHARED_SECRET in .env before starting the TURN profile}
-      - --realm=${OPENDESK_TURN_REALM:?Set OPENDESK_TURN_REALM in .env}
+      - --static-auth-secret=${G1VIEWER_TURN_SHARED_SECRET:-${OPENDESK_TURN_SHARED_SECRET:?Generate G1VIEWER_TURN_SHARED_SECRET in .env before starting the TURN profile}}
+      - --realm=${G1VIEWER_TURN_REALM:-${OPENDESK_TURN_REALM:?Set G1VIEWER_TURN_REALM in .env}}
       - --listening-port=3478
       - --min-port=49160
       - --max-port=49200
-      - --external-ip=${OPENDESK_TURN_EXTERNAL_IP:?Set OPENDESK_TURN_EXTERNAL_IP in .env}
+      - --external-ip=${G1VIEWER_TURN_EXTERNAL_IP:-${OPENDESK_TURN_EXTERNAL_IP:?Set G1VIEWER_TURN_EXTERNAL_IP in .env}}
       - --no-multicast-peers
       - --no-loopback-peers
       - --log-file=stdout

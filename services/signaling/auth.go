@@ -127,7 +127,11 @@ func clientIP(request *http.Request) string {
 }
 
 func isTrustedProxy(address net.IP) bool {
-	for _, value := range strings.Split(os.Getenv("OPENDESK_TRUSTED_PROXIES"), ",") {
+	raw := strings.TrimSpace(os.Getenv("G1VIEWER_TRUSTED_PROXIES"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("OPENDESK_TRUSTED_PROXIES"))
+	}
+	for _, value := range strings.Split(raw, ",") {
 		value = strings.TrimSpace(value)
 		if value == "" {
 			continue

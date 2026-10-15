@@ -1,4 +1,4 @@
-# OpenDesk architecture decisions
+# G1Viewer architecture decisions
 
 Status: implementation prototype. Decisions are provisional until a complete two-client session and platform packaging are verified.
 
@@ -40,7 +40,7 @@ Do not present unavailable capabilities as working. The UI and docs identify una
 
 **Decision:** receive into a random hidden temporary file in the user-selected destination directory, serialize IPC writes, verify byte count and SHA-256, then publish by an exclusive hard link. Existing destination files are never overwritten. Cancellation and session teardown remove temporary data and report cleanup failures.
 
-**Consequence:** destinations must reside on a filesystem supporting same-directory hard links. A process crash or forced power loss may leave a hidden `.opendesk-*.part` file; users should inspect and remove one only after confirming OpenDesk is closed.
+**Consequence:** destinations must reside on a filesystem supporting same-directory hard links. A process crash or forced power loss may leave a hidden `.opendesk-*.part` file; users should inspect and remove one only after confirming G1Viewer is closed.
 
 ## ADR-007: Documentation is part of the implementation
 

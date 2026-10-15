@@ -22,9 +22,9 @@ In a second terminal:
 npm run dev
 ```
 
-The Go service listens on `127.0.0.1:8787` by default and persists its device registry under `services/signaling/data` when launched from that directory. Check `/healthz` and `/readyz` with `curl`. The desktop app starts on Home with no server configured: enter `http://127.0.0.1:8787` in Settings, or set `OPENDESK_SIGNALING_URL` in its environment on first launch. This loopback setup is for one computer. Two devices on different computers, including LAN peers, need the same reachable HTTPS signaling origin.
+The Go service listens on `127.0.0.1:8787` by default and persists its device registry under `services/signaling/data` when launched from that directory. Check `/healthz` and `/readyz` with `curl`. The desktop app starts on Home with no server configured: enter `http://127.0.0.1:8787` in Settings, or set `G1VIEWER_SIGNALING_URL` in its environment on first launch. This loopback setup is for one computer. Two devices on different computers, including LAN peers, need the same reachable HTTPS signaling origin.
 
-Set `OPENDESK_SIGNALING_ADDR` to a valid host/port to change the Go listener. The app accepts plain HTTP only for loopback origins; non-loopback signaling URLs must use HTTPS. A production server should run behind a TLS reverse proxy. See [self-hosting](../self-hosting/signaling-and-turn.md).
+Set `G1VIEWER_SIGNALING_ADDR` (or `OPENDESK_SIGNALING_ADDR`) to a valid host/port to change the Go listener. The app accepts plain HTTP only for loopback origins; non-loopback signaling URLs must use HTTPS. A production server should run behind a TLS reverse proxy. See [self-hosting](../self-hosting/signaling-and-turn.md).
 
 ## Validation
 
@@ -59,5 +59,5 @@ Use a separate user-data directory or genuinely separate OS user/installations f
 - File transfer tests use a simulated RTC data channel; they do not demonstrate browser-to-browser/WebRTC connectivity.
 - Session/event queues and presence are in memory and are lost on signaling service restart. The public-key registry persists. Device rows in the app come only from lookups in that app run; old persisted online/offline cache entries are discarded.
 - Session history is local metadata. Old unverified `recentSessions.v1` browser storage is not imported into the new `v2` history; requests are never labeled connected until WebRTC reports a connection.
-- A crash or forced power loss can leave a hidden `.opendesk-*.part` file in the chosen destination directory. Only remove such files after OpenDesk is closed.
+- A crash or forced power loss can leave a hidden `.opendesk-*.part` file in the chosen destination directory. Only remove such files after G1Viewer is closed.
 - No signed updater/release, independent security audit, or production SLO is provided.

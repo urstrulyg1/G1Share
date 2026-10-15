@@ -329,7 +329,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
           <p>{connectionState === 'failed' || connectionState === 'degraded' || connectionState === 'reconnecting'
             ? 'No live display is available. Check ICE/STUN/TURN and both devices’ connectivity; close the session if it does not recover.'
             : active.role === 'host' && active.session.status === 'accepted'
-            ? 'Choose a screen to share. OpenDesk shows a native source-selection dialog and captures only after your confirmation.'
+            ? 'Choose a screen to share. G1Viewer shows a native source-selection dialog and captures only after your confirmation.'
             : active.role === 'viewer' && active.session.status === 'accepted'
               ? 'The remote user must start screen sharing on their computer. You will see the live display here after WebRTC connects.'
               : active.session.status === 'pending'

@@ -14,12 +14,15 @@ import (
 )
 
 func main() {
-	address := strings.TrimSpace(os.Getenv("OPENDESK_SIGNALING_ADDR"))
+	address := strings.TrimSpace(os.Getenv("G1VIEWER_SIGNALING_ADDR"))
+	if address == "" {
+		address = strings.TrimSpace(os.Getenv("OPENDESK_SIGNALING_ADDR"))
+	}
 	if address == "" {
 		address = "127.0.0.1:8787"
 	}
 	if _, _, err := net.SplitHostPort(address); err != nil {
-		log.Fatalf("invalid OPENDESK_SIGNALING_ADDR %q: %v", address, err)
+		log.Fatalf("invalid signaling address %q: %v", address, err)
 	}
 
 	broker, err := newBroker(dataDirectory(), turnSettingsFromEnvironment())
@@ -39,7 +42,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("OpenDesk signaling v%s listening on %s", serviceVersion, address)
+	log.Printf("G1Viewer signaling v%s listening on %s", serviceVersion, address)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("signaling service failed: %v", err)
 	}

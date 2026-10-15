@@ -99,10 +99,10 @@ function secureStorageBackend(): string {
 }
 
 function requireSecureStorage(): string {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('The operating-system credential store is unavailable. Install and unlock your desktop keyring, then restart OpenDesk.')
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('The operating-system credential store is unavailable. Install and unlock your desktop keyring, then restart G1Viewer.')
   const backend = secureStorageBackend()
   if (process.platform === 'linux' && (backend === 'basic_text' || backend === 'unknown')) {
-    throw new Error('OpenDesk refuses to store the device key without a real Linux secret store. Install and unlock GNOME Keyring/libsecret or KWallet, then restart.')
+    throw new Error('G1Viewer refuses to store the device key without a real Linux secret store. Install and unlock GNOME Keyring/libsecret or KWallet, then restart.')
   }
   return backend
 }
@@ -182,7 +182,7 @@ async function loadSecureIdentity(): Promise<SecureIdentity> {
 
 function cleanDeviceName(value: string): string {
   const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80)
-  return cleaned || 'OpenDesk device'
+  return cleaned || 'G1Viewer device'
 }
 
 async function getDeviceInfo(): Promise<DeviceInfo> {
@@ -235,8 +235,8 @@ async function loadSettings(): Promise<AppSettings> {
       contents = await readFile(settingsPath(), 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      // No cloud default. Development can opt in via OPENDESK_SIGNALING_URL or Settings.
-      const configured = process.env.OPENDESK_SIGNALING_URL?.trim()
+      // No cloud default. Development can opt in via G1VIEWER_SIGNALING_URL or OPENDESK_SIGNALING_URL or Settings.
+      const configured = (process.env.G1VIEWER_SIGNALING_URL || process.env.OPENDESK_SIGNALING_URL)?.trim()
       return { signalingUrl: configured ? validateSignalingURL(configured) : '' }
     }
     try {
@@ -412,7 +412,7 @@ async function authenticatedSignalingRequest(input: SignalingRequest, allowPrivi
 
 function assertTrustedIPC(event: Electron.IpcMainInvokeEvent): void {
   if (!mainWindow || event.sender.id !== mainWindow.webContents.id || event.senderFrame !== mainWindow.webContents.mainFrame) {
-    throw new Error('This operation is available only to the OpenDesk application window.')
+    throw new Error('This operation is available only to the G1Viewer application window.')
   }
 }
 
@@ -684,7 +684,7 @@ async function prepareIncomingFile(request: IncomingFileRequest): Promise<Incomi
   const prompt = await dialog.showMessageBox(mainWindow!, {
     type: 'question', title: 'Incoming file transfer',
     message: `Accept “${name}”?`,
-    detail: `The remote user is sending ${formatBytes(request.size)}. Choose a destination. OpenDesk will not overwrite an existing file.`,
+    detail: `The remote user is sending ${formatBytes(request.size)}. Choose a destination. G1Viewer will not overwrite an existing file.`,
     buttons: ['Choose destination', 'Decline'], cancelId: 1, defaultId: 1, noLink: true
   })
   if (prompt.response !== 0) return null
@@ -712,7 +712,7 @@ async function shareClipboardText(): Promise<string | null> {
   const answer = await dialog.showMessageBox(mainWindow!, {
     type: 'question', title: 'Share clipboard text',
     message: 'Send the current local clipboard text to the remote device?',
-    detail: 'Clipboard content is sensitive. OpenDesk reads it only after you confirm this action, and never logs the text.',
+    detail: 'Clipboard content is sensitive. G1Viewer reads it only after you confirm this action, and never logs the text.',
     buttons: ['Cancel', 'Share text'], cancelId: 0, defaultId: 0, noLink: true
   })
   if (answer.response !== 1) return null
@@ -726,7 +726,7 @@ async function receiveClipboardText(text: string): Promise<boolean> {
   const answer = await dialog.showMessageBox(mainWindow!, {
     type: 'warning', title: 'Remote clipboard update',
     message: 'Allow the remote device to replace your local clipboard text?',
-    detail: `The received text is ${formatBytes(Buffer.byteLength(text, 'utf8'))}. OpenDesk will not show or log its contents.`,
+    detail: `The received text is ${formatBytes(Buffer.byteLength(text, 'utf8'))}. G1Viewer will not show or log its contents.`,
     buttons: ['Keep current clipboard', 'Replace clipboard'], cancelId: 0, defaultId: 0, noLink: true
   })
   if (answer.response !== 1) return false
@@ -797,7 +797,7 @@ function installDisplayCaptureHandler(): void {
       const answer = await dialog.showMessageBox(mainWindow!, {
         type: 'question', title: 'Choose a screen to share',
         message: 'Select the display that the approved remote session may view.',
-        detail: 'Screen sharing starts only after you select a source. OpenDesk never captures in the background.',
+        detail: 'Screen sharing starts only after you select a source. G1Viewer never captures in the background.',
         buttons, cancelId: buttons.length - 1, defaultId: buttons.length - 1, noLink: true
       })
       if (answer.response < 0 || answer.response >= sources.length) {
@@ -873,7 +873,7 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle('window:minimize', event => {
     assertTrustedIPC(event)
-    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    if (!mainWindow) throw new Error('The G1Viewer window is unavailable.')
     if (process.platform === 'darwin' && mainWindow.isFullScreen()) {
       mainWindow.once('leave-full-screen', () => {
         mainWindow?.minimize()
@@ -885,7 +885,7 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle('window:toggle-maximize', (event, options?: unknown) => {
     assertTrustedIPC(event)
-    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    if (!mainWindow) throw new Error('The G1Viewer window is unavailable.')
     const altKey = Boolean(options && typeof options === 'object' && (options as { altKey?: boolean }).altKey)
     if (process.platform === 'darwin') {
       if (altKey) {
@@ -904,12 +904,12 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle('window:get-maximized', event => {
     assertTrustedIPC(event)
-    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    if (!mainWindow) throw new Error('The G1Viewer window is unavailable.')
     return mainWindow.isFullScreen() || mainWindow.isMaximized()
   })
   ipcMain.handle('window:close', event => {
     assertTrustedIPC(event)
-    if (!mainWindow) throw new Error('The OpenDesk window is unavailable.')
+    if (!mainWindow) throw new Error('The G1Viewer window is unavailable.')
     mainWindow.close()
   })
   ipcMain.handle('clipboard:share-text', async event => {
@@ -1003,7 +1003,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     show: false,
     backgroundColor: '#09111d',
-    title: 'OpenDesk',
+    title: 'G1Viewer',
     webPreferences: {
       preload: join(currentDir, '../preload/index.cjs'),
       contextIsolation: true,
@@ -1033,7 +1033,7 @@ function createWindow(): void {
   })
   if (process.env.ELECTRON_RENDERER_URL) void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void mainWindow.loadFile(join(currentDir, '../renderer/index.html'))
-  // Keys and buttons held through OpenDesk must never outlive the window that is driving them.
+  // Keys and buttons held through G1Viewer must never outlive the window that is driving them.
   mainWindow.webContents.on('render-process-gone', () => {
     releaseRemoteInput()
     captureArm = null

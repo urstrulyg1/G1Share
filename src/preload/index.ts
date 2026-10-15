@@ -53,3 +53,4 @@ const bridge: OpenDeskBridge = {
 }
 
 contextBridge.exposeInMainWorld('openDesk', bridge)
+contextBridge.exposeInMainWorld('g1Viewer', bridge)

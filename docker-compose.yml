@@ -4,15 +4,15 @@ services:
       context: ./services/signaling
     restart: unless-stopped
     environment:
-      OPENDESK_SIGNALING_ADDR: "0.0.0.0:8787"
-      OPENDESK_DATA_DIR: /var/lib/opendesk
-      OPENDESK_TRUSTED_PROXIES: "172.30.10.2/32"
-      OPENDESK_STUN_URLS: "${OPENDESK_STUN_URLS:-}"
-      OPENDESK_TURN_URLS: "${OPENDESK_TURN_URLS:-}"
-      OPENDESK_TURN_SHARED_SECRET: "${OPENDESK_TURN_SHARED_SECRET:-}"
-      OPENDESK_TURN_CREDENTIAL_TTL: "${OPENDESK_TURN_CREDENTIAL_TTL:-10m}"
+      G1VIEWER_SIGNALING_ADDR: "0.0.0.0:8787"
+      G1VIEWER_DATA_DIR: /var/lib/g1viewer
+      G1VIEWER_TRUSTED_PROXIES: "172.30.10.2/32"
+      G1VIEWER_STUN_URLS: "${G1VIEWER_STUN_URLS:-${OPENDESK_STUN_URLS:-}}"
+      G1VIEWER_TURN_URLS: "${G1VIEWER_TURN_URLS:-${OPENDESK_TURN_URLS:-}}"
+      G1VIEWER_TURN_SHARED_SECRET: "${G1VIEWER_TURN_SHARED_SECRET:-${OPENDESK_TURN_SHARED_SECRET:-}}"
+      G1VIEWER_TURN_CREDENTIAL_TTL: "${G1VIEWER_TURN_CREDENTIAL_TTL:-${OPENDESK_TURN_CREDENTIAL_TTL:-10m}}"
     volumes:
-      - ./data/signaling:/var/lib/opendesk
+      - ./data/signaling:/var/lib/g1viewer
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
@@ -37,7 +37,8 @@ services:
       signaling:
         condition: service_healthy
     environment:
-      OPENDESK_DOMAIN: "${OPENDESK_DOMAIN:?Set OPENDESK_DOMAIN in .env}"
+      G1VIEWER_DOMAIN: "${G1VIEWER_DOMAIN:-${OPENDESK_DOMAIN:-}}"
+      OPENDESK_DOMAIN: "${G1VIEWER_DOMAIN:-${OPENDESK_DOMAIN:-}}"
     ports:
       - "80:80/tcp"
       - "443:443/tcp"
@@ -54,7 +55,7 @@ services:
 
 networks:
   backend:
-    name: opendesk_backend
+    name: g1viewer_backend
     ipam:
       config:
         - subnet: 172.30.10.0/24

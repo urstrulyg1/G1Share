@@ -50,21 +50,21 @@ jobs:
           - platform: macOS DMG (x64, arm64)
             os: macos-latest
             build_cmd: npm run dist:mac
-            artifact: opendesk-release-macos
+            artifact: g1viewer-release-macos
             artifact_glob: |
               release/*.dmg
               release/*.blockmap
           - platform: Windows NSIS .exe (x64, arm64)
             os: windows-latest
             build_cmd: npm run dist:win
-            artifact: opendesk-release-windows
+            artifact: g1viewer-release-windows
             artifact_glob: |
               release/*.exe
               release/*.blockmap
           - platform: Linux AppImage and deb (x64)
             os: ubuntu-latest
             build_cmd: npm run dist:linux
-            artifact: opendesk-release-linux
+            artifact: g1viewer-release-linux
             artifact_glob: |
               release/*.AppImage
               release/*.deb
@@ -108,19 +108,19 @@ jobs:
       - name: Download macOS packages
         uses: actions/download-artifact@v4
         with:
-          name: opendesk-release-macos
+          name: g1viewer-release-macos
           path: release-assets/
 
       - name: Download Windows packages
         uses: actions/download-artifact@v4
         with:
-          name: opendesk-release-windows
+          name: g1viewer-release-windows
           path: release-assets/
 
       - name: Download Linux packages
         uses: actions/download-artifact@v4
         with:
-          name: opendesk-release-linux
+          name: g1viewer-release-linux
           path: release-assets/
 
       - name: Generate SHA-256 Checksums
@@ -154,6 +154,6 @@ jobs:
           else
             echo "Creating new release $TAG with automated release notes and assets..."
             gh release create "$TAG" release-assets/* \
-              --title "OpenDesk $TAG" \
+              --title "G1Viewer $TAG" \
               --generate-notes
           fi

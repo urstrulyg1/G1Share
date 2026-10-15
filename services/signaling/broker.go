@@ -429,7 +429,7 @@ func (broker *Broker) createSession(fromID, toID string, requested []Permission)
 	}
 	now := time.Now().UTC()
 	if now.Sub(target.LastSeen) > deviceOnlineThreshold {
-		return nil, DeviceSummary{}, newFault(409, "device_offline", "The target device is offline. Confirm that OpenDesk is running and connected to the same signaling service.")
+		return nil, DeviceSummary{}, newFault(409, "device_offline", "The target device is offline. Confirm that G1Viewer is running and connected to the same signaling service.")
 	}
 	active := 0
 	for _, existing := range broker.sessions {

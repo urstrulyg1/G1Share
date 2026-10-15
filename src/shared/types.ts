@@ -124,6 +124,8 @@ export interface DesktopCapabilities {
   clipboard: string
 }
 
+export type G1ViewerBridge = OpenDeskBridge
+
 export interface OpenDeskBridge {
   getDeviceInfo: () => Promise<DeviceInfo>
   renameLocalDevice: (name: string) => Promise<DeviceSummary>

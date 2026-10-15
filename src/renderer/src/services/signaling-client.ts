@@ -23,14 +23,14 @@ export class SignalingClient {
 
   async lookupDevice(deviceId: string): Promise<DeviceSummary> {
     const id = normalizeDeviceId(deviceId)
-    if (!isValidDeviceId(id)) throw new TypeError('Enter a valid OpenDesk device ID.')
+    if (!isValidDeviceId(id)) throw new TypeError('Enter a valid G1Viewer device ID.')
     if (id === this.localDevice.deviceId) throw new TypeError('You cannot connect to this device itself.')
     return await this.call<DeviceSummary>('GET', `/api/v1/devices/${id}`)
   }
 
   async createSession(toDeviceId: string, requestedPermissions: SessionPermission[]): Promise<{ session: RemoteSession; peer: DeviceSummary }> {
     const id = normalizeDeviceId(toDeviceId)
-    if (!isValidDeviceId(id)) throw new TypeError('Enter a valid OpenDesk device ID.')
+    if (!isValidDeviceId(id)) throw new TypeError('Enter a valid G1Viewer device ID.')
     if (!requestedPermissions.includes('view')) throw new TypeError('Screen viewing permission is required.')
     return await this.call('POST', '/api/v1/sessions', { toDeviceId: id, permissions: [...new Set(requestedPermissions)] })
   }
