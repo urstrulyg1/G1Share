@@ -72,7 +72,9 @@ describe('account-free application UI', () => {
     expect(screen.getByRole('button', { name: 'Connect to remote device' }).hasAttribute('disabled')).toBe(false)
     expect(screen.getByText(/No signaling server configured/)).toBeTruthy()
     expect(screen.getAllByText(local.deviceId!).length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('EXAMPLE DATA · NOT VERIFIED')).toBeTruthy()
+    expect(screen.getByText('No recent devices')).toBeTruthy()
+    expect(screen.queryByText('EXAMPLE DATA · NOT VERIFIED')).toBeNull()
+    expect(screen.queryByText('My Desktop')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Devices' }))
     expect(screen.getByText('No looked-up devices yet')).toBeTruthy()
@@ -164,17 +166,13 @@ describe('account-free application UI', () => {
     expect(screen.queryByText('Incoming session requests')).toBeNull()
   })
 
-  it('opens example-device details and routes safely to a real ID form instead of connecting a fake device', async () => {
-    initialState()
+  it('displays real known devices in recent devices and connects to real device IDs', async () => {
+    initialState({ serviceState: 'online', serviceError: '', signalingUrl: 'https://signaling.example.test', knownDevices: [peer] })
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'More actions for My Desktop' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
-    expect(screen.getByRole('dialog', { name: 'My Desktop' })).toBeTruthy()
-    expect(screen.getByText(/has no device identity and has never been checked/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Enter a real ID' }))
-    expect(screen.getByRole('button', { name: 'Connect' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByLabelText('Remote device ID')).toBeTruthy()
-    expect(runtime.requestSession).not.toHaveBeenCalled()
+    expect(screen.getByText(peer.name)).toBeTruthy()
+    expect(screen.queryByText('EXAMPLE DATA · NOT VERIFIED')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: `Connect to ${peer.name}` }))
+    await waitFor(() => expect(runtime.requestSession).toHaveBeenCalledWith(peer.id, []))
   })
 
   it('uses native window APIs for minimize, maximize, and close controls', async () => {

@@ -51,18 +51,9 @@ interface RecentDeviceRowData {
   name: string
   subtitle: string
   platform: string
-  example: boolean
   online: boolean
   presenceLabel: string
 }
-
-const referenceDevices: RecentDeviceRowData[] = [
-  { name: 'My Desktop', subtitle: 'Last connected 2 hours ago', platform: 'linux', example: true, online: false, presenceLabel: 'Example' },
-  { name: 'Office Laptop', subtitle: 'Last connected 1 day ago', platform: 'windows', example: true, online: false, presenceLabel: 'Example' },
-  { name: 'Home PC', subtitle: 'Last connected 3 days ago', platform: 'windows', example: true, online: false, presenceLabel: 'Example' },
-  { name: 'MacBook', subtitle: 'Last connected 1 week ago', platform: 'darwin', example: true, online: false, presenceLabel: 'Example' },
-  { name: 'Linux Server', subtitle: 'Last connected 1 week ago', platform: 'linux-server', example: true, online: false, presenceLabel: 'Example' }
-]
 
 export function ConnectionCard({
   remoteId, setRemoteId, busy, requestFiles, setRequestFiles,
@@ -231,30 +222,35 @@ export function HomeDashboard(props: HomeDashboardProps) {
             <h2 id="recent-devices-heading">Recent Devices</h2>
             <button className="text-action" onClick={() => onNavigate('Devices')}>See All <ArrowRight size={13}/></button>
           </div>
-          {recentRows.some(row => row.example) && <div className="reference-data-note">EXAMPLE DATA · NOT VERIFIED</div>}
-          <div className="dashboard-device-list">
-            {recentRows.slice(0, 5).map(row => <div className="dashboard-device-row" key={row.id || row.name}>
-              <button className="recent-device-main" type="button" onClick={() => row.example ? setDetailsDevice(row) : row.id ? void props.onConnect(row.id) : setDetailsDevice(row)}
-                disabled={!row.example && (!row.id || props.busy)} aria-label={row.example ? `View example device ${row.name}` : `Connect to ${row.name}`}>
-                <span className={`device-status-indicator${row.online ? ' is-online' : ''}${row.example ? ' is-example' : ''}`} aria-hidden="true"/>
-                <span className="dashboard-device-icon">{deviceIcon(row.platform)}</span>
-                <span className="dashboard-device-copy"><strong>{row.name}</strong><small>{row.subtitle}</small></span>
-              </button>
-              <div className="device-menu-anchor">
-                <button className="device-menu-trigger" type="button" aria-label={`More actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuDevice === (row.id || row.name)}
-                  onClick={() => setMenuDevice(current => current === (row.id || row.name) ? null : (row.id || row.name))}>
-                  <Ellipsis size={17}/>
+          {recentRows.length === 0 ? (
+            <div className="empty-inline recent-empty">
+              <Laptop size={24}/>
+              <strong>No recent devices</strong>
+              <span>Devices you connect to or look up will appear here for fast access.</span>
+            </div>
+          ) : (
+            <div className="dashboard-device-list">
+              {recentRows.slice(0, 5).map(row => <div className="dashboard-device-row" key={row.id || row.name}>
+                <button className="recent-device-main" type="button" onClick={() => row.id ? void props.onConnect(row.id) : setDetailsDevice(row)}
+                  disabled={!row.id || props.busy} aria-label={`Connect to ${row.name}`}>
+                  <span className={`device-status-indicator${row.online ? ' is-online' : ''}`} aria-hidden="true"/>
+                  <span className="dashboard-device-icon">{deviceIcon(row.platform)}</span>
+                  <span className="dashboard-device-copy"><strong>{row.name}</strong><small>{row.subtitle}</small></span>
                 </button>
-                {menuDevice === (row.id || row.name) && <div className="device-context-menu" role="menu">
-                  <button role="menuitem" onClick={() => { setMenuDevice(null); setDetailsDevice(row) }}>View details</button>
-                  {row.example
-                    ? <button role="menuitem" onClick={() => { setMenuDevice(null); onNavigate('Connect') }}>Connect using a real ID</button>
-                    : <button role="menuitem" disabled={!row.id || props.busy} onClick={() => { setMenuDevice(null); if (row.id) void props.onConnect(row.id) }}>Connect</button>}
-                  {!row.example && row.id && <button role="menuitem" onClick={() => { setMenuDevice(null); void copyRealDeviceId(row.id!) }}>Copy Device ID</button>}
-                </div>}
-              </div>
-            </div>)}
-          </div>
+                <div className="device-menu-anchor">
+                  <button className="device-menu-trigger" type="button" aria-label={`More actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuDevice === (row.id || row.name)}
+                    onClick={() => setMenuDevice(current => current === (row.id || row.name) ? null : (row.id || row.name))}>
+                    <Ellipsis size={17}/>
+                  </button>
+                  {menuDevice === (row.id || row.name) && <div className="device-context-menu" role="menu">
+                    <button role="menuitem" onClick={() => { setMenuDevice(null); setDetailsDevice(row) }}>View details</button>
+                    <button role="menuitem" disabled={!row.id || props.busy} onClick={() => { setMenuDevice(null); if (row.id) void props.onConnect(row.id) }}>Connect</button>
+                    {row.id && <button role="menuitem" onClick={() => { setMenuDevice(null); void copyRealDeviceId(row.id!) }}>Copy Device ID</button>}
+                  </div>}
+                </div>
+              </div>)}
+            </div>
+          )}
         </section>
 
         <section className="dashboard-panel network-panel" aria-labelledby="network-quality-heading">
@@ -286,14 +282,14 @@ export function HomeDashboard(props: HomeDashboardProps) {
 
     {detailsDevice && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setDetailsDevice(null) }}>
       <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="device-details-title">
-        <div className="dashboard-modal-heading"><div className="dashboard-icon">{deviceIcon(detailsDevice.platform)}</div><div><h2 id="device-details-title">{detailsDevice.name}</h2><p>{detailsDevice.example ? 'Reference example · not verified' : 'Device information from this app run'}</p></div>
+        <div className="dashboard-modal-heading"><div className="dashboard-icon">{deviceIcon(detailsDevice.platform)}</div><div><h2 id="device-details-title">{detailsDevice.name}</h2><p>Device information from this app run</p></div>
           <button className="icon-button" aria-label="Close device details" onClick={() => setDetailsDevice(null)}><X size={16}/></button></div>
         <div className="dashboard-modal-content">
-          <p>{detailsDevice.example ? 'This is a visual-reference example only. It has no device identity and has never been checked or connected from this installation.' : detailsDevice.subtitle}</p>
-          {!detailsDevice.example && detailsDevice.id && <div className="modal-device-id"><small>Device ID</small><code>{detailsDevice.id}</code><button className="subtle" onClick={() => void copyRealDeviceId(detailsDevice.id!)}><Copy size={13}/> Copy ID</button></div>}
-          <div className="modal-device-status"><span className={`device-status-indicator${detailsDevice.online ? ' is-online' : ''}${detailsDevice.example ? ' is-example' : ''}`}/>{detailsDevice.example ? 'Example data only' : detailsDevice.presenceLabel}</div>
+          <p>{detailsDevice.subtitle}</p>
+          {detailsDevice.id && <div className="modal-device-id"><small>Device ID</small><code>{detailsDevice.id}</code><button className="subtle" onClick={() => void copyRealDeviceId(detailsDevice.id!)}><Copy size={13}/> Copy ID</button></div>}
+          <div className="modal-device-status"><span className={`device-status-indicator${detailsDevice.online ? ' is-online' : ''}`}/>{detailsDevice.presenceLabel}</div>
         </div>
-        <div className="dashboard-modal-actions"><button className="subtle" onClick={() => setDetailsDevice(null)}>Close</button>{detailsDevice.example ? <button className="primary" onClick={() => { setDetailsDevice(null); onNavigate('Connect') }}>Enter a real ID</button> : detailsDevice.id ? <button className="primary" disabled={props.busy} onClick={() => { const id = detailsDevice.id; setDetailsDevice(null); void props.onConnect(id) }}>Connect <ChevronRight size={15}/></button> : null}</div>
+        <div className="dashboard-modal-actions"><button className="subtle" onClick={() => setDetailsDevice(null)}>Close</button>{detailsDevice.id ? <button className="primary" disabled={props.busy} onClick={() => { const id = detailsDevice.id; setDetailsDevice(null); void props.onConnect(id) }}>Connect <ChevronRight size={15}/></button> : null}</div>
       </section>
     </div>}
   </div>
@@ -312,11 +308,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function DeviceMenuRow({ row, serviceOnline, now }: { row: KnownDevice; serviceOnline: boolean; now: number }): RecentDeviceRowData {
   const presence = devicePresence(row, serviceOnline, now)
-  return { id: row.id, name: row.name, subtitle: `Last checked ${relativeTime(row.checkedAt, now)} · ${presence.label}`, platform: row.platform, example: false, online: presence.fresh && row.online, presenceLabel: presence.label }
+  return { id: row.id, name: row.name, subtitle: `Last checked ${relativeTime(row.checkedAt, now)} · ${presence.label}`, platform: row.platform, online: presence.fresh && row.online, presenceLabel: presence.label }
 }
 
 function getRecentDeviceRows(devices: KnownDevice[], sessions: RecentSession[], serviceOnline: boolean, now: number): RecentDeviceRowData[] {
-  if (!devices.length && !sessions.some(session => !!session.connectedAt)) return referenceDevices
   const deviceById = new Map(devices.map(device => [device.id, device]))
   const unique = new Map<string, RecentDeviceRowData>()
   for (const session of [...sessions].filter(item => item.connectedAt).sort((a, b) => Date.parse(b.connectedAt!) - Date.parse(a.connectedAt!))) {
@@ -328,7 +323,6 @@ function getRecentDeviceRows(devices: KnownDevice[], sessions: RecentSession[], 
       name: known?.name || session.peerName,
       subtitle: `Last connected ${relativeTime(session.connectedAt!, now)}`,
       platform: known?.platform || 'unknown',
-      example: false,
       online: !!presence?.fresh && !!known?.online,
       presenceLabel: presence?.label || 'Status unknown — refresh in Devices'
     })
@@ -337,8 +331,7 @@ function getRecentDeviceRows(devices: KnownDevice[], sessions: RecentSession[], 
     if (unique.has(device.id)) continue
     unique.set(device.id, DeviceMenuRow({ row: device, serviceOnline, now }))
   }
-  const rows = [...unique.values()].slice(0, 5)
-  return rows.length ? rows : referenceDevices
+  return [...unique.values()].slice(0, 5)
 }
 
 function relativeTime(timestamp: string, now: number): string {

@@ -1379,6 +1379,24 @@ input:focus-visible,
   outline: none !important;
   box-shadow: none !important;
 }
+.recent-devices-panel {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.recent-devices-panel .recent-empty {
+  margin: auto 0 !important;
+  padding: 24px 12px !important;
+}
+.recent-devices-panel .recent-empty strong {
+  font-size: 13px !important;
+  color: var(--text) !important;
+}
+.recent-devices-panel .recent-empty span {
+  font-size: 11px !important;
+  color: var(--muted) !important;
+  max-width: 220px !important;
+  line-height: 1.5 !important;
+}
 .paste-button {
   transition: transform 0.16s ease, color 0.16s ease, background 0.16s ease !important;
 }
