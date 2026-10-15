@@ -261,8 +261,8 @@ export default function App() {
                 <span>{openDesk.serviceState === 'online' && openDesk.device?.identityReady ? 'Ready for connections' : statusLabel}</span>
               </div>
               <div className="sidebar-network-status"><Wifi size={14}/><span><strong>Local Network</strong><small>{openDesk.serviceState === 'online' ? 'Signaling connected · LAN not measured' : 'Status unavailable'}</small></span></div>
+              <div className="sidebar-version">{openDesk.device?.appVersion ? `Version ${openDesk.device.appVersion}` : 'Version unavailable'}</div>
             </section>
-            <div className="sidebar-version">{openDesk.device?.appVersion ? `Version ${openDesk.device.appVersion}` : 'Version unavailable'}</div>
           </div>
         </aside>
 
