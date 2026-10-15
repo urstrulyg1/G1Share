@@ -763,3 +763,15 @@ html[data-visual-validation="true"] .device-status-indicator.is-example { backgr
   .dashboard-device-copy { min-width: 0; }
   .dashboard-device-copy small { letter-spacing: -.1px; }
 }
+
+
+/* Match the lower sidebar card and feature-copy rhythm from the reference. */
+@media (min-width: 1321px) and (min-height: 821px) {
+  .local-device-heading { font-size: 12px; }
+  .sidebar-device-id { padding: 13px 0 22px; font-size: 20px; line-height: 1.2; letter-spacing: 0; }
+  .sidebar-ready-status { font-size: 13px; }
+  .sidebar-network-status { margin-top: 24px; padding-top: 20px; }
+  .sidebar-network-status strong, .sidebar-network-status small { font-size: 12px; }
+  .dashboard-device-copy small { font-size: 11.5px; }
+  .benefit-card p { font-size: 14px !important; line-height: 1.5; }
+}
