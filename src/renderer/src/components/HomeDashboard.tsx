@@ -130,18 +130,20 @@ export function HomeDashboard(props: HomeDashboardProps) {
   const [renamingDevice, setRenamingDevice] = useState<RecentDeviceRowData | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [confirmingRemoveDevice, setConfirmingRemoveDevice] = useState<RecentDeviceRowData | null>(null)
+  const [featureDetail, setFeatureDetail] = useState<'speed' | 'secure' | 'platform' | 'free' | null>(null)
 
   useEffect(() => {
     if (!aliasEditing) setAliasDraft(localDevice?.name || device?.deviceName || '')
   }, [aliasEditing, device?.deviceName, localDevice?.name])
   useEffect(() => {
-    if (!detailsDevice && !menuDevice && !renamingDevice && !confirmingRemoveDevice) return
+    if (!detailsDevice && !menuDevice && !renamingDevice && !confirmingRemoveDevice && !featureDetail) return
     const closeOverlaysOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setDetailsDevice(null)
         setMenuDevice(null)
         setRenamingDevice(null)
         setConfirmingRemoveDevice(null)
+        setFeatureDetail(null)
       }
     }
     const handleClickOutside = (event: MouseEvent) => {
@@ -155,7 +157,7 @@ export function HomeDashboard(props: HomeDashboardProps) {
       window.removeEventListener('keydown', closeOverlaysOnEscape)
       window.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [detailsDevice, menuDevice, renamingDevice, confirmingRemoveDevice])
+  }, [detailsDevice, menuDevice, renamingDevice, confirmingRemoveDevice, featureDetail])
 
   const deviceId = device?.identityReady && device.deviceId ? device.deviceId : null
   const recentRows = useMemo(() => getRecentDeviceRows(knownDevices, recentSessions, serviceState === 'online', now), [knownDevices, recentSessions, serviceState, now])
@@ -291,10 +293,10 @@ export function HomeDashboard(props: HomeDashboardProps) {
       </aside>
 
       <section className="dashboard-benefits" aria-label="OpenDesk features">
-        <FeatureCard icon={<Zap size={21}/>} iconClass="benefit-speed" title="Ultra Fast" description="Optimized for low latency and smooth performance." onClick={() => onNavigate('Diagnostics')} ariaLabel="Open performance details"/>
-        <FeatureCard icon={<ShieldCheck size={21}/>} iconClass="benefit-secure" title="Secure" description="End-to-end encrypted peer-to-peer connection." onClick={() => onNavigate('Settings')} ariaLabel="Open security information"/>
-        <FeatureCard icon={<Laptop size={21}/>} iconClass="benefit-platform" title="Cross Platform" description="Windows, macOS, Linux and more." onClick={() => onNavigate('Diagnostics')} ariaLabel="Open supported platform information"/>
-        <FeatureCard icon={<InfinityIcon size={22}/>} iconClass="benefit-free" title="Completely Free" description="No login. No subscription. Open source." onClick={onOpenProject} ariaLabel="Open the OpenDesk source project"/>
+        <FeatureCard icon={<Zap size={21}/>} iconClass="benefit-speed" title="Ultra Fast" description="Optimized for low latency and smooth performance." onClick={() => setFeatureDetail('speed')} ariaLabel="Open Ultra Fast performance details"/>
+        <FeatureCard icon={<ShieldCheck size={21}/>} iconClass="benefit-secure" title="Secure" description="End-to-end encrypted peer-to-peer connection." onClick={() => setFeatureDetail('secure')} ariaLabel="Open Secure encryption details"/>
+        <FeatureCard icon={<Laptop size={21}/>} iconClass="benefit-platform" title="Cross Platform" description="Windows, macOS, Linux and more." onClick={() => setFeatureDetail('platform')} ariaLabel="Open Cross Platform information"/>
+        <FeatureCard icon={<InfinityIcon size={22}/>} iconClass="benefit-free" title="Completely Free" description="No login. No subscription. Open source." onClick={() => setFeatureDetail('free')} ariaLabel="Open Completely Free project details"/>
       </section>
     </div>
 
@@ -372,6 +374,190 @@ export function HomeDashboard(props: HomeDashboardProps) {
               props.onError(err instanceof Error ? err.message : 'Could not remove device.')
             }
           }}>Remove device</button>
+        </div>
+      </section>
+    </div>}
+
+    {featureDetail === 'speed' && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setFeatureDetail(null) }}>
+      <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="speed-feature-title">
+        <div className="dashboard-modal-heading">
+          <div className="benefit-icon benefit-speed" style={{ width: 34, height: 34, flex: '0 0 34px' }}><Zap size={18}/></div>
+          <div><h2 id="speed-feature-title">Ultra Fast Performance</h2><p>Real-time low-latency peer-to-peer transport</p></div>
+          <button className="icon-button" aria-label="Close feature details" onClick={() => setFeatureDetail(null)}><X size={16}/></button>
+        </div>
+        <div className="dashboard-modal-content">
+          <div className="feature-modal-list">
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-speed"/>
+              <div className="feature-modal-text">
+                <strong>Direct Peer-to-Peer Streaming</strong>
+                <span>Video and audio streams are sent directly between devices via WebRTC with no relay hops or cloud transcoding delays.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-speed"/>
+              <div className="feature-modal-text">
+                <strong>Adaptive Framerate &amp; Bitrate</strong>
+                <span>Supports smooth 60 FPS screen capture. Transport bitrate continuously adapts to network packet loss and latency.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-speed"/>
+              <div className="feature-modal-text">
+                <strong>Hardware Accelerated Codecs</strong>
+                <span>Supports VP8, VP9, and AV1 video encoding with GPU acceleration to minimize host CPU overhead and decode latency.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-speed"/>
+              <div className="feature-modal-text">
+                <strong>Live Transport Telemetry</strong>
+                <span>Active sessions measure real round-trip time (RTT), jitter buffer, dropped frames, and capture-to-display timings.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-modal-actions">
+          <button className="subtle" onClick={() => setFeatureDetail(null)}>Close</button>
+          <button className="primary" onClick={() => { setFeatureDetail(null); onNavigate('Diagnostics') }}>Open Diagnostics <ChevronRight size={14}/></button>
+        </div>
+      </section>
+    </div>}
+
+    {featureDetail === 'secure' && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setFeatureDetail(null) }}>
+      <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="secure-feature-title">
+        <div className="dashboard-modal-heading">
+          <div className="benefit-icon benefit-secure" style={{ width: 34, height: 34, flex: '0 0 34px' }}><ShieldCheck size={18}/></div>
+          <div><h2 id="secure-feature-title">End-to-End Encryption &amp; Security</h2><p>Zero-trust cryptographic security architecture</p></div>
+          <button className="icon-button" aria-label="Close feature details" onClick={() => setFeatureDetail(null)}><X size={16}/></button>
+        </div>
+        <div className="dashboard-modal-content">
+          <div className="feature-modal-list">
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-secure"/>
+              <div className="feature-modal-text">
+                <strong>Ed25519 Cryptographic Identity</strong>
+                <span>Every device is identified by an asymmetric Ed25519 public key. Authentication relies on cryptographic signatures, not passwords.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-secure"/>
+              <div className="feature-modal-text">
+                <strong>Protected OS Credential Storage</strong>
+                <span>Private keys are stored in your OS native secure storage (macOS Keychain, Windows DPAPI, Linux libsecret). Insecure storage is refused.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-secure"/>
+              <div className="feature-modal-text">
+                <strong>DTLS 1.3 &amp; SRTP Media Encryption</strong>
+                <span>Remote video, audio, files, and clipboard channels are encrypted peer-to-peer. The signaling server cannot inspect stream content.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-secure"/>
+              <div className="feature-modal-text">
+                <strong>Consent-First Access Model</strong>
+                <span>Every connection requires explicit approval on the host device. Unattended access and silent background monitoring are not supported.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-modal-actions">
+          <button className="subtle" onClick={() => setFeatureDetail(null)}>Close</button>
+          <button className="primary" onClick={() => { setFeatureDetail(null); onNavigate('Settings') }}>Security Settings <ChevronRight size={14}/></button>
+        </div>
+      </section>
+    </div>}
+
+    {featureDetail === 'platform' && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setFeatureDetail(null) }}>
+      <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="platform-feature-title">
+        <div className="dashboard-modal-heading">
+          <div className="benefit-icon benefit-platform" style={{ width: 34, height: 34, flex: '0 0 34px' }}><Laptop size={18}/></div>
+          <div><h2 id="platform-feature-title">Cross-Platform Compatibility</h2><p>Supported operating systems and platform capabilities</p></div>
+          <button className="icon-button" aria-label="Close feature details" onClick={() => setFeatureDetail(null)}><X size={16}/></button>
+        </div>
+        <div className="dashboard-modal-content">
+          <div className="feature-modal-list">
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-platform"/>
+              <div className="feature-modal-text">
+                <strong>macOS (Apple Silicon &amp; Intel)</strong>
+                <span>Supported on macOS 10.15+. Uses ScreenCaptureKit on modern macOS. Requires native Screen Recording and Accessibility permissions.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-platform"/>
+              <div className="feature-modal-text">
+                <strong>Windows (10 &amp; 11, 64-bit)</strong>
+                <span>Full desktop capture duplication, mouse/keyboard input forwarder, and system audio loopback capture.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-platform"/>
+              <div className="feature-modal-text">
+                <strong>Linux (X11 &amp; Wayland)</strong>
+                <span>Screen capture works on X11 and Wayland (via desktop portal). Remote input injection control currently requires an X11 session.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-platform"/>
+              <div className="feature-modal-text">
+                <strong>Current Device Environment</strong>
+                <span>Running on <strong>{device?.platform || 'local system'}</strong> ({device?.architecture || 'x64'}). App version {device?.appVersion || '0.1.0'}.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-modal-actions">
+          <button className="subtle" onClick={() => setFeatureDetail(null)}>Close</button>
+          <button className="primary" onClick={() => { setFeatureDetail(null); onNavigate('Diagnostics') }}>View Capabilities <ChevronRight size={14}/></button>
+        </div>
+      </section>
+    </div>}
+
+    {featureDetail === 'free' && <div className="dashboard-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setFeatureDetail(null) }}>
+      <section className="dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="free-feature-title">
+        <div className="dashboard-modal-heading">
+          <div className="benefit-icon benefit-free" style={{ width: 34, height: 34, flex: '0 0 34px' }}><InfinityIcon size={20}/></div>
+          <div><h2 id="free-feature-title">Completely Free &amp; Open Source</h2><p>Zero fees, zero subscriptions, zero corporate lock-in</p></div>
+          <button className="icon-button" aria-label="Close feature details" onClick={() => setFeatureDetail(null)}><X size={16}/></button>
+        </div>
+        <div className="dashboard-modal-content">
+          <div className="feature-modal-list">
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-free"/>
+              <div className="feature-modal-text">
+                <strong>100% Free Forever</strong>
+                <span>All remote access, file transfer, and clipboard sync tools are completely free with no session time limits or paywalled tiers.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-free"/>
+              <div className="feature-modal-text">
+                <strong>No Account or Sign-Up Required</strong>
+                <span>No registration forms, no email required, and no credit card. Devices connect purely through cryptographic IDs.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-free"/>
+              <div className="feature-modal-text">
+                <strong>Zero Tracking &amp; Advertising</strong>
+                <span>OpenDesk does not track users, log connections, display advertising, or collect telemetry data.</span>
+              </div>
+            </div>
+            <div className="feature-modal-item">
+              <span className="feature-modal-bullet feature-bullet-free"/>
+              <div className="feature-modal-text">
+                <strong>Self-Hostable &amp; Open Source</strong>
+                <span>Full code transparency. Deploy your own self-hosted signaling server or inspect the open-source implementation.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-modal-actions">
+          <button className="subtle" onClick={() => setFeatureDetail(null)}>Close</button>
+          <button className="primary" onClick={() => { setFeatureDetail(null); onOpenProject() }}>View on GitHub <ChevronRight size={14}/></button>
         </div>
       </section>
     </div>}

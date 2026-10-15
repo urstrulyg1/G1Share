@@ -238,23 +238,30 @@ describe('account-free application UI', () => {
     initialState()
     render(<App />)
 
-    // Ultra Fast -> Diagnostics
-    fireEvent.click(screen.getByRole('button', { name: 'Open performance details' }))
-    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    // Ultra Fast -> shows relevant Ultra Fast Performance modal
+    fireEvent.click(screen.getByRole('button', { name: /Ultra Fast performance details/ }))
+    expect(screen.getByRole('heading', { name: 'Ultra Fast Performance' })).toBeTruthy()
+    expect(screen.getByText(/Direct Peer-to-Peer Streaming/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
-    // Secure -> Settings
-    fireEvent.click(screen.getByRole('button', { name: 'Open security information' }))
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    // Secure -> shows relevant End-to-End Encryption & Security modal
+    fireEvent.click(screen.getByRole('button', { name: /Secure encryption details/ }))
+    expect(screen.getByRole('heading', { name: 'End-to-End Encryption & Security' })).toBeTruthy()
+    expect(screen.getByText(/Ed25519 Cryptographic Identity/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
-    // Cross Platform -> Diagnostics
-    fireEvent.click(screen.getByRole('button', { name: 'Open supported platform information' }))
-    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open OpenDesk Home' }))
+    // Cross Platform -> shows relevant Cross-Platform Compatibility modal
+    fireEvent.click(screen.getByRole('button', { name: /Cross Platform information/ }))
+    expect(screen.getByRole('heading', { name: 'Cross-Platform Compatibility' })).toBeTruthy()
+    expect(screen.getByText(/macOS \(Apple Silicon & Intel\)/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
-    // Completely Free -> External project link
-    fireEvent.click(screen.getByRole('button', { name: 'Open the OpenDesk source project' }))
+    // Completely Free -> shows relevant Completely Free & Open Source modal
+    fireEvent.click(screen.getByRole('button', { name: /Completely Free project details/ }))
+    expect(screen.getByRole('heading', { name: 'Completely Free & Open Source' })).toBeTruthy()
+    expect(screen.getByText(/100% Free Forever/)).toBeTruthy()
+    // Test action inside the modal
+    fireEvent.click(screen.getByRole('button', { name: /View on GitHub/ }))
     await waitFor(() => expect(bridge.openProjectPage).toHaveBeenCalledOnce())
 
     // Network details link -> Diagnostics
