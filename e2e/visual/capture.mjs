@@ -91,19 +91,94 @@ try {
       })
     }
   }
-  await page.screenshot({ path: resolve(out, 'opendesk-after.png'), fullPage: false })
+  const screenshotBuffer = await page.screenshot({ path: resolve(out, 'opendesk-after.png'), fullPage: false })
   await page.screenshot({ path: resolve(out, 'opendesk-preview.jpg'), type: 'jpeg', quality: 72, fullPage: false })
   const previewBase64 = (await readFile(resolve(out, 'opendesk-preview.jpg'))).toString('base64')
   console.log('VISUAL_PREVIEW_BASE64_START')
   console.log(previewBase64)
   console.log('VISUAL_PREVIEW_BASE64_END')
+
+  const pixelComparison = await page.evaluate(async currentPngDataUrl => {
+    const loadImage = (src) => new Promise((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = reject
+      image.src = src
+    })
+    const referenceResponse = await fetch('/e2e/visual/reference-192.jpg')
+    if (!referenceResponse.ok) throw new Error('Could not load the committed screenshot reference.')
+    const referenceBlob = await referenceResponse.blob()
+    const referenceUrl = URL.createObjectURL(referenceBlob)
+    try {
+      const [currentImage, referenceImage] = await Promise.all([
+        loadImage(currentPngDataUrl),
+        loadImage(referenceUrl)
+      ])
+      const width = 192
+      const height = 128
+      const currentCanvas = document.createElement('canvas')
+      const referenceCanvas = document.createElement('canvas')
+      const diffCanvas = document.createElement('canvas')
+      for (const canvas of [currentCanvas, referenceCanvas, diffCanvas]) {
+        canvas.width = width
+        canvas.height = height
+      }
+      const currentContext = currentCanvas.getContext('2d', { willReadFrequently: true })
+      const referenceContext = referenceCanvas.getContext('2d', { willReadFrequently: true })
+      const diffContext = diffCanvas.getContext('2d', { willReadFrequently: true })
+      if (!currentContext || !referenceContext || !diffContext) throw new Error('Canvas pixel comparison is unavailable.')
+      currentContext.drawImage(currentImage, 0, 0, width, height)
+      referenceContext.drawImage(referenceImage, 0, 0, width, height)
+      const currentPixels = currentContext.getImageData(0, 0, width, height).data
+      const referencePixels = referenceContext.getImageData(0, 0, width, height).data
+      const diffPixels = diffContext.createImageData(width, height)
+      let totalAbsoluteDifference = 0
+      let changedPixels = 0
+      for (let offset = 0; offset < currentPixels.length; offset += 4) {
+        const red = Math.abs(currentPixels[offset] - referencePixels[offset])
+        const green = Math.abs(currentPixels[offset + 1] - referencePixels[offset + 1])
+        const blue = Math.abs(currentPixels[offset + 2] - referencePixels[offset + 2])
+        const difference = (red + green + blue) / 3
+        totalAbsoluteDifference += red + green + blue
+        if (difference > 32) changedPixels++
+        diffPixels.data[offset] = Math.min(255, difference * 3)
+        diffPixels.data[offset + 1] = Math.max(0, 80 - difference * 2)
+        diffPixels.data[offset + 2] = Math.max(0, 80 - difference * 2)
+        diffPixels.data[offset + 3] = 255
+      }
+      diffContext.putImageData(diffPixels, 0, 0)
+      return {
+        comparisonResolution: { width, height },
+        meanAbsoluteError: Number((totalAbsoluteDifference / (width * height * 3)).toFixed(2)),
+        pixelsAbove32Difference: changedPixels,
+        totalPixels: width * height,
+        changedPixelRatio: Number((changedPixels / (width * height)).toFixed(4)),
+        diffPngDataUrl: diffCanvas.toDataURL('image/png')
+      }
+    } finally {
+      URL.revokeObjectURL(referenceUrl)
+    }
+  }, 'data:image/png;base64,' + screenshotBuffer.toString('base64'))
+  const diffBase64 = pixelComparison.diffPngDataUrl.split(',')[1]
+  await writeFile(resolve(out, 'pixel-diff-192.png'), Buffer.from(diffBase64, 'base64'))
+  delete pixelComparison.diffPngDataUrl
+  await writeFile(resolve(out, 'pixel-comparison.json'), JSON.stringify({
+    method: 'Downsample current and supplied reference screenshots to 192×128, compare every RGB pixel, and report mean absolute channel error plus the fraction of pixels whose average channel difference exceeds 32.',
+    ...pixelComparison
+  }, null, 2) + '\n')
   await writeFile(resolve(out, 'layout-measurements.json'), JSON.stringify({
     viewport: { width: 1536, height: 1024 },
-    note: 'Renderer screenshot uses a visual-only bridge. Device identity, signaling, sessions, and native capabilities are intentionally unavailable; sample rows are not live devices.',
-    comparison: { reference: referenceBounds, differences, passed: differences.length === 0 },
+    note: 'Renderer screenshot uses a visual-only bridge. Fixture device IDs, sample recent-device rows, and simulated signaling are only for visual validation; they are not live devices or production data.',
+    geometryComparison: { reference: referenceBounds, differences, passed: differences.length === 0 },
+    pixelComparison,
     elements: result
   }, null, 2) + '\n')
-  console.log(JSON.stringify({ screenshot: 'artifacts/visual-validation/opendesk-after.png', comparison: { passed: differences.length === 0, differences }, measurements: result }, null, 2))
+  console.log(JSON.stringify({
+    screenshot: 'artifacts/visual-validation/opendesk-after.png',
+    geometryComparison: { passed: differences.length === 0, differences },
+    pixelComparison,
+    measurements: result
+  }, null, 2))
   if (differences.length) process.exitCode = 1
 } finally {
   if (browser) await browser.close()
