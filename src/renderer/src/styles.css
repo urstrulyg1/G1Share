@@ -61,6 +61,7 @@ button, input, select{touch-action:manipulation}
   .dashboard-side{grid-template-columns:minmax(0,1fr)}
   .dashboard-benefits{grid-template-columns:minmax(0,1fr)}
   .dashboard-main-grid,.dashboard-primary{gap:12px}
+  .dashboard-primary{grid-template-columns:minmax(0,1fr)}
   .dashboard-panel{min-width:0}
   .dashboard-panel form{flex-wrap:wrap}
   .dashboard-panel form .input-wrap{flex:1 1 100%}
