@@ -215,11 +215,30 @@ export default function App() {
     catch (error) { reportError(error instanceof Error ? error.message : 'Could not open the OpenDesk project page.') }
   }
 
-  return <div className={`app-shell desktop-surface theme-${theme}`}>
+  const isVisualValidation = typeof document !== 'undefined' && document.documentElement.dataset.visualValidation === 'true'
+  const osPlatform = openDesk.device?.platform || (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.userAgent) ? 'darwin' : typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent) ? 'win32' : 'linux')
+  const isMac = !isVisualValidation && osPlatform === 'darwin'
+  const isWin = !isVisualValidation && osPlatform === 'win32'
+
+  return <div className={`app-shell desktop-surface theme-${theme} platform-${osPlatform}`}>
     <div className="application-window">
-      <header className="window-header" onDoubleClick={event => {
+      <header className={`window-header header-${isMac ? 'mac' : isWin ? 'win' : 'default'}`} onDoubleClick={event => {
         if (!(event.target instanceof HTMLElement) || !event.target.closest('button')) void toggleWindowSize()
       }}>
+        {isMac && (
+          <div className="mac-traffic-lights" aria-label="Window controls">
+            <button className="mac-traffic-light mac-close" aria-label="Close window" title="Close" onClick={() => void closeWindow()}>
+              <X size={8} strokeWidth={2.6}/>
+            </button>
+            <button className="mac-traffic-light mac-minimize" aria-label="Minimize window" title="Minimize" onClick={() => void minimizeWindow()}>
+              <Minus size={8} strokeWidth={2.6}/>
+            </button>
+            <button className="mac-traffic-light mac-maximize" aria-label={windowMaximized ? 'Restore window' : 'Maximize window'} title={windowMaximized ? 'Restore' : 'Maximize'} onClick={() => void toggleWindowSize()}>
+              {windowMaximized ? <Minus size={8} strokeWidth={2.6}/> : <Maximize2 size={7} strokeWidth={2.6}/>}
+            </button>
+          </div>
+        )}
+
         <div className="window-brand">
           <button className="brand-home" aria-label="Open OpenDesk Home" onClick={() => setPage('Home')}>
             <span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" className="brand-glyph"><path d="M20 4.5c8.5 0 15.5 6.7 15.5 15.1S28.5 35.1 20 35.1 4.5 28.2 4.5 19.6 11.5 4.5 20 4.5Z" fill="none" stroke="currentColor" strokeWidth="2.3"/><path d="M12 14.5c3.7-5 10.6-5.3 14.4-1.5 3.4 3.4 2.7 8.1-.5 10.8l-7.2 6.1c-2.6 2.2-6.8 1.4-8-1.7-.8-2 .1-4.1 1.8-5.7l4.2-3.7" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 11.4c5.2-.2 8.4 4.7 6.3 8.9-1.4 2.8-4.8 3.8-7.2 5.7" fill="none" stroke="#b9ddff" strokeWidth="2.5" strokeLinecap="round"/></svg></span>
@@ -227,17 +246,23 @@ export default function App() {
           </button>
           <span className="brand-tagline">Free. Fast. Secure. Remote Access.</span>
         </div>
+
         <div className="window-actions">
           <span className={`window-status status-${openDesk.serviceState}`} role="status" aria-live="polite" title={openDesk.serviceError || statusLabel}>
             <i aria-hidden="true"/>{headerStatus}
           </span>
           <button className="window-settings" aria-label="Open Settings" title="Settings" onClick={() => setPage('Settings')}><Settings size={17}/></button>
-          <span className="window-control-divider" aria-hidden="true"/>
-          <button className="window-control" aria-label="Minimize window" title="Minimize" onClick={() => void minimizeWindow()}><Minus size={17}/></button>
-          <button className="window-control" aria-label={windowMaximized ? 'Restore window' : 'Maximize window'} title={windowMaximized ? 'Restore' : 'Maximize'} onClick={() => void toggleWindowSize()}>
-            {windowMaximized ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
-          </button>
-          <button className="window-control window-close" aria-label="Close window" title="Close" onClick={() => void closeWindow()}><X size={17}/></button>
+
+          {!isMac && (
+            <>
+              <span className="window-control-divider" aria-hidden="true"/>
+              <button className="window-control" aria-label="Minimize window" title="Minimize" onClick={() => void minimizeWindow()}><Minus size={17}/></button>
+              <button className="window-control" aria-label={windowMaximized ? 'Restore window' : 'Maximize window'} title={windowMaximized ? 'Restore' : 'Maximize'} onClick={() => void toggleWindowSize()}>
+                {windowMaximized ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
+              </button>
+              <button className="window-control window-close" aria-label="Close window" title="Close" onClick={() => void closeWindow()}><X size={17}/></button>
+            </>
+          )}
         </div>
       </header>
 

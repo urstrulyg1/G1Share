@@ -775,3 +775,174 @@ html[data-visual-validation="true"] .device-status-indicator.is-example { backgr
   .dashboard-device-copy small { font-size: 11.5px; }
   .benefit-card p { font-size: 14px !important; line-height: 1.5; }
 }
+
+/* Real desktop application surface (no fake desktop wallpaper border or inner floating card) */
+html:not([data-visual-validation="true"]) .app-shell.desktop-surface {
+  padding: 0 !important;
+  background: var(--bg) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+}
+html:not([data-visual-validation="true"]) .app-shell.desktop-surface::before {
+  display: none !important;
+}
+html:not([data-visual-validation="true"]) .application-window {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+/* macOS-native window header & traffic lights */
+.window-header.header-mac {
+  padding-left: 18px;
+  gap: 16px;
+}
+.mac-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+  -webkit-app-region: no-drag;
+}
+.mac-traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  position: relative;
+  transition: filter 0.12s ease, transform 0.08s ease;
+  box-sizing: border-box;
+}
+.mac-traffic-light:hover {
+  filter: brightness(1.08);
+}
+.mac-traffic-light:active {
+  transform: scale(0.92);
+  filter: brightness(0.88);
+}
+.mac-traffic-light.mac-close {
+  background: #ff5f56;
+  border-color: #e0443e;
+}
+.mac-traffic-light.mac-minimize {
+  background: #ffbd2e;
+  border-color: #dea123;
+}
+.mac-traffic-light.mac-maximize {
+  background: #27c93f;
+  border-color: #1aab29;
+}
+.mac-traffic-light svg {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  color: rgba(0, 0, 0, 0.72);
+}
+.mac-traffic-lights:hover .mac-traffic-light svg {
+  opacity: 0.9;
+}
+
+/* Windows-native window header & controls */
+.window-header.header-win {
+  padding-right: 0;
+}
+.window-header.header-win .window-actions {
+  gap: 6px;
+}
+.window-header.header-win .window-control-divider {
+  margin-right: 4px;
+}
+.window-header.header-win .window-control {
+  width: 46px;
+  height: 38px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.window-header.header-win .window-control:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+  border-color: transparent;
+}
+.window-header.header-win .window-control.window-close:hover:not(:disabled) {
+  background: #e81123 !important;
+  color: #ffffff !important;
+}
+
+/* Fix Device ID overlapping copy button in "Allow Remote Access" card */
+html:not([data-visual-validation="true"]) .device-id-display {
+  min-height: 62px !important;
+  padding: 10px 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  overflow: hidden !important;
+}
+html:not([data-visual-validation="true"]) .device-id-display code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: clamp(14px, 1.22vw, 18px) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.4px !important;
+  white-space: normal !important;
+  word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+  line-height: 1.35 !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+html:not([data-visual-validation="true"]) .device-id-display .icon-button {
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  height: 34px !important;
+  z-index: 2 !important;
+}
+
+/* Fix sidebar bottom device card height and text overflow */
+html:not([data-visual-validation="true"]) .local-device-card {
+  height: auto !important;
+  min-height: 220px !important;
+  padding: 14px 13px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-device-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0.2px !important;
+  padding: 8px 0 10px !important;
+  word-break: break-all !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-network-status {
+  margin-top: 10px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid #26384b !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-network-status strong {
+  font-size: 10px !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-network-status small {
+  font-size: 9px !important;
+}
+html:not([data-visual-validation="true"]) .sidebar-version {
+  margin-top: 8px !important;
+  padding-top: 8px !important;
+  border-top: 1px solid #26384b !important;
+  font-size: 9px !important;
+  color: #70839a !important;
+}
+
