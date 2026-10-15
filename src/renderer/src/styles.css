@@ -982,7 +982,7 @@ html:not([data-visual-validation="true"]) .device-id-display .icon-button {
   z-index: 2 !important;
 }
 
-/* Expand sidebar bottom device card vertically up to the Settings option */
+/* Cohesive, well-proportioned sidebar bottom device card */
 html:not([data-visual-validation="true"]) .sidebar {
   display: flex !important;
   flex-direction: column !important;
@@ -990,77 +990,82 @@ html:not([data-visual-validation="true"]) .sidebar {
   overflow-y: auto !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-spacer {
-  flex: 0 0 16px !important;
-  height: 16px !important;
+  flex: 1 1 auto !important;
   min-height: 16px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-bottom {
-  flex: 1 1 auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  margin-top: 0 !important;
-  min-height: 260px !important;
+  flex: 0 0 auto !important;
+  margin-top: auto !important;
+  padding-top: 8px !important;
 }
 html:not([data-visual-validation="true"]) .local-device-card {
-  flex: 1 1 auto !important;
-  height: 100% !important;
-  min-height: 260px !important;
-  padding: 18px 14px 14px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 13px 12px 11px !important;
   display: flex !important;
   flex-direction: column !important;
-  justify-content: flex-start !important;
-  background: linear-gradient(155deg, #111e2d 0%, #0c1824 100%) !important;
-  border: 1px solid #2e435b !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 24px rgba(1, 8, 18, 0.22) !important;
+  background: linear-gradient(155deg, #111d2a 0%, #0d1925 100%) !important;
+  border: 1px solid #2a3c50 !important;
+  border-radius: 11px !important;
+  box-shadow: 0 4px 16px rgba(1, 8, 18, 0.18) !important;
 }
 html:not([data-visual-validation="true"]) .local-device-heading {
-  font-size: 11.5px !important;
-  font-weight: 700 !important;
-  gap: 8px !important;
-  color: #c7d5e8 !important;
-  margin-bottom: 6px !important;
+  font-size: 10.5px !important;
+  font-weight: 650 !important;
+  gap: 7px !important;
+  color: #bdcbe0 !important;
+  display: flex !important;
+  align-items: center !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-copy {
-  width: 26px !important;
-  height: 26px !important;
+  width: 24px !important;
+  height: 24px !important;
   border-radius: 6px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-device-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
-  font-size: 13px !important;
-  font-weight: 650 !important;
-  line-height: 1.4 !important;
-  letter-spacing: 0.3px !important;
-  padding: 12px 10px !important;
-  margin: 10px 0 10px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0.15px !important;
+  padding: 8px 9px !important;
+  margin: 8px 0 7px !important;
   word-break: break-all !important;
-  background: rgba(7, 16, 26, 0.65) !important;
-  border: 1px solid rgba(42, 60, 80, 0.7) !important;
-  border-radius: 8px !important;
+  background: rgba(7, 16, 26, 0.6) !important;
+  border: 1px solid rgba(42, 60, 80, 0.65) !important;
+  border-radius: 7px !important;
   color: #f6f9fc !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-ready-status {
-  padding: 6px 0 !important;
-  font-size: 11px !important;
-  color: #b0c0d4 !important;
+  padding: 2px 0 6px !important;
+  font-size: 9.5px !important;
+  color: #aebdd0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-network-status {
-  margin-top: auto !important;
-  padding-top: 14px !important;
+  margin-top: 6px !important;
+  padding-top: 8px !important;
   border-top: 1px solid #26384b !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-network-status strong {
-  font-size: 11px !important;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  color: #cfdae8 !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-network-status small {
-  font-size: 9.5px !important;
+  font-size: 8.5px !important;
+  color: #8397ae !important;
 }
 html:not([data-visual-validation="true"]) .sidebar-version {
-  margin-top: 12px !important;
-  padding-top: 10px !important;
-  border-top: 1px solid rgba(38, 56, 75, 0.6) !important;
-  font-size: 9.5px !important;
-  color: #72859d !important;
+  margin-top: 6px !important;
+  padding-top: 7px !important;
+  border-top: 1px solid rgba(38, 56, 75, 0.5) !important;
+  font-size: 9px !important;
+  color: #70839a !important;
 }
 
