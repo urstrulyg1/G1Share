@@ -89,7 +89,6 @@ export default function App() {
       setRemoteId(normalized)
       setPage('Remote session')
       setNotice({ kind: 'info', message: `Session request sent. The remote user must approve access before any screen data is shared.` })
-      setRefresh(value => value + 1)
       void session
     } catch (error) {
       reportError(error instanceof Error ? error.message : 'Could not request a remote session.')
