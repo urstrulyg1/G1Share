@@ -745,3 +745,21 @@ button, input, select{touch-action:manipulation}
 }
 html[data-visual-validation="true"] .reference-data-note { display: none; }
 html[data-visual-validation="true"] .device-status-indicator.is-example { background: #35ef63; box-shadow: 0 0 8px rgba(53, 239, 99, .42); }
+
+
+/* Fine-detail adjustments from reviewing the captured screenshot side-by-side. */
+@media (min-width: 1321px) and (min-height: 821px) {
+  .window-brand { gap: 39px; }
+  .brand-name { font-size: 28px; }
+  .nav-item { gap: 23px; }
+  .hero-copy { transform: translateY(30px); }
+  .dashboard-panel { padding-top: 23px; }
+  .dashboard-panel-title { gap: 22px; margin-bottom: 35px; }
+  .dashboard-panel-title h2 { font-size: 18px; }
+  .device-id-display { min-height: 70px; }
+  .alias-action { margin-top: 0; }
+  .dashboard-device-copy small { font-size: 12px; }
+  .dashboard-device-row { gap: 7px; }
+  .dashboard-device-copy { min-width: 0; }
+  .dashboard-device-copy small { letter-spacing: -.1px; }
+}
