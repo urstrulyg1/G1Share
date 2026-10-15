@@ -27,10 +27,10 @@ export interface QualityProfile {
 }
 
 export const QUALITY_PROFILES: Readonly<Record<EffectiveProfileId, QualityProfile>> = Object.freeze({
-  ultra: { id: 'ultra', label: 'Ultra-responsive', width: 1280, frameRate: 60, maxBitrateKbps: 8000, degradationPreference: 'maintain-framerate', contentHint: 'motion', playoutDelaySeconds: 0 },
-  balanced: { id: 'balanced', label: 'Balanced', width: 1600, frameRate: 30, maxBitrateKbps: 4000, degradationPreference: 'maintain-framerate', contentHint: 'motion', playoutDelaySeconds: 0 },
-  high: { id: 'high', label: 'High quality', width: 1920, frameRate: 30, maxBitrateKbps: 12000, degradationPreference: 'maintain-resolution', contentHint: 'detail', playoutDelaySeconds: null },
-  low: { id: 'low', label: 'Low bandwidth', width: 960, frameRate: 15, maxBitrateKbps: 800, degradationPreference: 'maintain-framerate', contentHint: 'motion', playoutDelaySeconds: null }
+  ultra: { id: 'ultra', label: 'Ultra-responsive (60 FPS)', width: 1920, frameRate: 60, maxBitrateKbps: 12000, degradationPreference: 'maintain-framerate', contentHint: 'motion', playoutDelaySeconds: 0 },
+  balanced: { id: 'balanced', label: 'Balanced (30 FPS)', width: 1600, frameRate: 30, maxBitrateKbps: 6000, degradationPreference: 'maintain-framerate', contentHint: 'motion', playoutDelaySeconds: 0 },
+  high: { id: 'high', label: 'High quality (60 FPS)', width: 1920, frameRate: 60, maxBitrateKbps: 16000, degradationPreference: 'maintain-framerate', contentHint: 'detail', playoutDelaySeconds: 0 },
+  low: { id: 'low', label: 'Low bandwidth (15 FPS)', width: 960, frameRate: 15, maxBitrateKbps: 1000, degradationPreference: 'maintain-framerate', contentHint: 'motion', playoutDelaySeconds: null }
 })
 
 /** Auto mode moves along this ladder only. `high` is chosen explicitly, never by adaptation. */

@@ -82,8 +82,8 @@ export class RemoteSessionController {
   /** Channels already reported as open. A channel can be seen both as open and via its open event. */
   private readonly announcedChannels = new WeakSet<RTCDataChannel>()
   private qualityMode: QualityProfileId = 'auto'
-  private effectiveProfile: EffectiveProfileId = AUTO_START
-  private adaptation: AdaptationState = initialAdaptationState(Date.now())
+  private effectiveProfile: EffectiveProfileId = 'ultra'
+  private adaptation: AdaptationState = { ...initialAdaptationState(Date.now()), current: 'ultra' }
   private lastQualityRequest = 0
   private senderQueue: Promise<void> = Promise.resolve()
   private metricsTimer: ReturnType<typeof setInterval> | null = null
@@ -144,8 +144,10 @@ export class RemoteSessionController {
 
     // Call synchronously in the user click handler so Chromium retains user activation.
     const profile = QUALITY_PROFILES[this.effectiveProfile]
+    const targetFps = Math.max(60, profile.frameRate)
+    const targetWidth = Math.max(1920, profile.width)
     const captureRequest = navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: profile.frameRate, max: profile.frameRate }, width: { ideal: profile.width } },
+      video: { frameRate: { ideal: targetFps, max: targetFps }, width: { ideal: targetWidth } },
       audio: this.audioRequested
     })
     try {
@@ -546,8 +548,8 @@ export class RemoteSessionController {
     if (this.role !== 'host' || this.closed) return
     this.qualityMode = profile
     if (profile === 'auto') {
-      // Adaptation resumes from the profile in use, or from the balanced default when that profile is manual-only.
-      const start = (AUTO_LADDER as readonly string[]).includes(this.effectiveProfile) ? this.effectiveProfile as EffectiveProfileId : AUTO_START
+      // Adaptation resumes from the profile in use, or from the ultra (60 FPS) default when that profile is manual-only.
+      const start = (AUTO_LADDER as readonly string[]).includes(this.effectiveProfile) ? this.effectiveProfile as EffectiveProfileId : 'ultra'
       this.adaptation = { ...initialAdaptationState(Date.now()), current: start as EffectiveProfileId }
       this.setEffectiveProfile(this.adaptation.current, 'auto')
     } else {

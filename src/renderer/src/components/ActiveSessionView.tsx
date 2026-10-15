@@ -350,7 +350,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
         <div className="session-detail-card">
           <div className="detail-heading"><Signal size={15}/><strong>Connection quality</strong></div>
           <div className="metric-grid">
-            <Metric label="Frame rate" value={liveMetrics.framesPerSecond !== undefined ? `${liveMetrics.framesPerSecond.toFixed(1)} fps` : 'Unavailable'}/>
+            <Metric label="Frame rate" value={livePresentation?.presentedFps !== null && livePresentation?.presentedFps !== undefined ? `${livePresentation.presentedFps.toFixed(0)} fps` : liveMetrics.framesPerSecond !== undefined ? `${liveMetrics.framesPerSecond.toFixed(1)} fps` : 'Unavailable'}/>
             <Metric label="Resolution" value={liveMetrics.width && liveMetrics.height ? `${liveMetrics.width} × ${liveMetrics.height}` : 'Unavailable'}/>
             <Metric label="Video bitrate" value={liveMetrics.bitrateKbps !== undefined ? `${liveMetrics.bitrateKbps.toFixed(0)} kb/s` : 'Unavailable'}/>
             <Metric label="Round trip" value={liveMetrics.roundTripTimeMs !== undefined ? `${liveMetrics.roundTripTimeMs.toFixed(0)} ms` : 'Unavailable'}/>
@@ -366,7 +366,7 @@ export function ActiveSessionView({ active, localDevice, client, signals, onStat
           <div className="security-line quality-line">
             <span>Quality profile</span>
             <select value={qualityChoice} onChange={event => chooseQuality(event.target.value as QualityProfileId)} aria-label="Quality profile" disabled={!controller}>
-              {QUALITY_PROFILE_IDS.map(id => <option key={id} value={id}>{id === 'auto' ? 'Automatic' : QUALITY_PROFILES[id].label}</option>)}
+              {QUALITY_PROFILE_IDS.map(id => <option key={id} value={id}>{id === 'auto' ? 'Automatic (60 FPS default)' : QUALITY_PROFILES[id].label}</option>)}
             </select>
           </div>
           <small className="metric-foot">{effectiveQuality ? `Sender target: ${QUALITY_PROFILES[effectiveQuality.profile].label}${effectiveQuality.mode === 'auto' ? ' (adapting automatically)' : ''}. Actual quality depends on the connection.` : 'Sender profile is unavailable until the host reports it.'}</small>
