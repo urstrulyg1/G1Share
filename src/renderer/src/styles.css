@@ -799,6 +799,78 @@ html:not([data-visual-validation="true"]) .application-window {
   min-height: 0 !important;
 }
 
+/* Ensure workspace content stretches to fill vertical space and pins feature cards to the bottom */
+html:not([data-visual-validation="true"]) .workspace-main {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 16px 20px 16px !important;
+  overflow-y: auto !important;
+}
+html:not([data-visual-validation="true"]) .home-dashboard {
+  height: 100% !important;
+  min-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+}
+html:not([data-visual-validation="true"]) .home-dashboard-layout {
+  height: 100% !important;
+  min-height: 100% !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 314px !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  row-gap: 16px !important;
+  column-gap: 14px !important;
+  flex: 1 1 auto !important;
+}
+html:not([data-visual-validation="true"]) .dashboard-center-column {
+  min-height: 0 !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-rows: auto 1fr !important;
+  gap: 15px !important;
+}
+html:not([data-visual-validation="true"]) .dashboard-hero {
+  height: auto !important;
+  min-height: 250px !important;
+}
+html:not([data-visual-validation="true"]) .dashboard-primary {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+html:not([data-visual-validation="true"]) .access-panel,
+html:not([data-visual-validation="true"]) .connect-panel {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+html:not([data-visual-validation="true"]) .dashboard-side {
+  min-height: 0 !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: 1fr auto !important;
+  gap: 14px !important;
+}
+html:not([data-visual-validation="true"]) .recent-devices-panel {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+html:not([data-visual-validation="true"]) .network-panel {
+  height: auto !important;
+}
+html:not([data-visual-validation="true"]) .dashboard-benefits {
+  margin-top: auto !important;
+  align-self: end !important;
+  grid-column: 1 / -1 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+}
+html:not([data-visual-validation="true"]) .benefit-card {
+  min-height: 106px !important;
+}
+
 /* macOS-native window header & traffic lights */
 .window-header.header-mac {
   padding-left: 18px;
