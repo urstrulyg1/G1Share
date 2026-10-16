@@ -13,7 +13,11 @@ services:
       - --listening-port=3478
       - --min-port=49160
       - --max-port=49200
-      - --external-ip=${G1VIEWER_TURN_EXTERNAL_IP:-${OPENDESK_TURN_EXTERNAL_IP:?Set G1VIEWER_TURN_EXTERNAL_IP in .env}}
+      - --external-ip=${G1VIEWER_TURN_EXTERNAL_IP:-${OPENDESK_TURN_EXTERNAL_IP:?Set G1VIEWER_TURN_EXTERNAL_IP in .env}}/172.30.10.4
+      - --listening-ip=0.0.0.0
+      - --relay-ip=172.30.10.4
+      - --user-quota=12
+      - --total-quota=1000
       - --no-multicast-peers
       - --no-loopback-peers
       - --log-file=stdout
@@ -27,4 +31,5 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - backend
+      backend:
+        ipv4_address: 172.30.10.4
