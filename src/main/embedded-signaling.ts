@@ -519,7 +519,7 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       return
     }
 
-    broker.touchDevice(deviceId)
+    if (!(req.method === 'POST' && path === '/api/v1/devices/register')) broker.touchDevice(deviceId)
 
     // Handlers
     if (req.method === 'POST' && path === '/api/v1/devices/register') {
@@ -1013,7 +1013,7 @@ export class WanRelayBridge {
         const normalizedTo = normalizeDeviceId(payload.toDeviceId)
         const session = this.broker.getSession(payload.sessionId)
         if (this.localDeviceId && normalizedTo === this.localDeviceId && session &&
-            (session.status === 'active' || session.status === 'pending') && Date.parse(session.expiresAt) > Date.now() &&
+            session.status === 'active' && Date.parse(session.expiresAt) > Date.now() &&
             (session.fromDeviceId === normalizedFrom || session.toDeviceId === normalizedFrom) &&
             (session.fromDeviceId === normalizedTo || session.toDeviceId === normalizedTo) &&
             normalizedFrom !== normalizedTo) {
