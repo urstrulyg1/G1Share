@@ -1,10 +1,28 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
 import { createServer } from 'node:http'
-import { createHash, generateKeyPairSync } from 'node:crypto'
+import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { EmbeddedSignalingBroker, AutoSignalingManager, deriveWanTopic } from './embedded-signaling'
 
 describe('WAN Relay cross-network signaling integration', () => {
+function signWanMessage(identity: ReturnType<typeof createTestIdentity>, payload: Record<string, unknown>) {
+  const issuedAt = Date.now()
+  const nonce = randomBytes(16).toString('hex')
+  const digest = createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex')
+  const canonical = `g1viewer-wan-v1\\n${identity.deviceId}\\n${issuedAt}\\n${nonce}\\n${digest}`
+  const signature = sign(null, Buffer.from(canonical, 'utf8'), identity.privateKey).toString('base64url')
+  return {
+    protocol: 'g1viewer-wan-v1',
+    fromDeviceId: identity.deviceId,
+    publicKey: identity.publicKey,
+    issuedAt,
+    nonce,
+    payload,
+    signature
+  }
+}
+
+
 function createTestIdentity() {
   const pair = generateKeyPairSync('ed25519')
   const raw = pair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
@@ -152,4 +170,83 @@ function createTestIdentity() {
     await managerA.stop()
     await managerB.stop()
   })
+  it('authenticates WAN requests, rejects tampering and replay, and enforces participants', async () => {
+    const sender = createTestIdentity()
+    const receiver = createTestIdentity()
+    const attacker = createTestIdentity()
+    const manager = new AutoSignalingManager()
+    await manager.start()
+    try {
+      manager.setLocalIdentity(receiver.deviceId, receiver.publicKey, 'Receiver', 'darwin', '0.1.0', receiver.privateKey)
+      const bridge = (manager as any).wanRelay
+      const sessionId = 'a'.repeat(32)
+      const now = Date.now()
+      const session = {
+        id: sessionId,
+        fromDeviceId: sender.deviceId,
+        toDeviceId: receiver.deviceId,
+        requestedPermissions: ['view'],
+        permissions: [],
+        status: 'pending',
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+        route: 'wan'
+      }
+      const requestPayload = {
+        action: 'session_request',
+        fromDeviceId: sender.deviceId,
+        toDeviceId: receiver.deviceId,
+        sessionId,
+        session,
+        peer: {
+          id: sender.deviceId,
+          publicKey: sender.publicKey,
+          name: 'Sender',
+          platform: 'darwin',
+          appVersion: '0.1.0',
+          registeredAt: new Date(now).toISOString(),
+          lastSeenAt: new Date(now).toISOString(),
+          online: true
+        }
+      }
+      const envelope = signWanMessage(sender, requestPayload)
+      const deliver = (value: unknown) => bridge.handleIncomingRawMessage(JSON.stringify({
+        event: 'message',
+        message: JSON.stringify(value)
+      }))
+
+      deliver(envelope)
+      expect((manager as any).broker.getSession(sessionId)?.status).toBe('pending')
+      deliver(envelope) // Same nonce/signature must not emit a second request.
+      const firstBatch = await (manager as any).broker.pollEvents(receiver.deviceId, 0, 20, 0)
+      expect(firstBatch.events.filter((event: any) => event.type === 'session.request' && event.sessionId === sessionId)).toHaveLength(1)
+
+      const tampered = JSON.parse(JSON.stringify(envelope))
+      tampered.payload.sessionId = 'b'.repeat(32)
+      tampered.payload.session.id = 'b'.repeat(32)
+      deliver(tampered)
+      expect((manager as any).broker.getSession('b'.repeat(32))).toBeNull()
+
+      const forgedDecision = signWanMessage(attacker, {
+        action: 'session_decision',
+        fromDeviceId: attacker.deviceId,
+        toDeviceId: receiver.deviceId,
+        sessionId,
+        accepted: true,
+        permissions: ['view'],
+        peer: {
+          id: attacker.deviceId,
+          publicKey: attacker.publicKey,
+          name: 'Attacker',
+          platform: 'linux',
+          appVersion: '0.1.0'
+        }
+      })
+      deliver(forgedDecision)
+      expect((manager as any).broker.getSession(sessionId)?.status).toBe('pending')
+    } finally {
+      await manager.stop()
+    }
+  })
+
 })
