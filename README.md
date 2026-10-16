@@ -4,6 +4,21 @@ G1Viewer is an account-free, consent-first desktop remote-viewing prototype buil
 
 **This is not yet a complete remote desktop product.** It does not support unattended access. Remote keyboard and mouse control and Windows system-audio sharing are implemented but have not been verified on real desktops; the two-client end-to-end test uses the real signaling broker and renderer services with substituted capture and native input. Do not treat a successful build or a simulated test as proof of working remote access on your hardware.
 
+## Downloads
+
+Standalone, uncompressed packages and installers are published on [GitHub Releases](https://github.com/urstrulyg1/G1Viewer/releases/latest) and downloadable by anyone without logging in or extracting zip archives:
+
+| Operating System | Architecture | Package Format | Direct Download Link |
+| :--- | :--- | :--- | :--- |
+| **Windows** | 64-bit (`x64`) | NSIS Setup Installer (`.exe`) | [**g1viewer_x64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.exe) |
+| **Windows** | ARM64 | NSIS Setup Installer (`.exe`) | [**g1viewer_arm64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.exe) |
+| **macOS** | Apple Silicon (`arm64`) | Drag-and-Drop Disk Image (`.dmg`) | [**g1viewer_arm64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.dmg) |
+| **macOS** | Intel (`x64`) | Drag-and-Drop Disk Image (`.dmg`) | [**g1viewer_x64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.dmg) |
+| **Linux** | 64-bit (`x64`) | Standalone AppImage (`.AppImage`) | [**g1viewer_x64.AppImage**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.AppImage) |
+| **Linux** | 64-bit (`x64`) | Debian / Ubuntu Package (`.deb`) | [**g1viewer_x64.deb**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.deb) |
+
+SHA-256 checksums for verifying download integrity are available at [**SHA256SUMS.txt**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/SHA256SUMS.txt).
+
 ## Capability status
 
 | Feature | Status |
