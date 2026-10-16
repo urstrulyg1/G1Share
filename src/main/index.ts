@@ -225,7 +225,8 @@ async function getDeviceInfo(): Promise<DeviceInfo> {
         identity.publicKey,
         name,
         process.platform,
-        app.getVersion()
+        app.getVersion(),
+        identity.privateKey
       )
     }
     return {
