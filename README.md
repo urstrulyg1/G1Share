@@ -79,6 +79,25 @@ Package configuration is available through `npm run package:dir` (unpacked build
 - `npm run dist:win` — builds Windows NSIS `.exe` installers for both **`x64`** and **`arm64`**.
 - `npm run dist:linux` — builds Linux **`x64`** `.AppImage` and `.deb` packages.
 
+### macOS signing and notarization (required for releases)
+
+macOS release builds are signed with an Apple **Developer ID Application** certificate and notarized by Apple before they are published. The release workflows intentionally fail closed if these credentials are missing, rather than silently publishing unsigned DMGs that trigger Gatekeeper warnings.
+
+Configure the following repository Actions secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|---|---|
+| `MAC_CSC_LINK` | Base64-encoded `.p12` export containing the Developer ID Application certificate and private key |
+| `MAC_CSC_KEY_PASSWORD` | Password used when exporting the `.p12` |
+| `APPLE_API_KEY_BASE64` | Base64-encoded App Store Connect API key `.p8` file |
+| `APPLE_API_KEY_ID` | App Store Connect API Key ID |
+| `APPLE_API_ISSUER` | App Store Connect Issuer ID |
+| `APPLE_TEAM_ID` | 10-character Apple Developer Team ID |
+
+An active Apple Developer Program membership and permission to create a Developer ID certificate and an App Store Connect API key are required. Create the certificate in [Apple Developer Certificates](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) and the API key in App Store Connect → Users and Access → Integrations → App Store Connect API. Keep the private key and certificate password only in GitHub Actions secrets; never commit them.
+
+After setting the secrets, push a new commit to `main` or trigger the release workflow. The workflow signs the app with hardened runtime enabled, submits it to Apple's notary service, and packages the notarized DMG. The final app should be validated with `codesign --verify --deep --strict --verbose=2`, `spctl --assess --type execute --verbose=4`, and `xcrun stapler validate` on a macOS runner or test Mac. Existing release assets are not retroactively repaired; they must be rebuilt and republished after credentials are configured.
+
 ### Automated GitHub Releases
 Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) triggers the automated release pipeline in `.github/workflows/release.yml`. It compiles and verifies all platforms, generates SHA-256 checksums (`SHA256SUMS.txt`), auto-generates release notes, and publishes the release directly with all `.exe`, `.dmg`, `.AppImage`, and `.deb` binaries attached.
 
