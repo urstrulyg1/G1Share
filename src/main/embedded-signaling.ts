@@ -860,6 +860,28 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
   })
 }
 
+export function isValidLanCoordinatorUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' || parsed.username || parsed.password || parsed.search || parsed.hash ||
+        (parsed.pathname !== '/' && parsed.pathname !== '') || !parsed.port) return false
+    const port = Number(parsed.port)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return false
+    const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '')
+    if (host === 'localhost' || host === '::1' || host === '127.0.0.1') return true
+    if (host.endsWith('.local')) return true
+    const parts = host.split('.').map(Number)
+    if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false
+    return parts[0] === 10 ||
+      (parts[0] === 192 && parts[1] === 168) ||
+      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+      (parts[0] === 127) ||
+      (parts[0] === 169 && parts[1] === 254)
+  } catch {
+    return false
+  }
+}
+
 export function getLanIpv4Addresses(): string[] {
   const addresses: string[] = []
   const ifaces = os.networkInterfaces()
@@ -1387,10 +1409,11 @@ export class AutoSignalingManager {
   }
 
   async checkHttpCoordinator(origin: string): Promise<boolean> {
+    if (!isValidLanCoordinatorUrl(origin)) return false
     try {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 300)
-      const res = await fetch(`${origin}/readyz`, { signal: controller.signal })
+      const res = await fetch(`${origin}/readyz`, { signal: controller.signal, redirect: 'error', cache: 'no-store' })
       clearTimeout(timer)
       if (res.ok) {
         const body = (await res.json()) as { service?: string }
@@ -1462,7 +1485,7 @@ export class AutoSignalingManager {
           const text = msg.toString('utf8')
           if (text.startsWith('G1VIEWER_COORDINATOR:')) {
             const url = text.slice('G1VIEWER_COORDINATOR:'.length).trim()
-            if (url && !this.isOwnCoordinatorUrl(url) && !resolved) {
+            if (url && isValidLanCoordinatorUrl(url) && !this.isOwnCoordinatorUrl(url) && !resolved) {
               resolved = true
               clearTimeout(timer)
               try { probeSocket?.close() } catch { /* ignore */ }
@@ -1511,7 +1534,7 @@ export class AutoSignalingManager {
           this.udpSocket?.send(reply, 0, reply.length, rinfo.port, rinfo.address, () => {})
         } else if (text.startsWith('G1VIEWER_COORDINATOR:')) {
           const url = text.slice('G1VIEWER_COORDINATOR:'.length).trim()
-          if (url && !this.isOwnCoordinatorUrl(url)) {
+          if (url && isValidLanCoordinatorUrl(url) && !this.isOwnCoordinatorUrl(url)) {
             this.peerCoordinators.add(url)
           }
         }
