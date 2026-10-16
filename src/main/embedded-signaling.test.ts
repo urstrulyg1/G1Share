@@ -174,6 +174,39 @@ function deviceIdForPublicKey(publicKey: string): string {
     expect(closeRes.status).toBe(200)
   })
 
+  it('rejects session signaling and closure from a non-participant', () => {
+    const isolated = new EmbeddedSignalingBroker()
+    isolated.registerDevice(devId1, pub1B64, 'Laptop 1', 'darwin', '0.1.0')
+    isolated.registerDevice(devId2, pub2B64, 'Laptop 2', 'win32', '0.1.0')
+    const pair3 = generateKeyPairSync('ed25519')
+    const raw3 = pair3.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
+    const pub3 = raw3.toString('base64url')
+    const devId3 = deviceIdForPublicKey(pub3)
+    isolated.registerDevice(devId3, pub3, 'Laptop 3', 'linux', '0.1.0')
+
+    const created = isolated.createSession(devId1, devId2, ['view'])
+    expect(created).not.toBeNull()
+    const sessionId = created!.session.id
+
+    expect(isolated.forwardSignal(sessionId, devId3, { type: 'offer' })).toBe(false)
+    expect(isolated.closeSession(sessionId, devId3, 'unauthorized')).toBe(false)
+    expect(isolated.getSession(sessionId)?.status).toBe('pending')
+
+    expect(isolated.forwardSignal(sessionId, devId1, { type: 'offer' })).toBe(true)
+    expect(isolated.closeSession(sessionId, devId2, 'approved participant')).toBe(true)
+    expect(isolated.getSession(sessionId)?.status).toBe('closed')
+  })
+
+  it('does not allow an accepted session to grant permissions that were not requested', () => {
+    const isolated = new EmbeddedSignalingBroker()
+    isolated.registerDevice(devId1, pub1B64, 'Laptop 1', 'darwin', '0.1.0')
+    isolated.registerDevice(devId2, pub2B64, 'Laptop 2', 'win32', '0.1.0')
+    const created = isolated.createSession(devId1, devId2, ['view'])
+    expect(created).not.toBeNull()
+    expect(isolated.decideSession(created!.session.id, devId2, true, ['view', 'input'])).toBeNull()
+    expect(isolated.getSession(created!.session.id)?.status).toBe('pending')
+  })
+
   it('AutoSignalingManager starts, provides an active URL, and stops cleanly', async () => {
     const manager = new AutoSignalingManager()
     const url = await manager.start()
