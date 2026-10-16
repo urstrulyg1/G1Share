@@ -83,15 +83,15 @@ if (!chromePath || process.platform !== 'darwin') {
 
 const svgSource = fs.readFileSync(publicSvg, 'utf8');
 
-// 1. 4K Master Icon Template (2048x2048)
+// 1. 4K Master Icon Template (responsive to viewport)
 const icon4kHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 2048px; height: 2048px; background: transparent; overflow: hidden; }
-    svg { width: 2048px; height: 2048px; display: block; shape-rendering: geometricPrecision; text-rendering: geometricPrecision; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
+    svg { width: 100%; height: 100%; display: block; shape-rendering: geometricPrecision; text-rendering: geometricPrecision; }
   </style>
 </head>
 <body>
@@ -425,11 +425,9 @@ async function renderAssets() {
     fs.writeFileSync(path.join(buildDir, 'icon-2048.png'), icon2048);
     fs.writeFileSync(path.join(tmpDir, 'master-2048.png'), icon2048);
 
-    // Master Icon (1024x1024)
-    await page.setViewport({ width: 1024, height: 1024 });
-    await page.setContent(icon4kHtml);
-    const icon1024 = await page.screenshot({ omitBackground: true, type: 'png' });
-    fs.writeFileSync(path.join(buildDir, 'icon.png'), icon1024);
+    // Master Icon (1024x1024) - resampled from full 2048x2048 master
+    execFileSync('sips', ['-z', '1024', '1024', path.join(buildDir, 'icon-2048.png'), '--out', path.join(buildDir, 'icon.png')]);
+    fs.copyFileSync(path.join(buildDir, 'icon.png'), path.join(rootDir, 'public', 'icon.png'));
 
     // 2. 4K DMG Background (2720x1800)
     await page.setViewport({ width: 2720, height: 1800 });
@@ -438,29 +436,25 @@ async function renderAssets() {
     fs.writeFileSync(path.join(buildDir, 'dmg-background-4k.png'), dmgBg4k);
     fs.writeFileSync(path.join(tmpDir, 'dmg-bg-4k.png'), dmgBg4k);
 
-    // 2x DMG Background (1360x900)
-    await page.setViewport({ width: 1360, height: 900 });
-    await page.setContent(dmgBg4kHtml);
-    const dmgBg2x = await page.screenshot({ type: 'png' });
-    fs.writeFileSync(path.join(buildDir, 'dmg-background@2x.png'), dmgBg2x);
+    // 2x DMG Background (1360x900) - resampled from 4K master
+    execFileSync('sips', ['-z', '900', '1360', path.join(buildDir, 'dmg-background-4k.png'), '--out', path.join(buildDir, 'dmg-background@2x.png')]);
 
-    // 1x DMG Background (680x450)
-    await page.setViewport({ width: 680, height: 450 });
-    await page.setContent(dmgBg4kHtml);
-    const dmgBg1x = await page.screenshot({ type: 'png' });
-    fs.writeFileSync(path.join(buildDir, 'dmg-background.png'), dmgBg1x);
+    // 1x DMG Background (680x450) - resampled from 4K master
+    execFileSync('sips', ['-z', '450', '680', path.join(buildDir, 'dmg-background-4k.png'), '--out', path.join(buildDir, 'dmg-background.png')]);
 
-    // 3. NSIS Sidebar (164x314 and 4K)
-    await page.setViewport({ width: 164, height: 314 });
+    // 3. NSIS Sidebar (656x1256 4K master resampled down to 164x314)
+    await page.setViewport({ width: 656, height: 1256 });
     await page.setContent(sidebar4kHtml);
-    const sidebarPng = await page.screenshot({ type: 'png' });
-    fs.writeFileSync(path.join(buildDir, 'installerSidebar.png'), sidebarPng);
+    const sidebar4k = await page.screenshot({ type: 'png' });
+    fs.writeFileSync(path.join(tmpDir, 'installerSidebar-4k.png'), sidebar4k);
+    execFileSync('sips', ['-z', '314', '164', path.join(tmpDir, 'installerSidebar-4k.png'), '--out', path.join(buildDir, 'installerSidebar.png')]);
 
-    // 4. NSIS Header (150x57)
-    await page.setViewport({ width: 150, height: 57 });
+    // 4. NSIS Header (600x228 4K master resampled down to 150x57)
+    await page.setViewport({ width: 600, height: 228 });
     await page.setContent(header4kHtml);
-    const headerPng = await page.screenshot({ type: 'png' });
-    fs.writeFileSync(path.join(buildDir, 'installerHeader.png'), headerPng);
+    const header4k = await page.screenshot({ type: 'png' });
+    fs.writeFileSync(path.join(tmpDir, 'installerHeader-4k.png'), header4k);
+    execFileSync('sips', ['-z', '57', '150', path.join(tmpDir, 'installerHeader-4k.png'), '--out', path.join(buildDir, 'installerHeader.png')]);
 
     console.log('  ✓ Rendered master vector PNG graphics');
   } finally {
