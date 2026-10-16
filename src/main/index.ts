@@ -26,7 +26,7 @@ import {
 import { existsSync } from 'node:fs'
 import { readFile, rename, unlink, writeFile, mkdir, chmod, rm, readdir } from 'node:fs/promises'
 import { dirname, join, basename } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { hostname, homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import type { DeviceInfo, DeviceSummary, DesktopCapabilities, EventBatch, IncomingFileHandle, IncomingFileRequest, OpenDeskBridge, PeerSignalVerification, RemoteSession, SessionDecisionRequest, SessionPermission, SignalingRequest, TrustedDevice } from '../shared/types'
