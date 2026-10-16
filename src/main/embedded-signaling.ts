@@ -43,6 +43,7 @@ const WAN_PROTOCOL = 'g1viewer-wan-v1'
 const WAN_MAX_CLOCK_SKEW_MS = 2 * 60 * 1000
 const WAN_REPLAY_WINDOW_MS = 2 * 60 * 1000
 const WAN_MAX_MESSAGE_BYTES = 64 * 1024
+const WAN_MAX_ENVELOPE_BYTES = Math.ceil(WAN_MAX_MESSAGE_BYTES * 4 / 3) + 4096
 const WAN_MAX_REPLAY_ENTRIES = 10_000
 const VALID_SESSION_PERMISSIONS = new Set(['view', 'files', 'clipboard', 'input', 'audio'])
 
@@ -1038,7 +1039,7 @@ export class WanRelayBridge {
     if (previouslyKnownKey && previouslyKnownKey !== envelope.publicKey) return false
     if (hasPlain && envelope.payload?.action !== 'query') return false
     if (hasPlain && Buffer.byteLength(JSON.stringify(envelope.payload), 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
-    if (hasEncrypted && Buffer.byteLength(JSON.stringify(envelope.encryptedPayload), 'utf8') > WAN_MAX_MESSAGE_BYTES + 1024) return false
+    if (hasEncrypted && Buffer.byteLength(JSON.stringify(envelope.encryptedPayload) ?? '', 'utf8') > WAN_MAX_ENVELOPE_BYTES) return false
     try {
       const rawKey = Buffer.from(envelope.publicKey, 'base64url')
       const signature = Buffer.from(envelope.signature, 'base64url')
@@ -1085,7 +1086,7 @@ export class WanRelayBridge {
   private handleIncomingRawMessage(rawData: unknown): void {
     try {
       const text = typeof rawData === 'string' ? rawData : String(rawData)
-      if (Buffer.byteLength(text, 'utf8') > WAN_MAX_MESSAGE_BYTES + 2048) return
+      if (Buffer.byteLength(text, 'utf8') > WAN_MAX_ENVELOPE_BYTES) return
       const envelope = JSON.parse(text) as { event?: string; message?: string }
       if (envelope.event !== 'message' || !envelope.message) return
 
