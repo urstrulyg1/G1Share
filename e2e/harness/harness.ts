@@ -67,6 +67,7 @@ let pumping = false
 let autoAccept = false
 let remoteStream: MediaStream | null = null
 let remoteState: ConnectionState = 'disconnected'
+let connectionStateHistory: ConnectionState[] = []
 let remoteControlState: RemoteControlState = 'off'
 let remoteControlReason = ''
 let viewerForwarder: ViewerInputForwarder | null = null
@@ -285,7 +286,11 @@ function remoteVideo(): HTMLVideoElement {
 
 function attachControllerCallbacks(role: 'host' | 'viewer') {
   return {
-    onState: (value: ConnectionState) => { remoteState = value },
+    onState: (value: ConnectionState) => {
+      remoteState = value
+      connectionStateHistory.push(value)
+      if (connectionStateHistory.length > 200) connectionStateHistory.splice(0, connectionStateHistory.length - 200)
+    },
     onRemoteStream: (stream: MediaStream | null) => {
       remoteStream = stream
       remoteVideo().srcObject = stream
@@ -348,6 +353,7 @@ async function startController(role: 'host' | 'viewer', sessionId: string, peer:
   remoteState = 'connecting'
   remoteControlState = 'off'
   activePermissions = [...permissions]
+  connectionStateHistory = []
   controller = new RemoteSessionController(sessionId, role, peer, localDevice, client, bridge, attachControllerCallbacks(role), permissions)
   controllerRole = role
   controllerSessionId = sessionId
@@ -537,6 +543,11 @@ const harness = {
     markerSamples.length = 0
     nativeLog.length = 0
   },
+  simulateIceDisconnect(): void {
+    if (!controller || controllerRole !== 'host') throw new Error('An active host session is required to test ICE recovery.')
+    // Exercise the controller's production disconnect-recovery path without making the runner's network flaky.
+    ;(controller as unknown as { scheduleRecovery: (state: 'disconnected') => void }).scheduleRecovery('disconnected')
+  },
   async transportSnapshot() {
     const active = peerConnections.filter(peer => peer.connectionState !== 'closed')
     return Promise.all(active.map(async peer => {
@@ -563,6 +574,7 @@ const harness = {
       deviceId: identity?.deviceId ?? null,
       role: controllerRole,
       connection: remoteState,
+      connectionStates: connectionStateHistory.slice(),
       remoteControl: remoteControlState,
       remoteControlReason,
       remoteControlStateFromController: controller?.remoteControlState ?? null,
