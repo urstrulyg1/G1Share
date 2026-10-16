@@ -73,6 +73,54 @@ jobs:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: npm run test:e2e
 
+  wan-smoke:
+    name: Deployed WAN signaling and WebRTC smoke (optional)
+    if: (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') && vars.G1VIEWER_WAN_SIGNALING_URL != ''
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install desktop dependencies
+        run: npm ci
+      - uses: browser-actions/setup-chrome@v2.1.2
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Test deployed signaling, WebRTC video, ICE path, file transfer, and input permissions
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          G1VIEWER_WAN_SIGNALING_URL: ${{ vars.G1VIEWER_WAN_SIGNALING_URL }}
+          E2E_ICE_TRANSPORT_POLICY: all
+        run: npm run test:e2e
+
+  turn-relay:
+    name: Deployed TURN relay-only connection smoke (optional)
+    if: (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') && vars.G1VIEWER_WAN_SIGNALING_URL != '' && vars.G1VIEWER_WAN_TURN_TEST == 'true'
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install desktop dependencies
+        run: npm ci
+      - uses: browser-actions/setup-chrome@v2.1.2
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Force relay-only ICE and verify selected TURN candidates
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          G1VIEWER_WAN_SIGNALING_URL: ${{ vars.G1VIEWER_WAN_SIGNALING_URL }}
+          E2E_ICE_TRANSPORT_POLICY: relay
+        run: npm run test:e2e
+
   packages:
     name: Build ${{ matrix.name }}
     needs: verify
