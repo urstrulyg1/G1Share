@@ -413,11 +413,13 @@ func (broker *Broker) listDevices() []DeviceSummary {
 	sort.Strings(ids)
 	devices := make([]DeviceSummary, 0, len(ids))
 	for _, id := range ids {
-		devices = append(devices, summaryFor(broker.devices[id], now))
+		summary := summaryFor(broker.devices[id], now)
+		if summary.Online {
+			devices = append(devices, summary)
+		}
 	}
 	return devices
 }
-
 func (broker *Broker) getDevice(id string) (DeviceSummary, *apiFault) {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()

@@ -133,12 +133,23 @@ jobs:
         run: npm ci
       - name: Generate desktop branding icons and packaging assets
         run: npm run icons
-      - name: Build and notarize macOS ${{ matrix.name }}
+      - name: Build macOS ${{ matrix.name }} (signed when credentials are configured)
         if: startsWith(matrix.id, 'macos-')
-        run: ${{ matrix.build_cmd }}
+        shell: bash
+        run: |
+          if [ -n "$MAC_CSC_LINK" ]; then
+            export CSC_LINK="$MAC_CSC_LINK"
+            export CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+            echo "Apple signing certificate found; building with configured signing credentials."
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "::notice::Apple signing credentials are not configured; producing an unsigned macOS build."
+          fi
+          npm run "${{ matrix.id == 'macos-x64' && 'dist:mac:x64' || 'dist:mac:arm64' }}"
         env:
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

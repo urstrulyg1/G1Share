@@ -39,6 +39,7 @@ import { readBoundedResponse } from './http-response'
 import { IncomingFileStore } from './incoming-file-store'
 import { AutoSignalingManager } from './embedded-signaling'
 import { isTrustedRendererUrl } from './renderer-navigation'
+import { requestPathIsAllowed } from './signaling-path'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const PROJECT_URL = 'https://github.com/urstrulyg1/G1Viewer'
@@ -363,14 +364,6 @@ async function fetchJSON(url: string, init: RequestInit, timeoutMs = 15_000): Pr
   }
 }
 
-function requestPathIsAllowed(path: string): boolean {
-  if (!path.startsWith('/api/v1/') || path.includes('#') || path.includes('\\') || path.includes('%') || path.includes('\n') || path.includes('\r')) return false
-  const route = path.split('?')[0]
-  if (path.includes('?')) {
-    if (route !== '/api/v1/events' || !/^\/api\/v1\/events\?after=\d+&wait=(?:0|[1-9]\d?)$/.test(path)) return false
-  }
-  return /^\/api\/v1\/(?:devices(?:\/(?:register|heartbeat|me|rename|revoke|[A-F0-9-]{12,35}))?|sessions(?:\/[a-f0-9]{32}(?:\/(?:decision|signal|close))?)?|events|ice)$/.test(route)
-}
 
 function peerSignalCanonical(sessionId: string, fromDeviceId: string, messageType: string, payload: unknown): string {
   const payloadJSON = JSON.stringify(payload)

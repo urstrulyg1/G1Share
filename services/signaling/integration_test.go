@@ -435,3 +435,48 @@ func hmacForTest(secret, username string) string {
 	_, _ = mac.Write([]byte(username))
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
+
+func TestAuthenticatedDeviceCollectionListsOnlineDevices(t *testing.T) {
+	server := newIntegrationServer(t, nil)
+	viewer := newIntegrationClient(t, server.URL)
+	host := newIntegrationClient(t, server.URL)
+	viewer.register(t, "Viewer workstation")
+	host.register(t, "Host workstation")
+
+	status, body := viewer.request(t, http.MethodGet, "/api/v1/devices", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list devices: status %d: %s", status, body)
+	}
+	var response struct {
+		Devices []DeviceSummary `json:"devices"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatalf("decode device collection: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, device := range response.Devices {
+		if !device.Online {
+			t.Errorf("offline device %s included in online collection", device.ID)
+		}
+		seen[device.ID] = true
+	}
+	if !seen[viewer.id] || !seen[host.id] {
+		t.Fatalf("device collection missing registered online peers: viewer=%v host=%v devices=%+v", seen[viewer.id], seen[host.id], response.Devices)
+	}
+
+	if status, body = host.request(t, http.MethodPost, "/api/v1/devices/revoke", map[string]any{}); status != http.StatusOK {
+		t.Fatalf("revoke host identity: status %d: %s", status, body)
+	}
+	status, body = viewer.request(t, http.MethodGet, "/api/v1/devices", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list devices after revocation: status %d: %s", status, body)
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
+	for _, device := range response.Devices {
+		if device.ID == host.id {
+			t.Fatal("revoked device must not appear in device collection")
+		}
+	}
+}

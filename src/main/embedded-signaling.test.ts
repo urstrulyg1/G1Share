@@ -137,6 +137,12 @@ function deviceIdForPublicKey(publicKey: string): string {
   })
 
   it('handles peer discovery, sessions, decisions, and signals', async () => {
+    // Register both identities here so this test is independent of test execution order.
+    const reg1 = await signedRequest(privKey1, devId1, 'POST', '/api/v1/devices/register', {
+      id: devId1, publicKey: pub1B64, name: 'Laptop 1', platform: 'linux', appVersion: '0.1.0'
+    }, pub1B64)
+    expect(reg1.status).toBe(200)
+
     // Register Device 2
     const reg2 = await signedRequest(privKey2, devId2, 'POST', '/api/v1/devices/register', {
       id: devId2,
@@ -146,6 +152,13 @@ function deviceIdForPublicKey(publicKey: string): string {
       appVersion: '0.1.0'
     }, pub2B64)
     expect(reg2.status).toBe(200)
+
+    const collection = await signedRequest(privKey1, devId1, 'GET', '/api/v1/devices')
+    expect(collection.status).toBe(200)
+    const listed = (await collection.json()) as { devices: Array<{ id: string; online: boolean }> }
+    expect(listed.devices.map(device => device.id)).toContain(devId1)
+    expect(listed.devices.map(device => device.id)).toContain(devId2)
+    expect(listed.devices.every(device => device.online)).toBe(true)
 
     // Lookup Device 2 from Device 1
     const lookup = await signedRequest(privKey1, devId1, 'GET', `/api/v1/devices/${devId2}`)
