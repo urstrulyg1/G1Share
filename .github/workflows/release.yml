@@ -22,10 +22,10 @@ permissions:
 jobs:
   verify:
     name: Verify tests, typecheck, and backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -37,7 +37,7 @@ jobs:
         run: npm test
       - name: Build desktop bundles
         run: npm run build
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.22.x"
           cache-dependency-path: services/signaling/go.mod
@@ -82,22 +82,22 @@ jobs:
             artifact_name: g1viewer-macos-arm64
           - id: linux-x64-deb
             name: Linux x64 Debian (.deb)
-            os: ubuntu-latest
+            os: ubuntu-24.04
             build_cmd: npm run dist:linux:deb
             file: release/g1viewer_x64.deb
             filename: g1viewer_x64.deb
             artifact_name: g1viewer-linux-x64-deb
           - id: linux-x64-appimage
             name: Linux x64 AppImage (.AppImage)
-            os: ubuntu-latest
+            os: ubuntu-24.04
             build_cmd: npm run dist:linux:appimage
             file: release/g1viewer_x64.AppImage
             filename: g1viewer_x64.AppImage
             artifact_name: g1viewer-linux-x64-appimage
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -137,13 +137,13 @@ jobs:
     concurrency:
       group: g1viewer-release-assets-${{ github.repository }}
       cancel-in-progress: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

@@ -18,10 +18,10 @@ permissions:
 jobs:
   verify:
     name: Typecheck, unit tests, build, audit, and Go verification
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -35,7 +35,7 @@ jobs:
         run: npm run build
       - name: Audit all npm dependencies
         run: npm audit --audit-level=high
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.22.x"
           cache-dependency-path: services/signaling/go.mod
@@ -50,21 +50,21 @@ jobs:
   e2e:
     name: Two-client end-to-end (real signaling broker, headless Chromium)
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - name: Install desktop dependencies
         run: npm ci
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.22.x"
           cache-dependency-path: services/signaling/go.mod
       - name: Install Chrome for the headless two-client test
-        uses: browser-actions/setup-chrome@v1
+        uses: browser-actions/setup-chrome@v2.1.2
         id: chrome
         with:
           chrome-version: stable
@@ -110,22 +110,22 @@ jobs:
             artifact_name: g1viewer-macos-arm64
           - id: linux-x64-deb
             name: Linux x64 Debian (.deb)
-            os: ubuntu-latest
+            os: ubuntu-24.04
             build_cmd: npm run dist:linux:deb
             file: release/g1viewer_x64.deb
             filename: g1viewer_x64.deb
             artifact_name: g1viewer-linux-x64-deb
           - id: linux-x64-appimage
             name: Linux x64 AppImage (.AppImage)
-            os: ubuntu-latest
+            os: ubuntu-24.04
             build_cmd: npm run dist:linux:appimage
             file: release/g1viewer_x64.AppImage
             filename: g1viewer_x64.AppImage
             artifact_name: g1viewer-linux-x64-appimage
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -165,10 +165,10 @@ jobs:
     concurrency:
       group: g1viewer-release-assets-${{ github.repository }}
       cancel-in-progress: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -225,17 +225,17 @@ jobs:
   visual:
     name: Reference-sized dashboard screenshot
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - name: Install desktop dependencies
         run: npm ci
       - name: Install Chromium
-        uses: browser-actions/setup-chrome@v1
+        uses: browser-actions/setup-chrome@v2.1.2
         id: chrome
         with:
           chrome-version: stable
