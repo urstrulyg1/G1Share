@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
 import { findChromePath, launchBrowser, startHarnessServer, startSignaling, waitFor } from './lib/rig.mjs'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -25,6 +26,29 @@ const results = []
 function check(name, passed, detail = '') {
   results.push({ name, passed, detail })
   console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`)
+}
+
+async function interruptUdpNetwork(milliseconds = 8_000) {
+  if (process.env.E2E_NETWORK_INTERRUPTION_MODE !== 'firewall') {
+    console.log('SKIP real UDP interruption — set E2E_NETWORK_INTERRUPTION_MODE=firewall on a disposable Linux runner.')
+    return false
+  }
+  let outputRule = false
+  let inputRule = false
+  const iptables = (...args) => execFileSync('sudo', ['iptables', '-w', ...args], { stdio: 'pipe' })
+  try {
+    iptables('-I', 'OUTPUT', '1', '-p', 'udp', '-j', 'DROP')
+    outputRule = true
+    iptables('-I', 'INPUT', '1', '-p', 'udp', '-j', 'DROP')
+    inputRule = true
+    console.log(`Simulating a real UDP network interruption for ${milliseconds}ms.`)
+    await new Promise(resolve => setTimeout(resolve, milliseconds))
+    return true
+  } finally {
+    // Always restore networking, including when the test throws or a rule insertion only partially succeeds.
+    if (inputRule) iptables('-D', 'INPUT', '-p', 'udp', '-j', 'DROP')
+    if (outputRule) iptables('-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP')
+  }
 }
 
 const workDir = await mkdtemp(join(tmpdir(), 'opendesk-e2e-'))
@@ -84,26 +108,25 @@ try {
 
   const hostStateOffset = (await host.evaluate(() => window.harness.snapshot())).connectionStates.length
   const viewerStateOffset = (await viewer.evaluate(() => window.harness.snapshot())).connectionStates.length
-  // Take the viewer offline long enough for ICE to detect a real transport interruption, then restore it.
-  await viewer.setOfflineMode(true)
-  await new Promise(resolve => setTimeout(resolve, 7_000))
-  await viewer.setOfflineMode(false)
-  let recoveredHost
-  try {
-    recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
-  } catch (error) {
-    const diagnostics = {
-      host: await host.evaluate(() => window.harness.snapshot()),
-      viewer: await viewer.evaluate(() => window.harness.snapshot()),
-      hostTransport: await host.evaluate(() => window.harness.transportSnapshot()),
-      viewerTransport: await viewer.evaluate(() => window.harness.transportSnapshot())
+  const interrupted = await interruptUdpNetwork()
+  if (interrupted) {
+    await waitFor(host, state => state.connectionStates.slice(hostStateOffset).includes('degraded') || state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to detect the UDP interruption', 15_000)
+    let recoveredHost
+    try {
+      recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
+    } catch (error) {
+      const diagnostics = {
+        host: await host.evaluate(() => window.harness.snapshot()),
+        viewer: await viewer.evaluate(() => window.harness.snapshot()),
+        hostTransport: await host.evaluate(() => window.harness.transportSnapshot()),
+        viewerTransport: await viewer.evaluate(() => window.harness.transportSnapshot())
+      }
+      throw new Error(`${error instanceof Error ? error.message : String(error)}; recovery diagnostics: ${JSON.stringify(diagnostics)}`)
     }
-    throw new Error(`${error instanceof Error ? error.message : String(error)}; recovery diagnostics: ${JSON.stringify(diagnostics)}`)
+    const recoveredViewer = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0 && state.connectionStates.slice(viewerStateOffset).includes('negotiating'), 'viewer to renegotiate and resume video after ICE restart', 35_000)
+    check('host ICE disconnect recovery returns to connected', recoveredHost.connection === 'connected', recoveredHost.connectionStates.slice(hostStateOffset).join(' -> '))
+    check('viewer renegotiates and continues receiving video after ICE restart', recoveredViewer.connection === 'connected' && recoveredViewer.video.width > 0, `${recoveredViewer.video.width}x${recoveredViewer.video.height}; ${recoveredViewer.connectionStates.slice(viewerStateOffset).join(' -> ')}`)
   }
-  const recoveredViewer = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0 && state.connectionStates.slice(viewerStateOffset).includes('negotiating'), 'viewer to renegotiate and resume video after ICE restart', 35_000)
-  check('host ICE disconnect recovery returns to connected', recoveredHost.connection === 'connected', recoveredHost.connectionStates.slice(hostStateOffset).join(' -> '))
-  check('viewer renegotiates and continues receiving video after ICE restart', recoveredViewer.connection === 'connected' && recoveredViewer.video.width > 0, `${recoveredViewer.video.width}x${recoveredViewer.video.height}; ${recoveredViewer.connectionStates.slice(viewerStateOffset).join(' -> ')}`)
-
   const pending = await viewer.evaluate(() => window.harness.snapshot())
   check('input permission starts as pending until the host enables control', pending.remoteControl === 'pending', pending.remoteControl)
 
@@ -194,7 +217,7 @@ try {
   const errorsSeen = [
     ...(await host.evaluate(() => window.harness.snapshot())).errors,
     ...(await viewer.evaluate(() => window.harness.snapshot())).errors
-  ].filter(message => !/rate limit/i.test(message) && !/^poll: (failed to fetch|fetch failed|networkerror)/i.test(message))
+  ].filter(message => !/rate limit/i.test(message))
   check('no unexpected runtime errors were reported by the renderer services', errorsSeen.length === 0, errorsSeen.join(' | '))
 } catch (error) {
   check('two-client scenario completed', false, error instanceof Error ? error.message : String(error))
