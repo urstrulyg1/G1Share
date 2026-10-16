@@ -1,7 +1,7 @@
 import http from 'node:http'
 import dgram from 'node:dgram'
 import os from 'node:os'
-import { createHash, createPrivateKey, createPublicKey, randomBytes, sign, verify } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, sign, verify } from 'node:crypto'
 import { normalizeDeviceId } from '../shared/device-id'
 
 export interface ServerEvent {
@@ -64,20 +64,154 @@ function deviceIdMatchesPublicKey(deviceId: string, publicKey: string): boolean 
   return legacy.slice(0, 12).match(/.{4}/g)!.join('-') === normalized
 }
 
+interface EncryptedWanPayload {
+  ephemeralPublicKey: string
+  salt: string
+  iv: string
+  ciphertext: string
+  tag: string
+}
+
 interface SignedWanEnvelope {
   protocol: string
   fromDeviceId: string
+  toDeviceId: string
   publicKey: string
   issuedAt: number
   nonce: string
-  payload: WanRelayMessage
+  payload?: WanRelayMessage
+  encryptedPayload?: EncryptedWanPayload
   signature: string
 }
 
+function modPow(base: bigint, exponent: bigint, modulus: bigint): bigint {
+  let result = 1n
+  let factor = base % modulus
+  let power = exponent
+  while (power > 0n) {
+    if (power & 1n) result = (result * factor) % modulus
+    factor = (factor * factor) % modulus
+    power >>= 1n
+  }
+  return result
+}
+
+function littleEndianInteger(bytes: Buffer): bigint {
+  let result = 0n
+  for (let i = bytes.length - 1; i >= 0; i--) result = (result << 8n) | BigInt(bytes[i])
+  return result
+}
+
+function integerToLittleEndian(value: bigint, length: number): Buffer {
+  const output = Buffer.alloc(length)
+  let current = value
+  for (let i = 0; i < length; i++) {
+    output[i] = Number(current & 255n)
+    current >>= 8n
+  }
+  return output
+}
+
+function ed25519PublicToX25519(publicKey: string): ReturnType<typeof createPublicKey> {
+  const encoded = Buffer.from(publicKey, 'base64url')
+  if (encoded.length !== 32 || encoded.toString('base64url') !== publicKey) throw new TypeError('Invalid Ed25519 public key.')
+  const yBytes = Buffer.from(encoded)
+  yBytes[31] &= 0x7f
+  const prime = (1n << 255n) - 19n
+  const y = littleEndianInteger(yBytes)
+  if (y >= prime) throw new TypeError('Invalid Ed25519 public point.')
+  const denominator = (1n - y + prime) % prime
+  if (denominator === 0n) throw new TypeError('Invalid Ed25519 public point.')
+  const u = ((1n + y) % prime * modPow(denominator, prime - 2n, prime)) % prime
+  const rawU = integerToLittleEndian(u, 32)
+  const spkiPrefix = Buffer.from('302a300506032b656e032100', 'hex')
+  return createPublicKey({ key: Buffer.concat([spkiPrefix, rawU]), type: 'spki', format: 'der' })
+}
+
+function ed25519PrivateToX25519(privateKey: ReturnType<typeof createPrivateKey>): ReturnType<typeof createPrivateKey> {
+  const encoded = Buffer.from(privateKey.export({ type: 'pkcs8', format: 'der' }))
+  const edPrefix = Buffer.from('302e020100300506032b657004220420', 'hex')
+  if (encoded.length !== edPrefix.length + 32 || !encoded.subarray(0, edPrefix.length).equals(edPrefix)) {
+    throw new TypeError('Invalid Ed25519 private key encoding.')
+  }
+  const seed = encoded.subarray(edPrefix.length)
+  const scalar = Buffer.from(createHash('sha512').update(seed).digest().subarray(0, 32))
+  scalar[0] &= 248
+  scalar[31] &= 127
+  scalar[31] |= 64
+  const xPrefix = Buffer.from('302e020100300506032b656e04220420', 'hex')
+  return createPrivateKey({ key: Buffer.concat([xPrefix, scalar]), type: 'pkcs8', format: 'der' })
+}
+
+function wanAad(fromDeviceId: string, toDeviceId: string, issuedAt: number, nonce: string): Buffer {
+  return Buffer.from(`${WAN_PROTOCOL}\n${fromDeviceId}\n${toDeviceId}\n${issuedAt}\n${nonce}`, 'utf8')
+}
+
 function wanCanonical(envelope: Omit<SignedWanEnvelope, 'signature' | 'publicKey'>): Buffer {
-  const payload = JSON.stringify(envelope.payload)
-  const digest = createHash('sha256').update(payload, 'utf8').digest('hex')
-  return Buffer.from(`${envelope.protocol}\n${envelope.fromDeviceId}\n${envelope.issuedAt}\n${envelope.nonce}\n${digest}`, 'utf8')
+  const encrypted = !!envelope.encryptedPayload
+  const body = encrypted ? JSON.stringify(envelope.encryptedPayload) : JSON.stringify(envelope.payload)
+  const digest = createHash('sha256').update(body, 'utf8').digest('hex')
+  return Buffer.from(`${envelope.protocol}\n${envelope.fromDeviceId}\n${envelope.toDeviceId}\n${envelope.issuedAt}\n${envelope.nonce}\n${encrypted ? 'encrypted' : 'plain'}\n${digest}`, 'utf8')
+}
+
+function encryptWanPayload(
+  recipientPublicKey: string,
+  senderDeviceId: string,
+  recipientDeviceId: string,
+  issuedAt: number,
+  nonce: string,
+  payload: WanRelayMessage
+): EncryptedWanPayload {
+  const recipientKey = ed25519PublicToX25519(recipientPublicKey)
+  const ephemeral = generateKeyPairSync('x25519')
+  const sharedSecret = diffieHellman({ privateKey: ephemeral.privateKey, publicKey: recipientKey })
+  const salt = randomBytes(16)
+  const key = Buffer.from(hkdfSync('sha256', sharedSecret, salt, Buffer.from('g1viewer-wan-e2e-v1'), 32))
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  cipher.setAAD(wanAad(senderDeviceId, recipientDeviceId, issuedAt, nonce))
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  const ephemeralPublicKey = ephemeral.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
+  return {
+    ephemeralPublicKey,
+    salt: salt.toString('base64url'),
+    iv: iv.toString('base64url'),
+    ciphertext: ciphertext.toString('base64url'),
+    tag: tag.toString('base64url')
+  }
+}
+
+function decryptWanPayload(
+  privateKey: ReturnType<typeof createPrivateKey>,
+  senderDeviceId: string,
+  recipientDeviceId: string,
+  issuedAt: number,
+  nonce: string,
+  encrypted: EncryptedWanPayload
+): WanRelayMessage {
+  const ephemeralRaw = Buffer.from(encrypted.ephemeralPublicKey, 'base64url')
+  const salt = Buffer.from(encrypted.salt, 'base64url')
+  const iv = Buffer.from(encrypted.iv, 'base64url')
+  const ciphertext = Buffer.from(encrypted.ciphertext, 'base64url')
+  const tag = Buffer.from(encrypted.tag, 'base64url')
+  if (ephemeralRaw.length !== 32 || salt.length !== 16 || iv.length !== 12 || tag.length !== 16 ||
+      ephemeralRaw.toString('base64url') !== encrypted.ephemeralPublicKey ||
+      salt.toString('base64url') !== encrypted.salt || iv.toString('base64url') !== encrypted.iv ||
+      tag.toString('base64url') !== encrypted.tag || ciphertext.length > WAN_MAX_MESSAGE_BYTES) {
+    throw new TypeError('Invalid encrypted WAN payload.')
+  }
+  const ephemeralKey = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b656e032100', 'hex'), ephemeralRaw]), type: 'spki', format: 'der' })
+  const sharedSecret = diffieHellman({ privateKey: ed25519PrivateToX25519(privateKey), publicKey: ephemeralKey })
+  const key = Buffer.from(hkdfSync('sha256', sharedSecret, salt, Buffer.from('g1viewer-wan-e2e-v1'), 32))
+  const decipher = createDecipheriv('aes-256-gcm', key, iv)
+  decipher.setAAD(wanAad(senderDeviceId, recipientDeviceId, issuedAt, nonce))
+  decipher.setAuthTag(tag)
+  const clear = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+  if (clear.length > WAN_MAX_MESSAGE_BYTES) throw new TypeError('Decrypted WAN payload exceeds the safety limit.')
+  const payload = JSON.parse(clear.toString('utf8')) as unknown
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new TypeError('Invalid decrypted WAN payload.')
+  return payload as WanRelayMessage
 }
 const DEFAULT_STUN_URLS = [
   'stun:stun.l.google.com:19302',
@@ -792,6 +926,7 @@ export class WanRelayBridge {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private pendingQueries = new Map<string, (device: (DeviceRecord & { online: boolean }) | null) => void>()
   private remoteDevicesCache = new Map<string, DeviceRecord & { online: boolean }>()
+  private knownPublicKeys = new Map<string, string>()
   private seenNonces = new Map<string, number>()
   private relayBaseUrl = (process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh').replace(/\/+$/, '')
 
@@ -814,17 +949,21 @@ export class WanRelayBridge {
   private verifyEnvelope(value: unknown): value is SignedWanEnvelope {
     if (!value || typeof value !== 'object') return false
     const envelope = value as Partial<SignedWanEnvelope>
+    const hasPlain = !!envelope.payload
+    const hasEncrypted = !!envelope.encryptedPayload
     if (envelope.protocol !== WAN_PROTOCOL || typeof envelope.fromDeviceId !== 'string' ||
+        typeof envelope.toDeviceId !== 'string' || normalizeDeviceId(envelope.toDeviceId) !== this.localDeviceId ||
         typeof envelope.publicKey !== 'string' || typeof envelope.issuedAt !== 'number' ||
         !Number.isSafeInteger(envelope.issuedAt) || Math.abs(Date.now() - envelope.issuedAt) > WAN_MAX_CLOCK_SKEW_MS ||
         typeof envelope.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(envelope.nonce) ||
         typeof envelope.signature !== 'string' || !/^[A-Za-z0-9_-]{86}$/.test(envelope.signature) ||
-        !envelope.payload || typeof envelope.payload !== 'object' || Array.isArray(envelope.payload)) return false
+        hasPlain === hasEncrypted || (hasPlain && (!envelope.payload || typeof envelope.payload !== 'object' || Array.isArray(envelope.payload))) ||
+        (hasEncrypted && (!envelope.encryptedPayload || typeof envelope.encryptedPayload !== 'object'))) return false
     const fromDeviceId = normalizeDeviceId(envelope.fromDeviceId)
     if (!fromDeviceId || !deviceIdMatchesPublicKey(fromDeviceId, envelope.publicKey)) return false
-    if (envelope.payload.fromDeviceId && normalizeDeviceId(envelope.payload.fromDeviceId) !== fromDeviceId) return false
-    const payloadText = JSON.stringify(envelope.payload)
-    if (Buffer.byteLength(payloadText, 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
+    if (hasPlain && envelope.payload?.action !== 'query') return false
+    if (hasPlain && Buffer.byteLength(JSON.stringify(envelope.payload), 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
+    if (hasEncrypted && Buffer.byteLength(JSON.stringify(envelope.encryptedPayload), 'utf8') > WAN_MAX_MESSAGE_BYTES + 1024) return false
     try {
       const rawKey = Buffer.from(envelope.publicKey, 'base64url')
       const signature = Buffer.from(envelope.signature, 'base64url')
@@ -834,9 +973,10 @@ export class WanRelayBridge {
       const canonical = wanCanonical({
         protocol: envelope.protocol,
         fromDeviceId,
+        toDeviceId: normalizeDeviceId(envelope.toDeviceId),
         issuedAt: envelope.issuedAt,
         nonce: envelope.nonce,
-        payload: envelope.payload
+        ...(hasPlain ? { payload: envelope.payload } : { encryptedPayload: envelope.encryptedPayload })
       })
       if (!verify(null, canonical, key, signature)) return false
     } catch {
@@ -848,48 +988,20 @@ export class WanRelayBridge {
       if (now - seenAt > WAN_REPLAY_WINDOW_MS) this.seenNonces.delete(key)
     }
     const replayKey = `${fromDeviceId}:${envelope.nonce}`
-    if (this.seenNonces.has(replayKey)) return false
-    if (this.seenNonces.size >= WAN_MAX_REPLAY_ENTRIES) return false
+    if (this.seenNonces.has(replayKey) || this.seenNonces.size >= WAN_MAX_REPLAY_ENTRIES) return false
     this.seenNonces.set(replayKey, now)
+    this.knownPublicKeys.set(fromDeviceId, envelope.publicKey)
     return true
   }
 
-  ensureConnected(): void {
-    if (this.stopped || !this.localDeviceId) return
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-      return
-    }
-
+  private decryptEnvelopePayload(envelope: SignedWanEnvelope): WanRelayMessage | null {
+    if (envelope.payload) return envelope.payload
+    if (!envelope.encryptedPayload || !this.localPrivateKey || !this.localDeviceId) return null
     try {
-      const topic = deriveWanTopic(this.localDeviceId)
-      const wsUrl = this.relayBaseUrl.replace(/^http/i, 'ws') + `/${topic}/ws`
-      this.ws = new WebSocket(wsUrl)
-
-      this.ws.onmessage = (event) => {
-        this.handleIncomingRawMessage(event.data)
-      }
-
-      this.ws.onerror = () => {
-        // Suppress unhandled WebSocket error
-      }
-
-      this.ws.onclose = () => {
-        this.ws = null
-        if (!this.stopped) {
-          this.scheduleReconnect()
-        }
-      }
+      return decryptWanPayload(this.localPrivateKey, envelope.fromDeviceId, this.localDeviceId, envelope.issuedAt, envelope.nonce, envelope.encryptedPayload)
     } catch {
-      this.scheduleReconnect()
+      return null
     }
-  }
-
-  private scheduleReconnect(): void {
-    if (this.reconnectTimer || this.stopped) return
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      this.ensureConnected()
-    }, 5000)
   }
 
   private handleIncomingRawMessage(rawData: unknown): void {
@@ -901,7 +1013,9 @@ export class WanRelayBridge {
 
       const signed = JSON.parse(envelope.message) as unknown
       if (!this.verifyEnvelope(signed)) return
-      this.handleRelayMessage(signed.payload, signed.publicKey)
+      const payload = this.decryptEnvelopePayload(signed)
+      if (!payload) return
+      this.handleRelayMessage(payload, signed.publicKey)
     } catch {
       // ignore parse errors
     }
@@ -1048,26 +1162,52 @@ export class WanRelayBridge {
     }
   }
 
-  async publishToDevice(targetDeviceId: string, payload: unknown): Promise<boolean> {
-    const normalized = normalizeDeviceId(targetDeviceId)
+  private createEnvelope(targetDeviceId: string, payload: unknown): SignedWanEnvelope | null {
+    const normalizedTarget = normalizeDeviceId(targetDeviceId)
     const localId = this.localDeviceId
     const publicKey = this.localSummary?.publicKey
     const privateKey = this.localPrivateKey
     if (!localId || !publicKey || !privateKey || !deviceIdMatchesPublicKey(localId, publicKey) ||
-        !payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+        !payload || typeof payload !== 'object' || Array.isArray(payload)) return null
     const payloadText = JSON.stringify(payload)
-    if (Buffer.byteLength(payloadText, 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
+    if (Buffer.byteLength(payloadText, 'utf8') > WAN_MAX_MESSAGE_BYTES) return null
     const issuedAt = Date.now()
-    const unsigned = {
+    const nonce = randomBytes(16).toString('hex')
+    const targetRecord = this.remoteDevicesCache.get(normalizedTarget) || this.broker.getDeviceSummary(normalizedTarget)
+    const targetPublicKey = targetRecord?.publicKey || this.knownPublicKeys.get(normalizedTarget)
+    const base = {
       protocol: WAN_PROTOCOL,
       fromDeviceId: localId,
+      toDeviceId: normalizedTarget,
       issuedAt,
-      nonce: randomBytes(16).toString('hex'),
-      payload: payload as WanRelayMessage
+      nonce
+    }
+    let unsigned: Omit<SignedWanEnvelope, 'signature' | 'publicKey'>
+    if (targetPublicKey) {
+      try {
+        const encryptedPayload = encryptWanPayload(targetPublicKey, localId, normalizedTarget, issuedAt, nonce, payload as WanRelayMessage)
+        unsigned = { ...base, encryptedPayload }
+      } catch {
+        return null
+      }
+    } else {
+      // Only the initial discovery query may be sent without recipient encryption.
+      if ((payload as WanRelayMessage).action !== 'query') return null
+      unsigned = { ...base, payload: payload as WanRelayMessage }
     }
     try {
       const signature = sign(null, wanCanonical(unsigned), privateKey).toString('base64url')
-      const envelope: SignedWanEnvelope = { ...unsigned, publicKey, signature }
+      return { ...unsigned, publicKey, signature }
+    } catch {
+      return null
+    }
+  }
+
+  async publishToDevice(targetDeviceId: string, payload: unknown): Promise<boolean> {
+    const normalized = normalizeDeviceId(targetDeviceId)
+    const envelope = this.createEnvelope(normalized, payload)
+    if (!envelope) return false
+    try {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 4000)
       try {
@@ -1086,7 +1226,6 @@ export class WanRelayBridge {
       return false
     }
   }
-
   async queryDevice(targetDeviceId: string, timeoutMs = 2500): Promise<(DeviceRecord & { online: boolean }) | null> {
     const normalized = normalizeDeviceId(targetDeviceId)
     const cached = this.remoteDevicesCache.get(normalized)
