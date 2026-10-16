@@ -1009,7 +1009,7 @@ function safeRelayBaseUrl(value: string): string {
     if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || parsed.username || parsed.password ||
         parsed.search || parsed.hash || !parsed.hostname) return ''
     if (parsed.protocol === 'http:' && !isValidLanCoordinatorUrl(`${parsed.origin}/`)) return ''
-    return `${parsed.origin}${parsed.pathname.replace(/\\/+$/, '')}`
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`
   } catch {
     return ''
   }
