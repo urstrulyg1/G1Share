@@ -75,7 +75,6 @@
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "notarize": true,
       "target": [
         {
           "target": "dmg",
