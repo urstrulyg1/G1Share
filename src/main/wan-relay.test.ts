@@ -124,6 +124,7 @@ function createTestIdentity() {
     // 4. Manager B accepts the session
     const bSession = (managerB as any).broker.getSession(sessionId)
     expect(bSession).toBeDefined()
+    expect((managerB as any).broker.decideSession(sessionId, devBId, true, ['view'])).not.toBeNull()
     await managerB.handleSessionDecision(bSession, devBId, true, ['view'])
 
     // 5. Manager A receives the acceptance event
