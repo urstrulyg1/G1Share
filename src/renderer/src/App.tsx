@@ -53,9 +53,14 @@ export default function App() {
   useEffect(() => {
     if ((page !== 'Devices' && page !== 'Home') || openDesk.activeSession) return
     setClock(Date.now())
-    const timer = setInterval(() => setClock(Date.now()), 10_000)
+    const timer = setInterval(() => {
+      setClock(Date.now())
+      if (openDesk.serviceState === 'online') {
+        void openDesk.refreshKnownDevices().catch(() => undefined)
+      }
+    }, 10_000)
     return () => clearInterval(timer)
-  }, [page, openDesk.activeSession])
+  }, [page, openDesk.activeSession, openDesk.serviceState, openDesk.refreshKnownDevices])
   useEffect(() => {
     if (openDesk.activeSession) {
       wasInActiveSession.current = true

@@ -45,6 +45,17 @@ describe('SignalingClient', () => {
     expect(calls[1]).toEqual({ method: 'GET', path: `/api/v1/devices/${peer.id}` })
   })
 
+  it('lists online devices automatically from the signaling coordinator', async () => {
+    const bridge = {
+      signalingRequest: vi.fn(async () => ({ devices: [peer] })),
+      decideSession: vi.fn()
+    }
+    const client = new SignalingClient(bridge, local)
+    const devices = await client.listDevices()
+    expect(devices).toEqual([peer])
+    expect(bridge.signalingRequest).toHaveBeenCalledWith({ method: 'GET', path: '/api/v1/devices', body: undefined })
+  })
+
   it('requires view permission and a valid target ID', async () => {
     const bridge = { signalingRequest: vi.fn(async () => peer), decideSession: vi.fn() }
     const client = new SignalingClient(bridge, local)

@@ -47,7 +47,12 @@ interface UseOpenDeskState {
 }
 
 function formatEventError(error: unknown): string {
-  if (error instanceof Error) return error.message.slice(0, 240)
+  if (error instanceof Error) {
+    let msg = error.message
+    const match = msg.match(/Error invoking remote method '[^']+': (?:SignalingRequestError: )?(.*)/)
+    if (match) msg = match[1]
+    return msg.slice(0, 240)
+  }
   return 'Signaling service is unavailable.'
 }
 
@@ -197,6 +202,24 @@ export function useOpenDesk() {
     clientRef.current = client
     setState(current => ({ ...current, serviceState: 'connecting', serviceError: '', cursor: 0 }))
 
+    const fetchDiscoveredDevices = async () => {
+      try {
+        const list = await client.listDevices()
+        if (stopped || !Array.isArray(list)) return
+        const checkedAt = new Date().toISOString()
+        const onlineDevices = list.filter(d => d.id !== device.deviceId)
+        if (onlineDevices.length > 0) {
+          setState(current => {
+            const map = new Map(current.knownDevices.map(d => [d.id, d]))
+            for (const dev of onlineDevices) {
+              map.set(dev.id, { ...map.get(dev.id), ...dev, checkedAt })
+            }
+            return { ...current, knownDevices: Array.from(map.values()) }
+          })
+        }
+      } catch { /* ignore discovery errors */ }
+    }
+
     const run = async () => {
       while (!stopped) {
         try {
@@ -204,12 +227,17 @@ export function useOpenDesk() {
           await client.heartbeat()
           if (stopped) return
           setState(current => ({ ...current, localDevice, serviceState: 'online', serviceError: '', cursor: 0 }))
+          void fetchDiscoveredDevices()
+
           let heartbeatBusy = false
           heartbeatTimer = setInterval(() => {
             if (heartbeatBusy || stopped) return
             heartbeatBusy = true
             void client.heartbeat().then(() => {
-              if (!stopped) setState(current => ({ ...current, serviceState: 'online', serviceError: '' }))
+              if (!stopped) {
+                setState(current => ({ ...current, serviceState: 'online', serviceError: '' }))
+                void fetchDiscoveredDevices()
+              }
             }).catch(error => {
               if (!stopped) setState(current => ({ ...current, serviceState: 'offline', serviceError: formatEventError(error) }))
             }).finally(() => { heartbeatBusy = false })
@@ -246,8 +274,23 @@ export function useOpenDesk() {
     const client = clientRef.current
     if (!client || stateRef.current.serviceState !== 'online') throw new Error('Unable to reach the signaling server. Check Settings and try again.')
     if (stateRef.current.activeSession) throw new Error('Disconnect the current session before starting another one.')
-    setState(current => ({ ...current, serviceError: '' }))
-    const peer = await client.lookupDevice(deviceId)
+    let peer: DeviceSummary | null = null
+    let lookupError: unknown = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        peer = await client.lookupDevice(deviceId)
+        if (peer) break
+      } catch (err) {
+        lookupError = err
+        if (attempt < 2) {
+          await delay(600)
+        }
+      }
+    }
+    if (!peer) {
+      const msg = lookupError instanceof Error ? formatEventError(lookupError) : `Device ${deviceId} was not found on the network.`
+      throw new Error(msg)
+    }
     saveKnownDevice(peer)
     if (!peer.online) throw new Error('That device is currently offline. Ask its user to open G1Viewer and check the signaling server URL.')
     const trusted = await window.openDesk.trustPeer({ id: peer.id, name: peer.name, publicKey: peer.publicKey })
@@ -367,15 +410,45 @@ export function useOpenDesk() {
   const refreshKnownDevices = useCallback(async () => {
     const client = clientRef.current
     if (!client || stateRef.current.serviceState !== 'online') throw new Error('Unable to reach the signaling server. Check Settings before refreshing devices.')
-    const ids = stateRef.current.knownDevices.map(device => device.id)
-    const results = await Promise.allSettled(ids.map(id => client.lookupDevice(id)))
-    if (clientRef.current !== client) return
+    let discovered: DeviceSummary[] = []
+    try {
+      discovered = await client.listDevices()
+    } catch { /* ignore and fallback to direct lookup */ }
     const checkedAt = new Date().toISOString()
-    const found = new Map(results.flatMap(result => result.status === 'fulfilled' ? [[result.value.id, { ...result.value, checkedAt }] as const] : []))
-    const failed = new Set(ids.filter((_, index) => results[index].status === 'rejected'))
-    setState(current => ({ ...current, knownDevices: current.knownDevices.map(device => found.get(device.id)
-      ?? (failed.has(device.id) ? { ...device, checkedAt: '' } : device)) }))
-    if (failed.size) throw new Error('Some devices could not be checked. Their presence is unknown; verify the signaling server and device IDs.')
+    const found = new Map<string, KnownDevice>()
+    for (const d of discovered) {
+      if (d.id !== stateRef.current.device?.deviceId) {
+        found.set(d.id, { ...d, checkedAt })
+      }
+    }
+    const ids = stateRef.current.knownDevices.map(device => device.id).filter(id => !found.has(id))
+    const failed = new Set<string>()
+    if (ids.length > 0) {
+      const results = await Promise.allSettled(ids.map(id => client.lookupDevice(id)))
+      if (clientRef.current !== client) return
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          found.set(result.value.id, { ...result.value, checkedAt })
+        } else {
+          failed.add(ids[index])
+        }
+      })
+    }
+    setState(current => {
+      const updated = current.knownDevices.map(device => {
+        if (found.has(device.id)) return found.get(device.id)!
+        if (failed.has(device.id)) return { ...device, checkedAt: '' }
+        return device
+      })
+      const existingIds = new Set(updated.map(d => d.id))
+      for (const [id, dev] of found) {
+        if (!existingIds.has(id)) {
+          updated.push(dev)
+        }
+      }
+      return { ...current, knownDevices: updated }
+    })
+    if (failed.size > 0 && ids.length > 0) throw new Error('Some devices could not be checked. Their presence is unknown; verify the signaling server and device IDs.')
   }, [])
 
   const forgetTrustedDevice = useCallback(async (id: string) => {

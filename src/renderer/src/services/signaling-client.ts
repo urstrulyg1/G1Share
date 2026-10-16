@@ -21,6 +21,11 @@ export class SignalingClient {
     await this.call('POST', '/api/v1/devices/heartbeat', {})
   }
 
+  async listDevices(): Promise<DeviceSummary[]> {
+    const result = await this.call<{ devices: DeviceSummary[] }>('GET', '/api/v1/devices')
+    return Array.isArray(result?.devices) ? result.devices : []
+  }
+
   async lookupDevice(deviceId: string): Promise<DeviceSummary> {
     const id = normalizeDeviceId(deviceId)
     if (!isValidDeviceId(id)) throw new TypeError('Enter a valid G1Viewer device ID.')

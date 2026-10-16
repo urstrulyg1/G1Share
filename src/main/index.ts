@@ -262,30 +262,26 @@ function validateSignalingURL(input: string): string {
 }
 
 async function loadSettings(): Promise<AppSettings> {
-  if (settingsPromise) return settingsPromise
-  settingsPromise = (async () => {
-    const defaultAutoUrl = await getAutomaticSignalingUrl()
-    let contents: string
-    try {
-      contents = await readFile(settingsPath(), 'utf8')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      const configured = (process.env.G1VIEWER_SIGNALING_URL || process.env.OPENDESK_SIGNALING_URL)?.trim()
-      return { signalingUrl: configured ? validateSignalingURL(configured) : defaultAutoUrl }
-    }
-    try {
-      const data: unknown = JSON.parse(contents)
-      if (!data || typeof data !== 'object') throw new Error('missing settings')
-      const { signalingUrl, deviceName } = data as Partial<AppSettings>
-      const configured = signalingUrl?.trim()
-      const effectiveUrl = configured ? validateSignalingURL(configured) : defaultAutoUrl
-      if (deviceName !== undefined && (typeof deviceName !== 'string' || !deviceName.trim() || Buffer.byteLength(deviceName, 'utf8') > 80)) throw new Error('invalid device name')
-      return { signalingUrl: effectiveUrl, ...(deviceName === undefined ? {} : { deviceName }) }
-    } catch {
-      return { signalingUrl: defaultAutoUrl }
-    }
-  })()
-  return settingsPromise
+  const currentAutoUrl = autoSignalingManager ? autoSignalingManager.getActiveUrl() : await getAutomaticSignalingUrl()
+  let contents: string
+  try {
+    contents = await readFile(settingsPath(), 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    const configured = (process.env.G1VIEWER_SIGNALING_URL || process.env.OPENDESK_SIGNALING_URL)?.trim()
+    return { signalingUrl: configured ? validateSignalingURL(configured) : currentAutoUrl }
+  }
+  try {
+    const data: unknown = JSON.parse(contents)
+    if (!data || typeof data !== 'object') throw new Error('missing settings')
+    const { signalingUrl, deviceName } = data as Partial<AppSettings>
+    const configured = signalingUrl?.trim()
+    const effectiveUrl = configured ? validateSignalingURL(configured) : currentAutoUrl
+    if (deviceName !== undefined && (typeof deviceName !== 'string' || !deviceName.trim() || Buffer.byteLength(deviceName, 'utf8') > 80)) throw new Error('invalid device name')
+    return { signalingUrl: effectiveUrl, ...(deviceName === undefined ? {} : { deviceName }) }
+  } catch {
+    return { signalingUrl: currentAutoUrl }
+  }
 }
 
 async function setSignalingURL(value: string): Promise<string> {

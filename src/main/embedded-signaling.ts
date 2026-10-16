@@ -304,7 +304,7 @@ export class EmbeddedSignalingBroker {
   }
 }
 
-export function createSignalingHttpServer(broker: EmbeddedSignalingBroker): http.Server {
+export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manager?: AutoSignalingManager): http.Server {
   return http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.setHeader('Cache-Control', 'no-store')
@@ -339,6 +339,18 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker): http
     if (req.method === 'GET' && path === '/readyz') {
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ready', service: 'opendesk-signaling', version: SERVICE_VERSION }))
+      return
+    }
+
+    if (req.method === 'GET' && path === '/api/v1/coordinator') {
+      res.writeHead(200)
+      res.end(JSON.stringify({
+        status: 'ready',
+        service: 'opendesk-signaling',
+        version: SERVICE_VERSION,
+        isCoordinator: manager ? manager.getIsCoordinator() : true,
+        activeUrl: manager ? manager.getActiveUrl() : 'http://127.0.0.1:8787'
+      }))
       return
     }
 
@@ -430,7 +442,7 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker): http
     }
 
     if (req.method === 'GET' && path === '/api/v1/devices') {
-      const devices = broker.listOnlineDevices()
+      const devices = manager ? await manager.listAllOnlineDevices() : broker.listOnlineDevices()
       res.writeHead(200)
       res.end(JSON.stringify({ devices }))
       return
@@ -438,7 +450,10 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker): http
 
     if (req.method === 'GET' && path.startsWith('/api/v1/devices/')) {
       const targetId = path.slice('/api/v1/devices/'.length)
-      const device = broker.getDeviceSummary(targetId)
+      let device = broker.getDeviceSummary(targetId)
+      if (!device && manager) {
+        device = await manager.findDeviceAcrossPeers(targetId)
+      }
       if (!device) {
         res.writeHead(404)
         res.end(JSON.stringify({ error: { code: 'not_found', message: 'Target device not found.' } }))
@@ -553,10 +568,19 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker): http
 export function getLanIpv4Addresses(): string[] {
   const addresses: string[] = []
   const ifaces = os.networkInterfaces()
-  for (const name of Object.keys(ifaces)) {
+  const names = Object.keys(ifaces).sort((a, b) => {
+    const isVirtualA = /docker|vbox|vmnet|tailscale|utun|tun|tap|virbr|bridge/i.test(a)
+    const isVirtualB = /docker|vbox|vmnet|tailscale|utun|tun|tap|virbr|bridge/i.test(b)
+    if (isVirtualA && !isVirtualB) return 1
+    if (!isVirtualA && isVirtualB) return -1
+    return 0
+  })
+  for (const name of names) {
     for (const iface of ifaces[name] || []) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        addresses.push(iface.address)
+        if (!iface.address.startsWith('169.254.')) {
+          addresses.push(iface.address)
+        }
       }
     }
   }
@@ -564,7 +588,7 @@ export function getLanIpv4Addresses(): string[] {
 }
 
 export function getSubnetBroadcastAddresses(): string[] {
-  const broadcasts: string[] = ['255.255.255.255']
+  const broadcasts: string[] = ['127.0.0.1', '255.255.255.255']
   const ifaces = os.networkInterfaces()
   for (const name of Object.keys(ifaces)) {
     for (const iface of ifaces[name] || []) {
@@ -591,16 +615,19 @@ export class AutoSignalingManager {
   private activeUrl = ''
   private isCoordinator = false
   private stopped = false
+  private peerCoordinators = new Set<string>()
+  private announceTimer: ReturnType<typeof setInterval> | null = null
 
   async start(): Promise<string> {
     // 1. Try to start local HTTP server on port 8787, or next available port if taken.
     await this.startHttpServer()
 
-    // 2. Discover if an existing coordinator is already on the LAN.
-    const discovered = await this.probeLanCoordinator(400)
-    if (discovered) {
+    // 2. Discover if an existing coordinator is already on the LAN or local host.
+    const discovered = await this.discoverCoordinator(400)
+    if (discovered && !this.isOwnCoordinatorUrl(discovered)) {
       this.activeUrl = discovered
       this.isCoordinator = false
+      this.peerCoordinators.add(discovered)
     } else {
       this.activeUrl = `http://127.0.0.1:${this.serverPort}`
       this.isCoordinator = true
@@ -609,11 +636,22 @@ export class AutoSignalingManager {
     // 3. Start UDP responder so other devices can discover this coordinator.
     this.startUdpListener()
 
+    // 4. Start periodic background announcer & peer discovery.
+    this.startBackgroundTasks()
+
     return this.activeUrl
   }
 
   getActiveUrl(): string {
     return this.activeUrl || `http://127.0.0.1:${this.serverPort}`
+  }
+
+  getIsCoordinator(): boolean {
+    return this.isCoordinator
+  }
+
+  getServerPort(): number {
+    return this.serverPort
   }
 
   getCoordinatorLanUrl(): string {
@@ -622,9 +660,52 @@ export class AutoSignalingManager {
     return `http://${ip}:${this.serverPort}`
   }
 
+  isOwnCoordinatorUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url)
+      const port = parseInt(parsed.port || '80', 10)
+      if (port === this.serverPort) {
+        if (['127.0.0.1', 'localhost', '0.0.0.0'].includes(parsed.hostname)) return true
+        const lanIps = getLanIpv4Addresses()
+        if (lanIps.includes(parsed.hostname)) return true
+      }
+    } catch { /* ignore */ }
+    return false
+  }
+
+  async checkHttpCoordinator(origin: string): Promise<boolean> {
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 300)
+      const res = await fetch(`${origin}/readyz`, { signal: controller.signal })
+      clearTimeout(timer)
+      if (res.ok) {
+        const body = (await res.json()) as { service?: string }
+        return body.service === 'opendesk-signaling'
+      }
+    } catch {
+      // not reachable
+    }
+    return false
+  }
+
+  private async discoverCoordinator(timeoutMs: number): Promise<string | null> {
+    // If local port 8787 was taken (e.g. running multiple instances locally), check port 8787
+    if (this.serverPort !== 8787) {
+      const isLocalCoordinator = await this.checkHttpCoordinator('http://127.0.0.1:8787')
+      if (isLocalCoordinator) return 'http://127.0.0.1:8787'
+    }
+
+    // Probe LAN via UDP broadcast
+    const udpFound = await this.probeLanCoordinator(timeoutMs)
+    if (udpFound) return udpFound
+
+    return null
+  }
+
   private startHttpServer(): Promise<number> {
     return new Promise(resolve => {
-      this.server = createSignalingHttpServer(this.broker)
+      this.server = createSignalingHttpServer(this.broker, this)
 
       const tryPort = (port: number) => {
         this.server!.listen(port, '0.0.0.0', () => {
@@ -665,16 +746,15 @@ export class AutoSignalingManager {
         }
       }, timeoutMs)
 
-      probeSocket.on('message', (msg, rinfo) => {
+      probeSocket.on('message', (msg) => {
         try {
           const text = msg.toString('utf8')
           if (text.startsWith('G1VIEWER_COORDINATOR:')) {
             const url = text.slice('G1VIEWER_COORDINATOR:'.length).trim()
-            if (url && !resolved) {
+            if (url && !this.isOwnCoordinatorUrl(url) && !resolved) {
               resolved = true
               clearTimeout(timer)
               try { probeSocket?.close() } catch { /* ignore */ }
-              // If the coordinator announced itself from another machine or same, resolve
               resolve(url)
             }
           }
@@ -694,8 +774,14 @@ export class AutoSignalingManager {
         try {
           probeSocket?.setBroadcast(true)
           const message = Buffer.from('G1VIEWER_PING')
-          for (const bcast of getSubnetBroadcastAddresses()) {
-            probeSocket?.send(message, 0, message.length, 8789, bcast, () => {})
+          const sendPings = () => {
+            for (const bcast of getSubnetBroadcastAddresses()) {
+              probeSocket?.send(message, 0, message.length, 8789, bcast, () => {})
+            }
+          }
+          sendPings()
+          if (timeoutMs > 200) {
+            setTimeout(() => { if (!resolved) sendPings() }, 150)
           }
         } catch { /* ignore */ }
       })
@@ -712,6 +798,11 @@ export class AutoSignalingManager {
           const lanUrl = this.getCoordinatorLanUrl()
           const reply = Buffer.from(`G1VIEWER_COORDINATOR:${lanUrl}`)
           this.udpSocket?.send(reply, 0, reply.length, rinfo.port, rinfo.address, () => {})
+        } else if (text.startsWith('G1VIEWER_COORDINATOR:')) {
+          const url = text.slice('G1VIEWER_COORDINATOR:'.length).trim()
+          if (url && !this.isOwnCoordinatorUrl(url)) {
+            this.peerCoordinators.add(url)
+          }
         }
       })
       this.udpSocket.on('error', () => { /* ignore */ })
@@ -721,8 +812,132 @@ export class AutoSignalingManager {
     } catch { /* ignore */ }
   }
 
+  private startBackgroundTasks(): void {
+    if (this.stopped) return
+    this.announceTimer = setInterval(() => {
+      if (this.stopped) return
+      void this.performPeriodicDiscovery()
+    }, 10_000)
+
+    setTimeout(() => {
+      if (!this.stopped) void this.scanSubnetForCoordinators()
+    }, 1500)
+  }
+
+  private async performPeriodicDiscovery(): Promise<void> {
+    if (this.stopped) return
+    try {
+      if (this.udpSocket && this.isCoordinator) {
+        const lanUrl = this.getCoordinatorLanUrl()
+        const announceMsg = Buffer.from(`G1VIEWER_COORDINATOR:${lanUrl}`)
+        for (const bcast of getSubnetBroadcastAddresses()) {
+          this.udpSocket.send(announceMsg, 0, announceMsg.length, 8789, bcast, () => {})
+        }
+      }
+    } catch { /* ignore */ }
+
+    for (const peerUrl of Array.from(this.peerCoordinators)) {
+      const ok = await this.checkHttpCoordinator(peerUrl)
+      if (!ok) {
+        this.peerCoordinators.delete(peerUrl)
+      }
+    }
+  }
+
+  private async scanSubnetForCoordinators(): Promise<void> {
+    const lanIps = getLanIpv4Addresses()
+    if (lanIps.length === 0) return
+    const selfIps = new Set([...lanIps, '127.0.0.1', 'localhost'])
+
+    for (const lanIp of lanIps) {
+      if (this.stopped) return
+      const parts = lanIp.split('.')
+      if (parts.length !== 4) continue
+      const prefix = `${parts[0]}.${parts[1]}.${parts[2]}`
+
+      const targetIps: string[] = []
+      const hostNum = parseInt(parts[3], 10)
+      for (let i = Math.max(1, hostNum - 5); i <= Math.min(254, hostNum + 5); i++) {
+        const ip = `${prefix}.${i}`
+        if (!selfIps.has(ip)) targetIps.push(ip)
+      }
+      for (let i = 1; i <= 25; i++) {
+        const ip = `${prefix}.${i}`
+        if (!selfIps.has(ip) && !targetIps.includes(ip)) targetIps.push(ip)
+      }
+
+      for (let i = 0; i < targetIps.length; i += 16) {
+        if (this.stopped) return
+        const batch = targetIps.slice(i, i + 16)
+        await Promise.all(
+          batch.map(async ip => {
+            const url = `http://${ip}:8787`
+            if (this.peerCoordinators.has(url)) return
+            const isCoordinator = await this.checkHttpCoordinator(url)
+            if (isCoordinator && !this.isOwnCoordinatorUrl(url)) {
+              this.peerCoordinators.add(url)
+            }
+          })
+        )
+      }
+    }
+  }
+
+  async listAllOnlineDevices(): Promise<(DeviceRecord & { online: boolean })[]> {
+    const local = this.broker.listOnlineDevices()
+    const map = new Map<string, DeviceRecord & { online: boolean }>()
+    for (const dev of local) map.set(dev.id, dev)
+
+    for (const peerUrl of this.peerCoordinators) {
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 1000)
+        const res = await fetch(`${peerUrl}/api/v1/devices`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal
+        })
+        clearTimeout(timer)
+        if (res.ok) {
+          const body = (await res.json()) as { devices?: (DeviceRecord & { online: boolean })[] }
+          if (Array.isArray(body?.devices)) {
+            for (const dev of body.devices) {
+              if (!map.has(dev.id)) map.set(dev.id, dev)
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    return Array.from(map.values())
+  }
+
+  async findDeviceAcrossPeers(targetId: string): Promise<(DeviceRecord & { online: boolean }) | null> {
+    if (this.peerCoordinators.size === 0) {
+      await this.scanSubnetForCoordinators()
+    }
+    for (const peerUrl of this.peerCoordinators) {
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 1000)
+        const res = await fetch(`${peerUrl}/api/v1/devices/${targetId}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal
+        })
+        clearTimeout(timer)
+        if (res.ok) {
+          const device = (await res.json()) as DeviceRecord & { online: boolean }
+          if (device && device.id === targetId) return device
+        }
+      } catch { /* ignore */ }
+    }
+    return null
+  }
+
   async stop(): Promise<void> {
     this.stopped = true
+    if (this.announceTimer) {
+      clearInterval(this.announceTimer)
+      this.announceTimer = null
+    }
     try { this.udpSocket?.close() } catch { /* ignore */ }
     if (this.server) {
       await new Promise<void>(resolve => {
