@@ -1272,14 +1272,18 @@ export class WanRelayBridge {
         const normalizedFrom = normalizeDeviceId(payload.fromDeviceId)
         const normalizedTo = normalizeDeviceId(payload.toDeviceId)
         const permissions = normalizedPermissions(payload.session.requestedPermissions)
+        const createdAt = Date.parse(payload.session.createdAt)
         const expiresAt = Date.parse(payload.session.expiresAt)
+        const now = Date.now()
         if (this.localDeviceId && normalizedTo === this.localDeviceId && normalizedFrom !== normalizedTo &&
             payload.session.id === payload.sessionId && payload.session.fromDeviceId === normalizedFrom &&
             !!payload.peer && typeof payload.peer === 'object' &&
             normalizeDeviceId((payload.peer as DeviceRecord).id) === normalizedFrom &&
             (payload.peer as DeviceRecord).publicKey === signerPublicKey &&
-            payload.session.toDeviceId === normalizedTo && permissions && Number.isFinite(expiresAt) &&
-            expiresAt > Date.now() && expiresAt <= Date.now() + 90_000) {
+            payload.session.toDeviceId === normalizedTo && permissions &&
+            Number.isFinite(createdAt) && createdAt >= now - 2 * 60 * 1000 && createdAt <= now + 30_000 &&
+            Number.isFinite(expiresAt) && expiresAt > createdAt && expiresAt <= createdAt + 90_000 &&
+            expiresAt > now && expiresAt <= now + 90_000) {
           const existing = this.broker.getSession(payload.sessionId)
           if (existing) return
           const session: SessionRecord = {
