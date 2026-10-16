@@ -144,9 +144,16 @@ function deviceIdForPublicKey(publicKey: string): string {
     expect(details.peer.id).toBe(devId1)
     expect(details.peer.publicKey).toBe(pub1B64)
 
-    // A non-participant cannot retrieve session details.
-    const detailsFromOther = await signedRequest(privKey1, devId1, 'GET', `/api/v1/sessions/${session.id}`)
-    expect(detailsFromOther.status).toBe(200)
+    // A third authenticated device cannot retrieve another pair's session details.
+    const otherPair = generateKeyPairSync('ed25519')
+    const otherPublicKey = otherPair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
+    const otherDeviceId = deviceIdForPublicKey(otherPublicKey)
+    const otherRegistration = await signedRequest(otherPair.privateKey, otherDeviceId, 'POST', '/api/v1/devices/register', {
+      id: otherDeviceId, publicKey: otherPublicKey, name: 'Other device', platform: 'linux', appVersion: '0.1.0'
+    }, otherPublicKey)
+    expect(otherRegistration.status).toBe(200)
+    const detailsFromOther = await signedRequest(otherPair.privateKey, otherDeviceId, 'GET', `/api/v1/sessions/${session.id}`)
+    expect(detailsFromOther.status).toBe(404)
 
     // Device 2 polls events and sees session.request
     const poll2 = await signedRequest(privKey2, devId2, 'GET', '/api/v1/events?cursor=0&limit=10')
