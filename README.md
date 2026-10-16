@@ -6,7 +6,7 @@ G1Viewer is an account-free, consent-first desktop remote-viewing prototype buil
 
 ## Downloads
 
-Standalone, uncompressed packages and installers are published on [GitHub Releases](https://github.com/urstrulyg1/G1Viewer/releases/latest) and downloadable by anyone without logging in or extracting zip archives:
+**Download installers from [G1Viewer Releases](https://github.com/urstrulyg1/G1Viewer/releases/latest) — do not download them from Actions → Artifacts.** GitHub Actions artifacts are always delivered as ZIP archives, even when the artifact contains a single native installer. The ZIP artifact links on workflow-run pages are for CI inspection only. The public release page publishes each installer as an individual native file; the direct links below return the `.exe`, `.dmg`, `.deb`, or `.AppImage` package itself:
 
 | Operating System | Architecture | Package Format | Direct Download Link |
 | :--- | :--- | :--- | :--- |
