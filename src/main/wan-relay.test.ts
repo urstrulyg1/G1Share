@@ -154,7 +154,9 @@ function createTestIdentity() {
     const signalMessage = signedPeerSignal(identityA, sessionId, 'answer', answerPayload)
     const aSession = (managerA as any).broker.getSession(sessionId)
     expect(aSession.status).toBe('active')
+    expect(Date.parse(aSession.expiresAt)).toBeGreaterThan(Date.now() + 60 * 60 * 1000)
     expect((managerB as any).broker.getSession(sessionId)?.status).toBe('active')
+    expect(Date.parse((managerB as any).broker.getSession(sessionId).expiresAt)).toBeGreaterThan(Date.now() + 60 * 60 * 1000)
     const signalEnvelopeProbe = (managerA as any).wanRelay.createEnvelope(devBId, {
       action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: signalMessage
     })
