@@ -1,84 +1,90 @@
-# G1Viewer Production Readiness & Security Audit
+# G1Viewer Production Readiness & Security Audit — Remediation Update
 Date: 2026-10-16
 Repository: https://github.com/urstrulyg1/G1Viewer
-Reviewed commit: 845953a4f49f672934ad68d411a4c0a7de0ff5d1
+Baseline audited commit: 845953a4f49f672934ad68d411a4c0a7de0ff5d1
+Remediation branch: `feature/production-security-hardening`
 
-## Verdict
-NOT READY FOR PUBLIC PRODUCTION RELEASE. GitHub Actions passed, but source review found high-risk trust-boundary and authorization gaps in the embedded/WAN signaling path. This was a read-only remote review; no repository files were changed and no local test commands were run from this environment.
+## Release verdict
 
-## Verified CI
-Workflow run: https://github.com/urstrulyg1/G1Viewer/actions/runs/38896588814
-Observed success: TypeScript typecheck, Vitest, desktop build, npm audit at high severity, Go tests with race detector, go vet, headless two-client E2E, Windows x64/ARM64, macOS x64/ARM64, Linux x64 DEB/AppImage package builds, and artifact validation.
+**Not yet approved for public production release.** The critical code-level findings from the initial audit have been addressed on the remediation branch, with regression coverage added. This does not substitute for a final successful run on the branch head, independent review of the cryptographic protocol, or physical-device/network validation.
 
-CI proves those jobs passed, not real-world cross-NAT connectivity or production security. README documents real desktop media/input/audio/file-transfer validation as outstanding.
+The original `main` branch has not been changed by the remediation work. The changes are isolated on the feature branch for review.
 
-## Findings
+## Implemented remediation
 
-### P0 — WAN relay payloads are not authenticated/authorized
-File: src/main/embedded-signaling.ts, WanRelayBridge.handleIncomingRawMessage / handleRelayMessage.
-Evidence: relay payload is parsed as JSON and dispatched by action. session_request injects a session and emits an event; session_decision changes session status based on payload.accepted; signal emits a signal event based on target ID; session_close marks a session closed. These routes do not cryptographically authenticate relay sender or bind the action to a trusted session participant/state.
-Impact: anyone able to publish on a target relay topic may forge events, interfere with sessions, or cause denial of service. Peer-signal signing exists in a separate path but does not authenticate every relay action.
-Remediation: define a versioned signed envelope; verify identity public key, device-ID binding, session participant membership, action-specific state transition, expiry, nonce/replay protection, payload bounds, and permission subset before mutating state. Add isolated tests for forged sender, forged decision, replay, stale session, signal injection, and unauthorized close.
+### P0 — Authenticated, confidential WAN relay envelopes
+File: `src/main/embedded-signaling.ts`
 
-### P0 — Embedded broker does not enforce participant authorization consistently
-File: src/main/embedded-signaling.ts, EmbeddedSignalingBroker.forwardSignal / closeSession.
-Evidence: forwardSignal verifies existence and status, but does not require fromDeviceId to equal either session participant. closeSession closes any existing session and computes destination as the initiator if the caller is not the initiator.
-Impact: another authenticated device on this embedded coordinator can try to inject signaling or terminate sessions it does not own.
-Remediation: reject unless actor is exactly fromDeviceId or toDeviceId; also enforce current session status and expiry. Make close/forward mutation and event emission atomic at the logical level. Test both valid participants and a third device.
+- Added versioned Ed25519-signed relay envelopes binding sender, recipient, timestamp, nonce, and payload/ciphertext.
+- Added end-to-end encryption for all non-discovery WAN messages. Payloads use ephemeral X25519 key agreement, HKDF-SHA-256, and AES-256-GCM; the long-term Ed25519 identity key remains local and is used for signatures.
+- The initial discovery query is the only permitted plaintext message; it contains discovery metadata only. Device summaries, session requests/decisions, WebRTC signaling, and session-close messages are encrypted.
+- Added timestamp freshness, replay rejection, message-size bounds, per-sender/global inbound rate limits, and observed-key continuity checks.
+- Bound peer metadata to the signing key and recipient identity. Invalid signatures, malformed ciphertext, expired messages, wrong recipients, and replayed nonces are rejected before dispatch.
 
-### P1 — Device-ID-derived relay topic is not authentication
-File: src/main/embedded-signaling.ts, deriveWanTopic.
-Evidence: topic is derived from a nine-digit device ID via SHA-256 truncated to 24 hex chars. The effective search space is bounded by possible IDs, not hash output length.
-Impact: topic secrecy cannot be treated as a security boundary; if the relay permits public subscribe/publish, knowledge or recovery of ID enables message access.
-Remediation: require cryptographic authorization independent of topic, validate relay access control/retention policies; consider random high-entropy routing identifiers or authenticated coordination.
+### P0 — Session authorization and signaling integrity
+Files: `src/main/embedded-signaling.ts`, `src/main/index.ts`
 
-### P1 — Unsafe static TURN credential fallback
-File: src/main/embedded-signaling.ts, GET /api/v1/ice.
-Evidence: when TURN URLs are configured without username/credential env vars, handler emits username and credential 'g1viewer'.
-Impact: inappropriate for publicly reachable TURN service; may permit unauthorized relay use depending on server configuration.
-Remediation: do not send fixed fallback credentials. Require explicit credentials for local configured servers or issue short-lived TURN credentials from trusted service. Never expose long-lived TURN shared secret to clients.
+- Session signal forwarding and closure require a real session participant and a valid session state.
+- Embedded WebRTC offer/answer messages now require the sender's registered Ed25519 signature, a valid SDP payload, and the correct role (host sends offer; viewer sends answer).
+- Approved permissions must be a subset of requested permissions. Session decisions must have a boolean outcome and valid permission arrays.
+- Device registration rejects ID/public-key mismatches and key replacement attempts.
+- Electron navigation is restricted to the packaged renderer document (or same-origin development server); redirects to arbitrary file URLs and external origins are blocked, and IPC additionally validates the main-frame URL.
+- Session-detail retrieval is participant-only and returns both the session and peer summary expected by the approval flow.
+- WAN session requests fail closed if they cannot be injected locally or published to the relay; WAN decision/signal/close delivery failures are returned to the caller rather than silently reported as successful.
+- Accepted sessions receive an active-session expiry instead of retaining the short pending-request timeout. Expired/terminal sessions are cleaned up, and device/session registries are bounded.
 
-### P1 — Embedded signaling server listens on 0.0.0.0
-File: src/main/embedded-signaling.ts, AutoSignalingManager.startHttpServer.
-Evidence: server binds to all IPv4 interfaces. Signed authentication is applied to API routes, but health and coordinator discovery routes are unauthenticated and LAN-exposed.
-Impact: larger local-network attack surface; discovery/announcements are untrusted.
-Remediation: prefer loopback by default unless LAN hosting is an intentional product requirement; if LAN use is required, document threat model and harden all reachable endpoints/discovery, with untrusted-LAN tests.
+### P1 — TURN and LAN discovery hardening
+File: `src/main/embedded-signaling.ts`
 
-### P1 — Verify embedded session detail response contract
-Files: src/main/embedded-signaling.ts GET /api/v1/sessions/:id; src/main/index.ts decideSession.
-Evidence: embedded GET-session handler returns JSON.stringify(session), while decideSession expects response.session and response.peer. Need reproduce through actual caller to determine whether WAN incoming session approval fails on this path.
-Remediation: add an end-to-end test for embedded WAN request -> host sees peer identity -> user approves/rejects -> requester sees outcome. Align response types deliberately; do not patch based solely on static inference.
+- Removed the static `g1viewer/g1viewer` TURN credential fallback. TURN entries are omitted unless explicit credentials are configured.
+- Automatic coordinator discovery only accepts HTTP origins on loopback/private/link-local LAN addresses or `.local` hosts, rejects paths/credentials/query strings, and refuses redirects.
+- Added body validation for authenticated embedded signaling routes, device-name validation, and limits on challenge/session/device state.
 
-## Partially verified / not established
-- Signed HTTP API authentication exists in reviewed code, but the separate relay path does not apply equivalent verification.
-- Peer fingerprint trust and signed offer/answer verification are implemented in Electron main process; tests still need to cover WAN-delivered malicious events end-to-end.
-- STUN URLs are configured; arbitrary cross-NAT media is not proven. Real TURN-only tests with deployed TURN credentials are required.
-- Screen sharing, native input, Windows-only system audio and file transfer are explicitly documented in README as not verified on real desktops / real clients.
-- Unattended access is explicitly unavailable.
-- CI builds six installable formats and validates artifacts; signed/notarized production release remains outstanding.
-- Relay reconnection, pending-query cleanup, stale presence, slow request handling, rate limiting and long-poll resource use need soak/load testing.
+## Regression tests added or updated
 
-## Remediation plan
-P0:
-1. Fix participant authorization in forwardSignal and closeSession.
-2. Design and implement signed/authenticated WAN envelope with session binding, expiry and replay protection.
-3. Add attacker-model tests for forged requests, forged decisions, replayed messages, cross-session signals and unauthorized teardown.
-4. Add full embedded WAN approval E2E, including response-contract validation.
+- Session signals/closure from non-participants are rejected.
+- Invalid role and unsigned/invalid WebRTC signals are rejected; valid signed signals are accepted.
+- Session decisions cannot grant unrequested permissions.
+- Session details include peer identity for participants and are hidden from third parties.
+- WAN envelopes are encrypted, tampering and replay are rejected, and a non-participant cannot forge a session decision.
+- Active WAN sessions get the longer active TTL.
+- LAN coordinator discovery rejects external or malformed targets.
+- Renderer-navigation policy tests reject arbitrary file URLs, external origins, and cross-origin development navigation.
 
-P1:
-1. Remove static TURN credential fallback.
-2. Decide and document loopback-vs-LAN binding; harden coordinator discovery.
-3. Implement TURN-only WebRTC integration tests over a controlled test network.
-4. Run real host/viewer tests on Windows, macOS and Linux, and clean-installer smoke tests.
-5. Test reconnect, shutdown, stale presence, oversized inputs, slow clients and concurrency.
+## CI evidence
 
-P2:
-1. Add privacy-safe session diagnostics and correlation IDs.
-2. Add soak tests and resource/latency baselines.
-3. Complete signing/notarization and verify release provenance.
-4. Clearly publish the tested platform and capability matrix.
+The GitHub Actions run for commit `a2ea98c209a022fa70de954729f8a89d11df2cdd` passed the core verification job:
+- TypeScript typecheck
+- Vitest: **18 test files, 143 tests passed**
+- Desktop build
+- `npm audit --audit-level=high`
+- Go signaling tests with race detector and `go vet`
 
-## Reproducible CI commands
+Run: https://github.com/urstrulyg1/G1Viewer/actions/runs/38899798261
+
+Run 38900330101 passed the core verification job after the renderer-navigation regression tests were added. The subsequent main-process integration of that policy and later timestamp/input-rate hardening have new checks queued; verify the latest PR-head run before merging. Earlier run 38900259153 passed the core verification, dashboard screenshot, headless two-client E2E, Linux AppImage/DEB, and macOS x64/ARM64 build jobs; Windows x64/ARM64 packaging was still running at report time. CI results are not proof of real-world cross-NAT media transport or physical-device input/capture behavior.
+
+## Remaining release gates
+
+### P0 — Required before public release
+1. Obtain an independent cryptographic review of the Ed25519-to-X25519 key conversion, envelope canonicalization, nonce/replay handling, and AES-GCM/HKDF construction. Do not ship the new protocol until this review and the full current-head CI pass are complete.
+2. Test two real devices across separate networks with STUN-only, TURN-only, restrictive NAT, IPv4/IPv6, network changes, disconnect/reconnect, and relay failure. Verify media transport separately from signaling delivery.
+3. Test real screen capture, native keyboard/mouse input, clipboard, file transfer, and supported audio behavior on actual Windows, macOS, and Linux desktops. Headless Chromium tests do not prove native behavior.
+4. Run clean-install and upgrade smoke tests on each supported OS/architecture.
+
+### P1 — Required for a supported release
+1. Set up code signing and macOS notarization using release-owner-controlled certificates/secrets; current installers are not signed/notarized.
+2. Automate dependency license-policy checks and document any required notices.
+3. Validate relay provider availability, retention, and abuse policies. Payload contents are end-to-end encrypted, but the public relay can still observe device IDs/public keys, timing, message sizes, and topic metadata and can deny service.
+4. Perform a soak test for long-running sessions, relay reconnects, event overflow, memory/CPU use, and repeated session creation/closure.
+
+### Product limitations to disclose
+- Unattended access remains unavailable.
+- The README already states that native input, system audio, real cross-device streaming, and real-client file transfer have not all been verified on physical desktops.
+- Universal cross-network connectivity must not be claimed without reproducible results for the supported network matrix.
+
+## Reproducible commands
+
 ```sh
 npm ci
 npm run typecheck
@@ -88,8 +94,14 @@ npm audit --audit-level=high
 (cd services/signaling && go test -race -cover ./... && go vet ./...)
 CHROME_PATH=/path/to/chrome npm run test:e2e
 ```
-The repository's CI workflow ran these checks successfully at the reviewed commit. The commands were not executed locally during this remote audit.
 
-## Changed files
-None. No fix was committed because these findings require coordinated protocol/authentication changes and regression tests; implementing a partial untested patch remotely would not be responsible for a security-sensitive remote-control application.
+## Changed application files
 
+- `src/main/embedded-signaling.ts`
+- `src/main/index.ts`
+- `src/main/embedded-signaling.test.ts`
+- `src/main/wan-relay.test.ts`
+- `src/main/renderer-navigation.ts`
+- `src/main/renderer-navigation.test.ts`
+
+The remediation branch is intentionally not merged into `main` pending a green run on its latest commit and the release gates above.

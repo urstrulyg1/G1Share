@@ -1,9 +1,33 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
 import { createPrivateKey, createPublicKey, sign, createHash, generateKeyPairSync } from 'node:crypto'
-import { EmbeddedSignalingBroker, createSignalingHttpServer, AutoSignalingManager } from './embedded-signaling'
+import { EmbeddedSignalingBroker, createSignalingHttpServer, AutoSignalingManager, isValidLanCoordinatorUrl } from './embedded-signaling'
 
 describe('EmbeddedSignalingBroker and HTTP Server', () => {
+function signedPeerSignal(
+  privateKey: ReturnType<typeof createPrivateKey>,
+  sessionId: string,
+  fromDeviceId: string,
+  type: 'offer' | 'answer',
+  payload: Record<string, unknown>
+) {
+  const digest = createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex')
+  const canonical = `opendesk-peer-signal-v1\n${sessionId}\n${fromDeviceId}\n${type}\n${digest}`
+  return {
+    fromDeviceId,
+    type,
+    payload,
+    signature: sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64url')
+  }
+}
+
+function deviceIdForPublicKey(publicKey: string): string {
+  const hash = createHash('sha256').update(publicKey, 'utf8').digest()
+  const numeric = (hash.readBigUInt64BE(0) % 900_000_000n + 100_000_000n).toString()
+  return `${numeric.slice(0, 3)}-${numeric.slice(3, 6)}-${numeric.slice(6, 9)}`
+}
+
+
   let broker: EmbeddedSignalingBroker
   let server: http.Server
   let port: number
@@ -12,12 +36,12 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
   const { publicKey: pubObj1, privateKey: privKey1 } = generateKeyPairSync('ed25519')
   const rawPub1 = pubObj1.export({ type: 'spki', format: 'der' }).subarray(-32)
   const pub1B64 = rawPub1.toString('base64url')
-  const devId1 = '11223344-55667788-99AABBCC-DDEEFF00'
+  const devId1 = deviceIdForPublicKey(pub1B64)
 
   const { publicKey: pubObj2, privateKey: privKey2 } = generateKeyPairSync('ed25519')
   const rawPub2 = pubObj2.export({ type: 'spki', format: 'der' }).subarray(-32)
   const pub2B64 = rawPub2.toString('base64url')
-  const devId2 = 'AABBCCDD-EEFF0011-22334455-66778899'
+  const devId2 = deviceIdForPublicKey(pub2B64)
 
   beforeAll(async () => {
     broker = new EmbeddedSignalingBroker()
@@ -72,6 +96,16 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
       body: bodyText || undefined
     })
   }
+
+  it('restricts automatic coordinator discovery to local-network HTTP origins', () => {
+    expect(isValidLanCoordinatorUrl('http://192.168.1.12:8787')).toBe(true)
+    expect(isValidLanCoordinatorUrl('http://10.0.0.4:8788')).toBe(true)
+    expect(isValidLanCoordinatorUrl('http://127.0.0.1:8787')).toBe(true)
+    expect(isValidLanCoordinatorUrl('https://example.com:8787')).toBe(false)
+    expect(isValidLanCoordinatorUrl('http://example.com:8787')).toBe(false)
+    expect(isValidLanCoordinatorUrl('http://192.168.1.12:8787/path')).toBe(false)
+    expect(isValidLanCoordinatorUrl('http://user:pass@192.168.1.12:8787')).toBe(false)
+  })
 
   it('serves /healthz and /readyz', async () => {
     const res = await fetch(`${baseUrl}/healthz`)
@@ -129,6 +163,25 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
     const { session } = (await sessRes.json()) as { session: { id: string; status: string } }
     expect(session.status).toBe('pending')
 
+    // Session details must include the authenticated peer required by the approval flow.
+    const detailsRes = await signedRequest(privKey2, devId2, 'GET', `/api/v1/sessions/${session.id}`)
+    expect(detailsRes.status).toBe(200)
+    const details = (await detailsRes.json()) as { session: { id: string }; peer: { id: string; publicKey: string } }
+    expect(details.session.id).toBe(session.id)
+    expect(details.peer.id).toBe(devId1)
+    expect(details.peer.publicKey).toBe(pub1B64)
+
+    // A third authenticated device cannot retrieve another pair's session details.
+    const otherPair = generateKeyPairSync('ed25519')
+    const otherPublicKey = otherPair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
+    const otherDeviceId = deviceIdForPublicKey(otherPublicKey)
+    const otherRegistration = await signedRequest(otherPair.privateKey, otherDeviceId, 'POST', '/api/v1/devices/register', {
+      id: otherDeviceId, publicKey: otherPublicKey, name: 'Other device', platform: 'linux', appVersion: '0.1.0'
+    }, otherPublicKey)
+    expect(otherRegistration.status).toBe(200)
+    const detailsFromOther = await signedRequest(otherPair.privateKey, otherDeviceId, 'GET', `/api/v1/sessions/${session.id}`)
+    expect(detailsFromOther.status).toBe(404)
+
     // Device 2 polls events and sees session.request
     const poll2 = await signedRequest(privKey2, devId2, 'GET', '/api/v1/events?cursor=0&limit=10')
     expect(poll2.status).toBe(200)
@@ -147,17 +200,17 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
     // Device 1 polls events and sees session.accepted
     const poll1 = await signedRequest(privKey1, devId1, 'GET', '/api/v1/events?cursor=0&limit=10')
     expect(poll1.status).toBe(200)
-    const batch1 = (await poll1.json()) as { events: Array<{ type: string; sessionId: string }> }
+    const batch1 = (await poll1.json()) as { events: Array<{ type: string; sessionId: string; sequence?: number }> }
     expect(batch1.events.some(e => e.type === 'session.accepted')).toBe(true)
 
-    // Device 1 sends WebRTC offer signal
-    const sigRes = await signedRequest(privKey1, devId1, 'POST', `/api/v1/sessions/${session.id}/signal`, {
-      message: { fromDeviceId: devId1, type: 'offer', payload: { sdp: 'fake-sdp' }, signature: 'sig' }
-    })
+    // The session host (Device 2) sends a signed WebRTC offer to the viewer (Device 1).
+    const offerPayload = { type: 'offer', sdp: 'v=0\\r\\na=ice-ufrag:test\\r\\n' }
+    const offer = signedPeerSignal(privKey2, session.id, devId2, 'offer', offerPayload)
+    const sigRes = await signedRequest(privKey2, devId2, 'POST', `/api/v1/sessions/${session.id}/signal`, { message: offer })
     expect(sigRes.status).toBe(200)
 
-    // Device 2 receives signal
-    const pollSig = await signedRequest(privKey2, devId2, 'GET', `/api/v1/events?cursor=${batch2.events[0].sequence}&limit=10`)
+    // Device 1 receives the authenticated signal.
+    const pollSig = await signedRequest(privKey1, devId1, 'GET', `/api/v1/events?cursor=${batch1.events[batch1.events.length - 1]?.sequence || 0}&limit=10`)
     expect(pollSig.status).toBe(200)
     const batchSig = (await pollSig.json()) as { events: Array<{ type: string }> }
     expect(batchSig.events.some(e => e.type === 'signal')).toBe(true)
@@ -165,6 +218,43 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
     // Close session
     const closeRes = await signedRequest(privKey1, devId1, 'POST', `/api/v1/sessions/${session.id}/close`, { reason: 'done' })
     expect(closeRes.status).toBe(200)
+  })
+
+  it('rejects session signaling and closure from a non-participant', () => {
+    const isolated = new EmbeddedSignalingBroker()
+    isolated.registerDevice(devId1, pub1B64, 'Laptop 1', 'darwin', '0.1.0')
+    isolated.registerDevice(devId2, pub2B64, 'Laptop 2', 'win32', '0.1.0')
+    const pair3 = generateKeyPairSync('ed25519')
+    const raw3 = pair3.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
+    const pub3 = raw3.toString('base64url')
+    const devId3 = deviceIdForPublicKey(pub3)
+    isolated.registerDevice(devId3, pub3, 'Laptop 3', 'linux', '0.1.0')
+
+    const created = isolated.createSession(devId1, devId2, ['view'])
+    expect(created).not.toBeNull()
+    const sessionId = created!.session.id
+
+    expect(isolated.forwardSignal(sessionId, devId3, { type: 'offer' })).toBe(false)
+    expect(isolated.closeSession(sessionId, devId3, 'unauthorized')).toBe(false)
+    expect(isolated.getSession(sessionId)?.status).toBe('pending')
+
+    expect(isolated.decideSession(sessionId, devId2, true, ['view'])).not.toBeNull()
+    const wrongRoleOffer = signedPeerSignal(privKey1, sessionId, devId1, 'offer', { type: 'offer', sdp: 'v=0\\r\\n' })
+    expect(isolated.forwardSignal(sessionId, devId1, wrongRoleOffer)).toBe(false)
+    const validAnswer = signedPeerSignal(privKey1, sessionId, devId1, 'answer', { type: 'answer', sdp: 'v=0\\r\\n' })
+    expect(isolated.forwardSignal(sessionId, devId1, validAnswer)).toBe(true)
+    expect(isolated.closeSession(sessionId, devId2, 'approved participant')).toBe(true)
+    expect(isolated.getSession(sessionId)?.status).toBe('closed')
+  })
+
+  it('does not allow an accepted session to grant permissions that were not requested', () => {
+    const isolated = new EmbeddedSignalingBroker()
+    isolated.registerDevice(devId1, pub1B64, 'Laptop 1', 'darwin', '0.1.0')
+    isolated.registerDevice(devId2, pub2B64, 'Laptop 2', 'win32', '0.1.0')
+    const created = isolated.createSession(devId1, devId2, ['view'])
+    expect(created).not.toBeNull()
+    expect(isolated.decideSession(created!.session.id, devId2, true, ['view', 'input'])).toBeNull()
+    expect(isolated.getSession(created!.session.id)?.status).toBe('pending')
   })
 
   it('AutoSignalingManager starts, provides an active URL, and stops cleanly', async () => {
