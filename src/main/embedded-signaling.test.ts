@@ -4,6 +4,13 @@ import { createPrivateKey, createPublicKey, sign, createHash, generateKeyPairSyn
 import { EmbeddedSignalingBroker, createSignalingHttpServer, AutoSignalingManager } from './embedded-signaling'
 
 describe('EmbeddedSignalingBroker and HTTP Server', () => {
+function deviceIdForPublicKey(publicKey: string): string {
+  const hash = createHash('sha256').update(publicKey, 'utf8').digest()
+  const numeric = (hash.readBigUInt64BE(0) % 900_000_000n + 100_000_000n).toString()
+  return `${numeric.slice(0, 3)}-${numeric.slice(3, 6)}-${numeric.slice(6, 9)}`
+}
+
+
   let broker: EmbeddedSignalingBroker
   let server: http.Server
   let port: number
@@ -12,12 +19,12 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
   const { publicKey: pubObj1, privateKey: privKey1 } = generateKeyPairSync('ed25519')
   const rawPub1 = pubObj1.export({ type: 'spki', format: 'der' }).subarray(-32)
   const pub1B64 = rawPub1.toString('base64url')
-  const devId1 = '11223344-55667788-99AABBCC-DDEEFF00'
+  const devId1 = deviceIdForPublicKey(pub1B64)
 
   const { publicKey: pubObj2, privateKey: privKey2 } = generateKeyPairSync('ed25519')
   const rawPub2 = pubObj2.export({ type: 'spki', format: 'der' }).subarray(-32)
   const pub2B64 = rawPub2.toString('base64url')
-  const devId2 = 'AABBCCDD-EEFF0011-22334455-66778899'
+  const devId2 = deviceIdForPublicKey(pub2B64)
 
   beforeAll(async () => {
     broker = new EmbeddedSignalingBroker()
