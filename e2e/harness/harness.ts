@@ -85,6 +85,7 @@ window.RTCPeerConnection = class extends NativeRTCPeerConnection {
 } as typeof RTCPeerConnection
 const errors: string[] = []
 const transferRecords: TransferRecord[] = []
+const signalHistory: string[] = []
 let activePermissions: SessionPermission[] = []
 
 // Native input path: the real RemoteInputController records every operation the OS would receive.
@@ -136,6 +137,8 @@ async function signedRequest(input: SignalingRequest, privileged = false): Promi
   const signalMatch = path.match(/^\/api\/v1\/sessions\/([a-f0-9]{32})\/signal$/)
   if (signalMatch && body) {
     const message = body.message as { type: string; payload: unknown; fromDeviceId?: string; signature?: string }
+    signalHistory.push(`out:${message.type}:${identity.deviceId}`)
+    if (signalHistory.length > 100) signalHistory.splice(0, signalHistory.length - 100)
     message.fromDeviceId = identity.deviceId
     const digest = await peerDigest(message.payload)
     message.signature = await signText(peerSignalCanonical(signalMatch[1], identity.deviceId, message.type, message.payload, digest))
@@ -379,6 +382,8 @@ async function handleEvent(event: SignalingEvent): Promise<void> {
     return
   }
   if (event.type === 'signal' && event.sessionId && event.message) {
+    signalHistory.push(`in:${event.message.type}:${event.message.fromDeviceId}`)
+    if (signalHistory.length > 100) signalHistory.splice(0, signalHistory.length - 100)
     if (controllerSessionId === event.sessionId && controller) {
       await controller.handleSignal(event.message)
     } else {
@@ -560,6 +565,8 @@ const harness = {
       const remote = records.find(record => record.type === 'remote-candidate' && record.id === pair?.remoteCandidateId)
       return {
         connectionState: peer.connectionState,
+        signalingState: peer.signalingState,
+        iceGatheringState: peer.iceGatheringState,
         iceConnectionState: peer.iceConnectionState,
         iceTransportPolicy: peer.getConfiguration().iceTransportPolicy ?? 'all',
         pairState: pair?.state ?? null,
@@ -585,6 +592,7 @@ const harness = {
       remoteInputActive: remoteInput.active,
       dataChannelReady: !!fileTransfers,
       transfers: transferRecords.slice(-50),
+      signals: signalHistory.slice(-50),
       errors: errors.slice(-20)
     }
   },
