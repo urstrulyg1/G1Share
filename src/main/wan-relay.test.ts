@@ -1,9 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
 import { createServer } from 'node:http'
+import { createHash, generateKeyPairSync } from 'node:crypto'
 import { EmbeddedSignalingBroker, AutoSignalingManager, deriveWanTopic } from './embedded-signaling'
 
 describe('WAN Relay cross-network signaling integration', () => {
+function createTestIdentity() {
+  const pair = generateKeyPairSync('ed25519')
+  const raw = pair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
+  const publicKey = raw.toString('base64url')
+  const hash = createHash('sha256').update(publicKey, 'utf8').digest()
+  const numeric = (hash.readBigUInt64BE(0) % 900_000_000n + 100_000_000n).toString()
+  const deviceId = `${numeric.slice(0, 3)}-${numeric.slice(3, 6)}-${numeric.slice(6, 9)}`
+  return { deviceId, publicKey, privateKey: pair.privateKey }
+}
+
+
   let mockRelayServer: http.Server
   let relayPort: number
   let relayUrl: string
@@ -55,8 +67,10 @@ describe('WAN Relay cross-network signaling integration', () => {
   })
 
   it('connects two AutoSignalingManager instances across separate simulated networks', async () => {
-    const devAId = '100-200-300'
-    const devBId = '400-500-600'
+    const identityA = createTestIdentity()
+    const identityB = createTestIdentity()
+    const devAId = identityA.deviceId
+    const devBId = identityB.deviceId
 
     const topicA = deriveWanTopic(devAId)
     const topicB = deriveWanTopic(devBId)
@@ -79,8 +93,8 @@ describe('WAN Relay cross-network signaling integration', () => {
     await managerA.start()
     await managerB.start()
 
-    managerA.setLocalIdentity(devAId, 'pubKeyA', 'Device A (Home)', 'darwin', '0.1.5')
-    managerB.setLocalIdentity(devBId, 'pubKeyB', 'Device B (Office)', 'win32', '0.1.5')
+    managerA.setLocalIdentity(devAId, identityA.publicKey, 'Device A (Home)', 'darwin', '0.1.5', identityA.privateKey)
+    managerB.setLocalIdentity(devBId, identityB.publicKey, 'Device B (Office)', 'win32', '0.1.5', identityB.privateKey)
 
     attachMockSub(topicA, (managerA as any).wanRelay)
     attachMockSub(topicB, (managerB as any).wanRelay)
