@@ -97,7 +97,7 @@ export async function loadNetworkBootstrapConfig(
   if (cached && cached.configUrl === configUrl && cached.expiresAt > now) return cached.config
 
   try {
-    const endpoint = parseHttpsEndpoint(configUrl, false)
+    const endpoint = parseHttpsEndpoint(configUrl, true)
     if (!endpoint) throw new Error('Network bootstrap URL must be a trusted HTTPS origin.')
     const response = await fetcher(endpoint, {
       method: 'GET',
