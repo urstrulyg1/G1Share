@@ -28,6 +28,7 @@ Files: `src/main/embedded-signaling.ts`, `src/main/index.ts`
 - Embedded WebRTC offer/answer messages now require the sender's registered Ed25519 signature, a valid SDP payload, and the correct role (host sends offer; viewer sends answer).
 - Approved permissions must be a subset of requested permissions. Session decisions must have a boolean outcome and valid permission arrays.
 - Device registration rejects ID/public-key mismatches and key replacement attempts.
+- Electron navigation is restricted to the packaged renderer document (or same-origin development server); redirects to arbitrary file URLs and external origins are blocked, and IPC additionally validates the main-frame URL.
 - Session-detail retrieval is participant-only and returns both the session and peer summary expected by the approval flow.
 - WAN session requests fail closed if they cannot be injected locally or published to the relay; WAN decision/signal/close delivery failures are returned to the caller rather than silently reported as successful.
 - Accepted sessions receive an active-session expiry instead of retaining the short pending-request timeout. Expired/terminal sessions are cleaned up, and device/session registries are bounded.
@@ -48,6 +49,7 @@ File: `src/main/embedded-signaling.ts`
 - WAN envelopes are encrypted, tampering and replay are rejected, and a non-participant cannot forge a session decision.
 - Active WAN sessions get the longer active TTL.
 - LAN coordinator discovery rejects external or malformed targets.
+- Renderer-navigation policy tests reject arbitrary file URLs, external origins, and cross-origin development navigation.
 
 ## CI evidence
 
@@ -60,7 +62,7 @@ The GitHub Actions run for commit `a2ea98c209a022fa70de954729f8a89d11df2cdd` pas
 
 Run: https://github.com/urstrulyg1/G1Viewer/actions/runs/38899798261
 
-That run also started the packaging and headless two-client E2E jobs. A later test-only change added active-session expiry assertions; its run must be checked before treating the current branch head as green. CI results are not proof of real-world cross-NAT media transport or physical-device input/capture behavior.
+Run 38900330101 passed the core verification job after the renderer-navigation regression tests were added. The subsequent main-process integration of that policy and later timestamp/input-rate hardening have new checks queued; verify the latest PR-head run before merging. Earlier run 38900259153 passed the core verification, dashboard screenshot, headless two-client E2E, Linux AppImage/DEB, and macOS x64/ARM64 build jobs; Windows x64/ARM64 packaging was still running at report time. CI results are not proof of real-world cross-NAT media transport or physical-device input/capture behavior.
 
 ## Remaining release gates
 
@@ -99,5 +101,7 @@ CHROME_PATH=/path/to/chrome npm run test:e2e
 - `src/main/index.ts`
 - `src/main/embedded-signaling.test.ts`
 - `src/main/wan-relay.test.ts`
+- `src/main/renderer-navigation.ts`
+- `src/main/renderer-navigation.test.ts`
 
 The remediation branch is intentionally not merged into `main` pending a green run on its latest commit and the release gates above.
