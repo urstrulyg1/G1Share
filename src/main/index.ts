@@ -335,7 +335,8 @@ async function renameLocalDevice(value: string): Promise<DeviceSummary> {
       identity.publicKey,
       name,
       process.platform,
-      app.getVersion()
+      app.getVersion(),
+      identity.privateKey
     )
   }
   return summary
