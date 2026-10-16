@@ -1388,7 +1388,7 @@ export class WanRelayBridge {
     const issuedAt = Date.now()
     const nonce = randomBytes(16).toString('hex')
     const targetRecord = this.remoteDevicesCache.get(normalizedTarget) || this.broker.getDeviceSummary(normalizedTarget)
-    const targetPublicKey = targetRecord?.publicKey || this.knownPublicKeys.get(normalizedTarget)
+    const targetPublicKey = this.knownPublicKeys.get(normalizedTarget) || targetRecord?.publicKey
     const base = {
       protocol: WAN_PROTOCOL,
       fromDeviceId: localId,
