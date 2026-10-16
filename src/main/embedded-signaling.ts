@@ -3,6 +3,7 @@ import dgram from 'node:dgram'
 import os from 'node:os'
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, sign, verify } from 'node:crypto'
 import { isValidDeviceId, normalizeDeviceId } from '../shared/device-id'
+import { fetchDynamicTurnServers, loadNetworkBootstrapConfig } from './network-config'
 
 export interface ServerEvent {
   sequence: number
@@ -227,14 +228,6 @@ function decryptWanPayload(
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new TypeError('Invalid decrypted WAN payload.')
   return payload as WanRelayMessage
 }
-const DEFAULT_STUN_URLS = [
-  'stun:stun.l.google.com:19302',
-  'stun:stun1.l.google.com:19302',
-  'stun:stun2.l.google.com:19302',
-  'stun:stun3.l.google.com:19302',
-  'stun:stun4.l.google.com:19302',
-  'stun:stun.cloudflare.com:3478'
-]
 
 export function deriveWanTopic(deviceId: string): string {
   const clean = normalizeDeviceId(deviceId).replace(/[^0-9A-Za-z]/g, '')
@@ -951,7 +944,8 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     }
 
     if (req.method === 'GET' && path === '/api/v1/ice') {
-      const stunList = [...DEFAULT_STUN_URLS]
+      const networkConfig = await loadNetworkBootstrapConfig()
+      const stunList = [...networkConfig.stunUrls]
       const envStun = (process.env.G1VIEWER_STUN_URLS || process.env.OPENDESK_STUN_URLS)?.trim()
       if (envStun) {
         for (const u of envStun.split(',')) {
@@ -962,19 +956,23 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       const iceServers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [
         { urls: stunList }
       ]
+
+      // If the dynamic bootstrap publishes a TURN credential endpoint, fetch short-lived
+      // credentials on demand. An unavailable endpoint degrades to STUN rather than blocking
+      // direct/LAN connections. Never ship shared static TURN credentials in the app.
+      iceServers.push(...await fetchDynamicTurnServers(networkConfig))
+
       const envTurn = (process.env.G1VIEWER_TURN_URLS || process.env.OPENDESK_TURN_URLS)?.trim()
       if (envTurn) {
         const turnUrls = envTurn.split(',').map(s => s.trim()).filter(Boolean)
         const username = (process.env.G1VIEWER_TURN_USERNAME || process.env.OPENDESK_TURN_USERNAME || '').trim()
         const credential = (process.env.G1VIEWER_TURN_CREDENTIAL || process.env.OPENDESK_TURN_CREDENTIAL || '').trim()
-        // Never publish static/default TURN credentials. If credentials are missing, keep STUN
-        // available and omit TURN rather than silently shipping a shared public credential.
         if (turnUrls.length > 0 && username && credential) {
           iceServers.push({ urls: turnUrls, username, credential })
         }
       }
       res.writeHead(200)
-      res.end(JSON.stringify({ iceServers }))
+      res.end(JSON.stringify({ iceServers, networkConfig: { source: 'dynamic-bootstrap', turnAvailable: iceServers.length > 1 } }))
       return
     }
 
@@ -1090,12 +1088,16 @@ export class WanRelayBridge {
   private inboundCount = 0
   private rawWindowStarted = Date.now()
   private rawMessageCount = 0
-  private relayBaseUrl = safeRelayBaseUrl(process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh')
+  private relayBaseUrl: string
 
   constructor(
     private readonly broker: EmbeddedSignalingBroker,
-    private readonly manager: AutoSignalingManager
-  ) {}
+    private readonly manager: AutoSignalingManager,
+    dynamicRelayUrl = 'https://ntfy.sh'
+  ) {
+    const configuredRelay = process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || dynamicRelayUrl
+    this.relayBaseUrl = safeRelayBaseUrl(configuredRelay)
+  }
 
   setLocalDevice(device: DeviceRecord): void {
     const normalized = normalizeDeviceId(device.id)
@@ -1520,7 +1522,10 @@ export class AutoSignalingManager {
   private localPrivateKey: ReturnType<typeof createPrivateKey> | null = null
 
   async start(): Promise<string> {
-    this.wanRelay = new WanRelayBridge(this.broker, this)
+    // Resolve public relay/STUN configuration at runtime. The bounded fetch falls back to
+    // built-in public STUN and the default relay if the bootstrap endpoint is unavailable.
+    const networkConfig = await loadNetworkBootstrapConfig()
+    this.wanRelay = new WanRelayBridge(this.broker, this, networkConfig.relayUrl)
     if (this.localPrivateKey) this.wanRelay.setSigningKey(this.localPrivateKey)
     if (this.localIdentityRecord) this.wanRelay.setLocalDevice(this.localIdentityRecord)
 

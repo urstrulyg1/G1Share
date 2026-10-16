@@ -258,21 +258,35 @@ function deviceIdForPublicKey(publicKey: string): string {
   })
 
   it('AutoSignalingManager starts, provides an active URL, and stops cleanly', async () => {
+    const previousBootstrap = process.env.G1VIEWER_NETWORK_CONFIG_URL
+    process.env.G1VIEWER_NETWORK_CONFIG_URL = 'http://invalid-bootstrap.test'
     const manager = new AutoSignalingManager()
-    const url = await manager.start()
-    expect(url).toMatch(/^http:\/\/(?:127\.0\.0\.1|localhost|\d+\.\d+\.\d+\.\d+):\d+$/)
-    expect(manager.getActiveUrl()).toBe(url)
-    await manager.stop()
+    try {
+      const url = await manager.start()
+      expect(url).toMatch(/^http:\/\/(?:127\.0\.0\.1|localhost|\d+\.\d+\.\d+\.\d+):\d+$/)
+      expect(manager.getActiveUrl()).toBe(url)
+    } finally {
+      await manager.stop()
+      if (previousBootstrap === undefined) delete process.env.G1VIEWER_NETWORK_CONFIG_URL
+      else process.env.G1VIEWER_NETWORK_CONFIG_URL = previousBootstrap
+    }
   })
 
   it('serves rich ICE configuration with Google and Cloudflare STUN servers', async () => {
-    const res = await signedRequest(privKey1, devId1, 'GET', '/api/v1/ice')
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as { iceServers: Array<{ urls: string[] }> }
-    expect(Array.isArray(json.iceServers)).toBe(true)
-    const allUrls = json.iceServers.flatMap(s => s.urls)
-    expect(allUrls.some(u => u.includes('google.com'))).toBe(true)
-    expect(allUrls.some(u => u.includes('cloudflare.com'))).toBe(true)
+    const previousBootstrap = process.env.G1VIEWER_NETWORK_CONFIG_URL
+    process.env.G1VIEWER_NETWORK_CONFIG_URL = 'http://invalid-bootstrap.test'
+    try {
+      const res = await signedRequest(privKey1, devId1, 'GET', '/api/v1/ice')
+      expect(res.status).toBe(200)
+      const json = (await res.json()) as { iceServers: Array<{ urls: string[] }> }
+      expect(Array.isArray(json.iceServers)).toBe(true)
+      const allUrls = json.iceServers.flatMap(s => s.urls)
+      expect(allUrls.some(u => u.includes('google.com'))).toBe(true)
+      expect(allUrls.some(u => u.includes('cloudflare.com'))).toBe(true)
+    } finally {
+      if (previousBootstrap === undefined) delete process.env.G1VIEWER_NETWORK_CONFIG_URL
+      else process.env.G1VIEWER_NETWORK_CONFIG_URL = previousBootstrap
+    }
   })
 
   it('derives deterministic WAN relay topics across formatting variations', async () => {

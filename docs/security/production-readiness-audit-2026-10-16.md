@@ -2,13 +2,14 @@
 Date: 2026-10-16
 Repository: https://github.com/urstrulyg1/G1Viewer
 Baseline audited commit: 845953a4f49f672934ad68d411a4c0a7de0ff5d1
-Remediation branch: `feature/production-security-hardening`
+Security-hardening merge: `cb987d960d76638a6c8794947a4584ed855421ab` (PR #7, merged to `main`)
+Dynamic-bootstrap work: PR #8, `feature/dynamic-zero-config-connect`
 
 ## Release verdict
 
-**Not yet approved for public production release.** The critical code-level findings from the initial audit have been addressed on the remediation branch, with regression coverage added. This does not substitute for a final successful run on the branch head, independent review of the cryptographic protocol, or physical-device/network validation.
+**Not yet approved for public production release.** The initial code-level security findings were addressed and merged to `main` with regression coverage. Dynamic network bootstrap is being added in PR #8. This does not substitute for green current-head CI, independent review of the cryptographic protocol, TURN infrastructure, or physical-device/network validation.
 
-The original `main` branch has not been changed by the remediation work. The changes are isolated on the feature branch for review.
+The security-hardening changes are now on `main`. The dynamic-bootstrap change remains under review in PR #8.
 
 ## Implemented remediation
 
@@ -51,6 +52,14 @@ File: `src/main/embedded-signaling.ts`
 - LAN coordinator discovery rejects external or malformed targets.
 - Renderer-navigation policy tests reject arbitrary file URLs, external origins, and cross-origin development navigation.
 
+## Dynamic device-ID-first network configuration (PR #8)
+
+- Added `src/main/network-config.ts` and a source-controlled `config/network-bootstrap.json` fetched from the project's HTTPS raw-content endpoint at runtime.
+- The bootstrap supplies the WAN signaling relay and STUN list; configuration is validated, bounded by a timeout, briefly cached, and falls back to safe defaults if unavailable.
+- Optional TURN credentials are fetched from a separately configured HTTPS endpoint and must expire within 24 hours. Static/shared TURN credentials are not embedded in the desktop client.
+- The default bootstrap currently has no TURN credential endpoint. Therefore the app needs no manual signaling URL for normal device-ID-first use, but cannot guarantee connections through every NAT/firewall until TURN infrastructure is deployed and real-network tested.
+- User-facing first-run and Settings guidance now describes this flow. Device fingerprint verification and host consent are intentionally retained.
+
 ## CI evidence
 
 The GitHub Actions run for commit `a2ea98c209a022fa70de954729f8a89d11df2cdd` passed the core verification job:
@@ -62,7 +71,7 @@ The GitHub Actions run for commit `a2ea98c209a022fa70de954729f8a89d11df2cdd` pas
 
 Run: https://github.com/urstrulyg1/G1Viewer/actions/runs/38899798261
 
-Run 38900330101 passed the core verification job after the renderer-navigation regression tests were added. The subsequent main-process integration of that policy and later timestamp/input-rate hardening have new checks queued; verify the latest PR-head run before merging. Earlier run 38900259153 passed the core verification, dashboard screenshot, headless two-client E2E, Linux AppImage/DEB, and macOS x64/ARM64 build jobs; Windows x64/ARM64 packaging was still running at report time. CI results are not proof of real-world cross-NAT media transport or physical-device input/capture behavior.
+PR #7 was squash-merged after the security-hardening work. PR #8 adds runtime-fetched relay/STUN configuration and optional ephemeral TURN credentials. The latest PR #8 core verification run passed TypeScript typecheck, unit tests, desktop build, npm audit, Go race tests, and Go vet; its current workflow run is tracked at https://github.com/urstrulyg1/G1Viewer/actions. CI results are not proof of real-world cross-NAT media transport or physical-device input/capture behavior.
 
 ## Remaining release gates
 
@@ -104,4 +113,4 @@ CHROME_PATH=/path/to/chrome npm run test:e2e
 - `src/main/renderer-navigation.ts`
 - `src/main/renderer-navigation.test.ts`
 
-The remediation branch is intentionally not merged into `main` pending a green run on its latest commit and the release gates above.
+PR #7 is merged into `main`; PR #8 remains separate until its latest CI and packaging jobs finish. The remaining release gates above still apply.
