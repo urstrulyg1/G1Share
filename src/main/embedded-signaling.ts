@@ -869,13 +869,13 @@ export class WanRelayBridge {
 
       const signed = JSON.parse(envelope.message) as unknown
       if (!this.verifyEnvelope(signed)) return
-      this.handleRelayMessage(signed.payload)
+      this.handleRelayMessage(signed.payload, signed.publicKey)
     } catch {
       // ignore parse errors
     }
   }
 
-  private handleRelayMessage(payload: WanRelayMessage): void {
+  private handleRelayMessage(payload: WanRelayMessage, signerPublicKey: string): void {
     if (!payload || typeof payload.action !== 'string') return
 
     if (payload.action === 'query') {
@@ -896,7 +896,7 @@ export class WanRelayBridge {
     if (payload.action === 'device_info') {
       if (payload.device && payload.device.id && payload.fromDeviceId &&
           normalizeDeviceId(payload.device.id) === normalizeDeviceId(payload.fromDeviceId) &&
-          payload.device.publicKey && deviceIdMatchesPublicKey(payload.device.id, payload.device.publicKey) &&
+          payload.device.publicKey === signerPublicKey && deviceIdMatchesPublicKey(payload.device.id, payload.device.publicKey) &&
           payload.toDeviceId && normalizeDeviceId(payload.toDeviceId) === this.localDeviceId) {
         const dev = { ...payload.device, id: normalizeDeviceId(payload.device.id), online: true }
         this.remoteDevicesCache.set(dev.id, dev)
@@ -918,6 +918,9 @@ export class WanRelayBridge {
         const expiresAt = Date.parse(payload.session.expiresAt)
         if (this.localDeviceId && normalizedTo === this.localDeviceId && normalizedFrom !== normalizedTo &&
             payload.session.id === payload.sessionId && payload.session.fromDeviceId === normalizedFrom &&
+            !!payload.peer && typeof payload.peer === 'object' &&
+            normalizeDeviceId((payload.peer as DeviceRecord).id) === normalizedFrom &&
+            (payload.peer as DeviceRecord).publicKey === signerPublicKey &&
             payload.session.toDeviceId === normalizedTo && permissions && Number.isFinite(expiresAt) &&
             expiresAt > Date.now() && expiresAt <= Date.now() + 90_000) {
           const existing = this.broker.getSession(payload.sessionId)
@@ -953,6 +956,9 @@ export class WanRelayBridge {
         if (this.localDeviceId && normalizedTo === this.localDeviceId && session &&
             session.fromDeviceId === normalizedTo && session.toDeviceId === normalizedFrom &&
             session.status === 'pending' && Date.parse(session.expiresAt) > Date.now() &&
+            !!payload.peer && typeof payload.peer === 'object' &&
+            normalizeDeviceId((payload.peer as DeviceRecord).id) === normalizedFrom &&
+            (payload.peer as DeviceRecord).publicKey === signerPublicKey &&
             (!payload.accepted || (permissions && permissions.every(p => session.requestedPermissions.includes(p))))) {
           const accepted = payload.accepted
           session.status = accepted ? 'active' : 'rejected'
