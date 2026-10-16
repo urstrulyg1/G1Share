@@ -148,6 +148,13 @@ function wanAad(fromDeviceId: string, toDeviceId: string, issuedAt: number, nonc
   return Buffer.from(`${WAN_PROTOCOL}\n${fromDeviceId}\n${toDeviceId}\n${issuedAt}\n${nonce}`, 'utf8')
 }
 
+function embeddedPeerSignalCanonical(sessionId: string, fromDeviceId: string, messageType: string, payload: unknown): Buffer {
+  const payloadJSON = JSON.stringify(payload)
+  if (payloadJSON === undefined) throw new TypeError('Peer signal payload must be JSON serializable.')
+  const digest = createHash('sha256').update(payloadJSON, 'utf8').digest('hex')
+  return Buffer.from(`opendesk-peer-signal-v1\n${sessionId}\n${fromDeviceId}\n${messageType}\n${digest}`, 'utf8')
+}
+
 function wanCanonical(envelope: Omit<SignedWanEnvelope, 'signature' | 'publicKey'>): Buffer {
   const encrypted = !!envelope.encryptedPayload
   const body = (encrypted ? JSON.stringify(envelope.encryptedPayload) : JSON.stringify(envelope.payload)) ?? ''
@@ -431,10 +438,41 @@ export class EmbeddedSignalingBroker {
     return session
   }
 
+  private isValidPeerSignal(sessionId: string, fromDeviceId: string, message: unknown): boolean {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) return false
+    const signal = message as Record<string, unknown>
+    if (signal.fromDeviceId !== fromDeviceId || (signal.type !== 'offer' && signal.type !== 'answer') ||
+        !signal.payload || typeof signal.payload !== 'object' || Array.isArray(signal.payload)) return false
+    const payload = signal.payload as Record<string, unknown>
+    if (payload.type !== signal.type || typeof payload.sdp !== 'string' ||
+        payload.sdp.length < 3 || payload.sdp.length > 256 * 1024 || !payload.sdp.startsWith('v=0')) return false
+    if (typeof signal.signature !== 'string' || !/^[A-Za-z0-9_-]{86}$/.test(signal.signature)) return false
+    const device = this.devices.get(fromDeviceId)
+    if (!device || device.revoked) return false
+    try {
+      const rawPublicKey = Buffer.from(device.publicKey, 'base64url')
+      const signature = Buffer.from(signal.signature, 'base64url')
+      if (rawPublicKey.length !== 32 || rawPublicKey.toString('base64url') !== device.publicKey ||
+          signature.length !== 64 || signature.toString('base64url') !== signal.signature) return false
+      const publicKey = createPublicKey({
+        key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawPublicKey]),
+        type: 'spki',
+        format: 'der'
+      })
+      return verify(null, embeddedPeerSignalCanonical(sessionId, fromDeviceId, signal.type, payload), publicKey, signature)
+    } catch {
+      return false
+    }
+  }
+
   forwardSignal(sessionId: string, fromDeviceId: string, message: unknown): boolean {
     const session = this.sessions.get(sessionId)
     if (!session || session.status !== 'active' || Date.parse(session.expiresAt) <= Date.now() ||
-        (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId)) return false
+        (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId) ||
+        !this.isValidPeerSignal(sessionId, fromDeviceId, message)) return false
+    const signal = message as { type: 'offer' | 'answer' }
+    if ((signal.type === 'offer' && fromDeviceId !== session.toDeviceId) ||
+        (signal.type === 'answer' && fromDeviceId !== session.fromDeviceId)) return false
     const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
     this.pushEvent(destDeviceId, { type: 'signal', sessionId, message })
     return true
