@@ -4,6 +4,23 @@ import { createPrivateKey, createPublicKey, sign, createHash, generateKeyPairSyn
 import { EmbeddedSignalingBroker, createSignalingHttpServer, AutoSignalingManager, isValidLanCoordinatorUrl } from './embedded-signaling'
 
 describe('EmbeddedSignalingBroker and HTTP Server', () => {
+function signedPeerSignal(
+  privateKey: ReturnType<typeof createPrivateKey>,
+  sessionId: string,
+  fromDeviceId: string,
+  type: 'offer' | 'answer',
+  payload: Record<string, unknown>
+) {
+  const digest = createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex')
+  const canonical = `opendesk-peer-signal-v1\n${sessionId}\n${fromDeviceId}\n${type}\n${digest}`
+  return {
+    fromDeviceId,
+    type,
+    payload,
+    signature: sign(null, Buffer.from(canonical, 'utf8'), privateKey).toString('base64url')
+  }
+}
+
 function deviceIdForPublicKey(publicKey: string): string {
   const hash = createHash('sha256').update(publicKey, 'utf8').digest()
   const numeric = (hash.readBigUInt64BE(0) % 900_000_000n + 100_000_000n).toString()
@@ -186,14 +203,14 @@ function deviceIdForPublicKey(publicKey: string): string {
     const batch1 = (await poll1.json()) as { events: Array<{ type: string; sessionId: string }> }
     expect(batch1.events.some(e => e.type === 'session.accepted')).toBe(true)
 
-    // Device 1 sends WebRTC offer signal
-    const sigRes = await signedRequest(privKey1, devId1, 'POST', `/api/v1/sessions/${session.id}/signal`, {
-      message: { fromDeviceId: devId1, type: 'offer', payload: { sdp: 'fake-sdp' }, signature: 'sig' }
-    })
+    // The session host (Device 2) sends a signed WebRTC offer to the viewer (Device 1).
+    const offerPayload = { type: 'offer', sdp: 'v=0\\r\\na=ice-ufrag:test\\r\\n' }
+    const offer = signedPeerSignal(privKey2, session.id, devId2, 'offer', offerPayload)
+    const sigRes = await signedRequest(privKey2, devId2, 'POST', `/api/v1/sessions/${session.id}/signal`, { message: offer })
     expect(sigRes.status).toBe(200)
 
-    // Device 2 receives signal
-    const pollSig = await signedRequest(privKey2, devId2, 'GET', `/api/v1/events?cursor=${batch2.events[0].sequence}&limit=10`)
+    // Device 1 receives the authenticated signal.
+    const pollSig = await signedRequest(privKey1, devId1, 'GET', `/api/v1/events?cursor=${batch1.events[batch1.events.length - 1]?.sequence || 0}&limit=10`)
     expect(pollSig.status).toBe(200)
     const batchSig = (await pollSig.json()) as { events: Array<{ type: string }> }
     expect(batchSig.events.some(e => e.type === 'signal')).toBe(true)
@@ -222,7 +239,10 @@ function deviceIdForPublicKey(publicKey: string): string {
     expect(isolated.getSession(sessionId)?.status).toBe('pending')
 
     expect(isolated.decideSession(sessionId, devId2, true, ['view'])).not.toBeNull()
-    expect(isolated.forwardSignal(sessionId, devId1, { type: 'offer' })).toBe(true)
+    const wrongRoleOffer = signedPeerSignal(privKey1, sessionId, devId1, 'offer', { type: 'offer', sdp: 'v=0\\r\\n' })
+    expect(isolated.forwardSignal(sessionId, devId1, wrongRoleOffer)).toBe(false)
+    const validAnswer = signedPeerSignal(privKey1, sessionId, devId1, 'answer', { type: 'answer', sdp: 'v=0\\r\\n' })
+    expect(isolated.forwardSignal(sessionId, devId1, validAnswer)).toBe(true)
     expect(isolated.closeSession(sessionId, devId2, 'approved participant')).toBe(true)
     expect(isolated.getSession(sessionId)?.status).toBe('closed')
   })
