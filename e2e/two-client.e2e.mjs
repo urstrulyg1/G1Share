@@ -84,7 +84,10 @@ try {
 
   const hostStateOffset = (await host.evaluate(() => window.harness.snapshot())).connectionStates.length
   const viewerStateOffset = (await viewer.evaluate(() => window.harness.snapshot())).connectionStates.length
-  await host.evaluate(() => window.harness.simulateIceDisconnect())
+  // Take the viewer offline long enough for ICE to detect a real transport interruption, then restore it.
+  await viewer.setOfflineMode(true)
+  await new Promise(resolve => setTimeout(resolve, 7_000))
+  await viewer.setOfflineMode(false)
   let recoveredHost
   try {
     recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
@@ -191,7 +194,7 @@ try {
   const errorsSeen = [
     ...(await host.evaluate(() => window.harness.snapshot())).errors,
     ...(await viewer.evaluate(() => window.harness.snapshot())).errors
-  ].filter(message => !/rate limit/i.test(message))
+  ].filter(message => !/rate limit/i.test(message) && !/^poll: (failed to fetch|fetch failed|networkerror)/i.test(message))
   check('no unexpected runtime errors were reported by the renderer services', errorsSeen.length === 0, errorsSeen.join(' | '))
 } catch (error) {
   check('two-client scenario completed', false, error instanceof Error ? error.message : String(error))
