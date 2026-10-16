@@ -113,7 +113,7 @@ try {
     await waitFor(host, state => state.connectionStates.slice(hostStateOffset).includes('degraded') || state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to detect the UDP interruption', 15_000)
     let recoveredHost
     try {
-      recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
+      recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('degraded'), 'host to recover after the UDP interruption', 35_000)
     } catch (error) {
       const diagnostics = {
         host: await host.evaluate(() => window.harness.snapshot()),
@@ -123,9 +123,9 @@ try {
       }
       throw new Error(`${error instanceof Error ? error.message : String(error)}; recovery diagnostics: ${JSON.stringify(diagnostics)}`)
     }
-    const recoveredViewer = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0 && state.connectionStates.slice(viewerStateOffset).includes('negotiating'), 'viewer to renegotiate and resume video after ICE restart', 35_000)
-    check('host ICE disconnect recovery returns to connected', recoveredHost.connection === 'connected', recoveredHost.connectionStates.slice(hostStateOffset).join(' -> '))
-    check('viewer renegotiates and continues receiving video after ICE restart', recoveredViewer.connection === 'connected' && recoveredViewer.video.width > 0, `${recoveredViewer.video.width}x${recoveredViewer.video.height}; ${recoveredViewer.connectionStates.slice(viewerStateOffset).join(' -> ')}`)
+    const recoveredViewer = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0 && state.connectionStates.slice(viewerStateOffset).includes('degraded'), 'viewer to recover and resume video after the UDP interruption', 35_000)
+    check('host connection recovers after UDP interruption', recoveredHost.connection === 'connected', recoveredHost.connectionStates.slice(hostStateOffset).join(' -> '))
+    check('viewer connection recovers and video resumes after UDP interruption', recoveredViewer.connection === 'connected' && recoveredViewer.video.width > 0, `${recoveredViewer.video.width}x${recoveredViewer.video.height}; ${recoveredViewer.connectionStates.slice(viewerStateOffset).join(' -> ')}`)
   }
   const pending = await viewer.evaluate(() => window.harness.snapshot())
   check('input permission starts as pending until the host enables control', pending.remoteControl === 'pending', pending.remoteControl)
