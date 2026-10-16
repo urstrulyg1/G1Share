@@ -1,5 +1,10 @@
 name: CI
 
+# Keep only the newest run per ref; a newer main commit cancels obsolete builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, "feature/**"]
@@ -156,6 +161,10 @@ jobs:
   verify-packages:
     name: Verify all 6 standalone deliverables
     needs: packages
+    # CI and tag-based releases must never upload the same release assets concurrently.
+    concurrency:
+      group: g1viewer-release-assets-${{ github.repository }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

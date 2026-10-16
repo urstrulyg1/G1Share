@@ -1,5 +1,10 @@
 name: Release
 
+# Supersede obsolete attempts for the same tag/ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     tags:
@@ -128,6 +133,10 @@ jobs:
   publish:
     name: Publish GitHub Release with Changelog
     needs: build-packages
+    # Shared lock with CI's continuous-release publisher prevents asset upload races.
+    concurrency:
+      group: g1viewer-release-assets-${{ github.repository }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
