@@ -38,6 +38,7 @@ import { formatDeviceId, isValidDeviceId, normalizeDeviceId } from '../shared/de
 import { readBoundedResponse } from './http-response'
 import { IncomingFileStore } from './incoming-file-store'
 import { AutoSignalingManager } from './embedded-signaling'
+import { isTrustedRendererUrl } from './renderer-navigation'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const PROJECT_URL = 'https://github.com/urstrulyg1/G1Viewer'
@@ -475,9 +476,16 @@ async function authenticatedSignalingRequest(input: SignalingRequest, allowPrivi
   return result.value
 }
 
+function isTrustedRendererNavigation(targetURL: string): boolean {
+  const expectedFileURL = pathToFileURL(join(currentDir, '../renderer/index.html')).href
+  return isTrustedRendererUrl(targetURL, expectedFileURL, process.env.ELECTRON_RENDERER_URL)
+}
+
 function assertTrustedIPC(event: Electron.IpcMainInvokeEvent): void {
-  if (!mainWindow || event.sender.id !== mainWindow.webContents.id || event.senderFrame !== mainWindow.webContents.mainFrame) {
-    throw new Error('This operation is available only to the G1Viewer application window.')
+  if (!mainWindow || event.sender.id !== mainWindow.webContents.id ||
+      event.senderFrame !== mainWindow.webContents.mainFrame ||
+      !isTrustedRendererNavigation(event.senderFrame.url)) {
+    throw new Error('This operation is available only to the trusted G1Viewer renderer.')
   }
 }
 
@@ -1262,13 +1270,10 @@ function createWindow(): void {
   mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send('window:maximized-changed', mainWindow?.isMaximized() ?? false))
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event, targetURL) => {
-    const devURL = process.env.ELECTRON_RENDERER_URL
-    if (devURL) {
-      try {
-        if (new URL(targetURL).origin === new URL(devURL).origin) return
-      } catch { /* Reject malformed navigation. */ }
-    }
-    if (!targetURL.startsWith('file://')) event.preventDefault()
+    if (!isTrustedRendererNavigation(targetURL)) event.preventDefault()
+  })
+  mainWindow.webContents.on('will-redirect', (event, targetURL) => {
+    if (!isTrustedRendererNavigation(targetURL)) event.preventDefault()
   })
   if (process.env.ELECTRON_RENDERER_URL) void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void mainWindow.loadFile(join(currentDir, '../renderer/index.html'))
