@@ -7,6 +7,7 @@ command -v docker >/dev/null 2>&1 || fail "Docker is required."
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required."
 command -v openssl >/dev/null 2>&1 || fail "OpenSSL is required."
 command -v getent >/dev/null 2>&1 || fail "getent is required to validate DNS."
+command -v curl >/dev/null 2>&1 || fail "curl is required for deployment health checks."
 command -v python3 >/dev/null 2>&1 || fail "Python 3 is required to validate the public IPv4 address."
 
 : "${G1VIEWER_DOMAIN:?Set G1VIEWER_DOMAIN to a real DNS hostname pointing to this server.}"
@@ -72,9 +73,21 @@ EOF
 
 if [[ "${G1VIEWER_DEPLOY:-0}" == "1" ]]; then
   docker compose -f docker-compose.yml -f docker-compose.turn.yml --profile turn up -d --build
-  printf '\nDeployment started. Check status with: docker compose -f docker-compose.yml -f docker-compose.turn.yml --profile turn ps\n'
-  printf 'Health check: curl -fsS https://%s/healthz\n' "$DOMAIN"
-  printf 'TURN credential endpoint: https://%s/api/v1/turn-credentials\n' "$DOMAIN"
+  healthy=0
+  for _ in $(seq 1 30); do
+    if curl --connect-timeout 3 --max-time 5 -fsS -o /dev/null "https://$DOMAIN/healthz"; then
+      healthy=1
+      break
+    fi
+    sleep 2
+  done
+  [[ "$healthy" == "1" ]] || fail "HTTPS health check did not pass. Inspect Caddy/signaling logs and verify DNS/firewall."
+  turn_status="$(curl --connect-timeout 3 --max-time 5 -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/api/v1/turn-credentials")"
+  [[ "$turn_status" == "200" ]] || fail "TURN credential endpoint returned HTTP $turn_status instead of 200. Check the TURN profile, shared secret, TURN URLs, and service logs."
+  printf '\nDeployment health checks passed.\n'
+  printf 'Compose status: docker compose -f docker-compose.yml -f docker-compose.turn.yml --profile turn ps\n'
+  printf 'TURN endpoint verified: https://%s/api/v1/turn-credentials (credential values were not printed)\n' "$DOMAIN"
+  printf 'Next, from a trusted development checkout, run: python3 scripts/configure-network-bootstrap.py %s\n' "$DOMAIN"
 else
   printf '\nConfiguration validated but services were not started. To deploy now, rerun with G1VIEWER_DEPLOY=1.\n'
 fi
