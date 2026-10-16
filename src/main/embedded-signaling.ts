@@ -1003,6 +1003,18 @@ export function isValidLanCoordinatorUrl(value: string): boolean {
   }
 }
 
+function safeRelayBaseUrl(value: string): string {
+  try {
+    const parsed = new URL(value)
+    if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || parsed.username || parsed.password ||
+        parsed.search || parsed.hash || !parsed.hostname) return ''
+    if (parsed.protocol === 'http:' && !isValidLanCoordinatorUrl(`${parsed.origin}/`)) return ''
+    return `${parsed.origin}${parsed.pathname.replace(/\\/+$/, '')}`
+  } catch {
+    return ''
+  }
+}
+
 export function getLanIpv4Addresses(): string[] {
   const addresses: string[] = []
   const ifaces = os.networkInterfaces()
@@ -1074,7 +1086,7 @@ export class WanRelayBridge {
   private inboundRates = new Map<string, { windowStarted: number; count: number }>()
   private inboundWindowStarted = Date.now()
   private inboundCount = 0
-  private relayBaseUrl = (process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh').replace(/\/+$/, '')
+  private relayBaseUrl = safeRelayBaseUrl(process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh')
 
   constructor(
     private readonly broker: EmbeddedSignalingBroker,
@@ -1093,7 +1105,7 @@ export class WanRelayBridge {
   }
 
   ensureConnected(): void {
-    if (this.stopped || !this.localDeviceId) return
+    if (this.stopped || !this.localDeviceId || !this.relayBaseUrl) return
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
     try {
       const topic = deriveWanTopic(this.localDeviceId)
@@ -1407,6 +1419,7 @@ export class WanRelayBridge {
 
   async publishToDevice(targetDeviceId: string, payload: unknown): Promise<boolean> {
     const normalized = normalizeDeviceId(targetDeviceId)
+    if (!this.relayBaseUrl) return false
     const envelope = this.createEnvelope(normalized, payload)
     if (!envelope) return false
     try {
