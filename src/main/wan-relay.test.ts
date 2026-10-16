@@ -257,6 +257,13 @@ function createTestIdentity() {
       deliver(receiverBridge, tampered)
       expect((receiverManager as any).broker.getSession('b'.repeat(32))).toBeNull()
 
+      const malformedSession = { ...session, id: 'c'.repeat(32), createdAt: 'not-a-date' }
+      const malformedEnvelope = senderBridge.createEnvelope(receiver.deviceId, {
+        ...requestPayload, sessionId: 'c'.repeat(32), session: malformedSession
+      })
+      deliver(receiverBridge, malformedEnvelope)
+      expect((receiverManager as any).broker.getSession('c'.repeat(32))).toBeNull()
+
       const forgedDecision = attackerBridge.createEnvelope(sender.deviceId, {
         action: 'session_decision',
         fromDeviceId: attacker.deviceId,
