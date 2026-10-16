@@ -246,6 +246,14 @@ export class EmbeddedSignalingBroker {
     return this.sessions.get(sessionId) || null
   }
 
+  getSessionDetails(sessionId: string, actorDeviceId: string): { session: SessionRecord; peer: DeviceRecord & { online: boolean } } | null {
+    const session = this.sessions.get(sessionId)
+    if (!session || (session.fromDeviceId !== actorDeviceId && session.toDeviceId !== actorDeviceId)) return null
+    const peerId = session.fromDeviceId === actorDeviceId ? session.toDeviceId : session.fromDeviceId
+    const peer = this.getDeviceSummary(peerId)
+    return peer ? { session, peer } : null
+  }
+
   decideSession(sessionId: string, actorDeviceId: string, accepted: boolean, permissions: string[]): SessionRecord | null {
     const session = this.sessions.get(sessionId)
     if (!session || session.toDeviceId !== actorDeviceId || session.status !== 'pending' || Date.parse(session.expiresAt) <= Date.now()) return null
@@ -586,14 +594,14 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
 
     if (req.method === 'GET' && path.startsWith('/api/v1/sessions/')) {
       const sessionId = path.split('/')[4]
-      const session = broker.getSession(sessionId)
-      if (!session) {
+      const details = broker.getSessionDetails(sessionId, deviceId)
+      if (!details) {
         res.writeHead(404)
         res.end(JSON.stringify({ error: { code: 'not_found', message: 'Session not found.' } }))
         return
       }
       res.writeHead(200)
-      res.end(JSON.stringify(session))
+      res.end(JSON.stringify(details))
       return
     }
 
@@ -935,6 +943,7 @@ export class WanRelayBridge {
             status: 'pending',
             route: 'wan'
           }
+          this.broker.registerRemoteDevice({ ...(payload.peer as DeviceRecord), online: true })
           this.broker.injectSession(session)
           this.broker.pushEvent(normalizedTo, {
             type: 'session.request',
