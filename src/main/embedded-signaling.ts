@@ -343,6 +343,9 @@ export class EmbeddedSignalingBroker {
   }
 
   renameDevice(id: string, name: string): DeviceRecord | null {
+    if (typeof name !== 'string' || !name.trim() || Buffer.byteLength(name, 'utf8') > 80 || /[\\u0000-\\u001f\\u007f]/.test(name)) {
+      throw new TypeError('The device name must contain 1 to 80 bytes without control characters.')
+    }
     const record = this.devices.get(id)
     if (!record || record.revoked) return null
     record.name = name
@@ -692,6 +695,20 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       return
     }
 
+    const parseAuthenticatedBody = <T>(): T | null => {
+      try {
+        const parsed: unknown = JSON.parse(bodyText)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+        return parsed as T
+      } catch {
+        return null
+      }
+    }
+    const badRequest = (message = 'Request body is invalid.'): void => {
+      res.writeHead(400)
+      res.end(JSON.stringify({ error: { code: 'bad_request', message } }))
+    }
+
     if (!(req.method === 'POST' && path === '/api/v1/devices/register')) broker.touchDevice(deviceId)
 
     // Handlers
@@ -755,8 +772,11 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     }
 
     if (req.method === 'POST' && path === '/api/v1/devices/rename') {
-      const data = JSON.parse(bodyText) as { name: string }
-      const device = broker.renameDevice(deviceId, data.name)
+      const data = parseAuthenticatedBody<{ name: string }>()
+      if (!data || typeof data.name !== 'string') { badRequest('A valid device name is required.'); return }
+      let device: DeviceRecord | null
+      try { device = broker.renameDevice(deviceId, data.name) }
+      catch { badRequest('The device name is invalid.'); return }
       if (manager && device) {
         manager.setLocalDevice(device)
       }
@@ -773,10 +793,13 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     }
 
     if (req.method === 'POST' && path === '/api/v1/sessions') {
-      const data = JSON.parse(bodyText) as { toDeviceId: string; permissions: string[] }
-      let result = broker.createSession(deviceId, data.toDeviceId, data.permissions || ['view'])
+      const data = parseAuthenticatedBody<{ toDeviceId: string; permissions: string[] }>()
+      if (!data || typeof data.toDeviceId !== 'string' || !isValidDeviceId(data.toDeviceId)) { badRequest('A valid target device ID is required.'); return }
+      const permissions = normalizedPermissions(data.permissions ?? ['view'])
+      if (!permissions) { badRequest('Session permissions are invalid.'); return }
+      let result = broker.createSession(deviceId, normalizeDeviceId(data.toDeviceId), permissions)
       if (!result && manager) {
-        result = await manager.createSessionAcrossNetwork(deviceId, data.toDeviceId, data.permissions || ['view'])
+        result = await manager.createSessionAcrossNetwork(deviceId, normalizeDeviceId(data.toDeviceId), permissions)
       }
       if (!result) {
         res.writeHead(409)
@@ -804,8 +827,12 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     const decisionMatch = path.match(/^\/api\/v1\/sessions\/([a-f0-9]{32})\/decision$/)
     if (req.method === 'POST' && decisionMatch) {
       const sessionId = decisionMatch[1]
-      const data = JSON.parse(bodyText) as { accepted: boolean; permissions: string[] }
-      const session = broker.decideSession(sessionId, deviceId, data.accepted, data.permissions || ['view'])
+      const data = parseAuthenticatedBody<{ accepted: boolean; permissions: string[] }>()
+      if (!data || typeof data.accepted !== 'boolean' || !Array.isArray(data.permissions)) { badRequest('A valid session decision is required.'); return }
+      if ((!data.accepted && data.permissions.length > 0) || new Set(data.permissions).size !== data.permissions.length) { badRequest('Session decision permissions are invalid.'); return }
+      const permissions = data.accepted ? normalizedPermissions(data.permissions) : []
+      if (data.accepted && !permissions) { badRequest('Approved permissions are invalid.'); return }
+      const session = broker.decideSession(sessionId, deviceId, data.accepted, permissions || [])
       if (!session) {
         res.writeHead(404)
         res.end(JSON.stringify({ error: { code: 'invalid_session', message: 'Session not available.' } }))
@@ -822,7 +849,8 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     const signalMatch = path.match(/^\/api\/v1\/sessions\/([a-f0-9]{32})\/signal$/)
     if (req.method === 'POST' && signalMatch) {
       const sessionId = signalMatch[1]
-      const data = JSON.parse(bodyText) as { message: unknown }
+      const data = parseAuthenticatedBody<{ message: unknown }>()
+      if (!data || !data.message || typeof data.message !== 'object' || Array.isArray(data.message)) { badRequest('A valid signed WebRTC signal is required.'); return }
       const ok = broker.forwardSignal(sessionId, deviceId, data.message)
       if (!ok) {
         res.writeHead(404)
@@ -841,8 +869,10 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     const closeMatch = path.match(/^\/api\/v1\/sessions\/([a-f0-9]{32})\/close$/)
     if (req.method === 'POST' && closeMatch) {
       const sessionId = closeMatch[1]
-      const data = bodyText ? JSON.parse(bodyText) as { reason?: string } : {}
-      const closed = broker.closeSession(sessionId, deviceId, data.reason || 'user closed')
+      const data = bodyText ? parseAuthenticatedBody<{ reason?: string }>() : {}
+      if (!data || (data.reason !== undefined && (typeof data.reason !== 'string' || Buffer.byteLength(data.reason, 'utf8') > 120))) { badRequest('The session close reason is invalid.'); return }
+      const reason = data.reason || 'user closed'
+      const closed = broker.closeSession(sessionId, deviceId, reason)
       if (!closed) {
         res.writeHead(404)
         res.end(JSON.stringify({ error: { code: 'invalid_session', message: 'Session not available to this device.' } }))
@@ -850,7 +880,7 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       }
       const session = broker.getSession(sessionId)
       if (manager && session) {
-        void manager.closeSession(session, deviceId, data.reason || 'user closed')
+        void manager.closeSession(session, deviceId, reason)
       }
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ok' }))
