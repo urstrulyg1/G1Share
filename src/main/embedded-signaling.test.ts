@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
 import { createPrivateKey, createPublicKey, sign, createHash, generateKeyPairSync } from 'node:crypto'
-import { EmbeddedSignalingBroker, createSignalingHttpServer, AutoSignalingManager } from './embedded-signaling'
+import { EmbeddedSignalingBroker, createSignalingHttpServer, AutoSignalingManager, isValidLanCoordinatorUrl } from './embedded-signaling'
 
 describe('EmbeddedSignalingBroker and HTTP Server', () => {
 function deviceIdForPublicKey(publicKey: string): string {
@@ -79,6 +79,16 @@ function deviceIdForPublicKey(publicKey: string): string {
       body: bodyText || undefined
     })
   }
+
+  it('restricts automatic coordinator discovery to local-network HTTP origins', () => {
+    expect(isValidLanCoordinatorUrl('http://192.168.1.12:8787')).toBe(true)
+    expect(isValidLanCoordinatorUrl('http://10.0.0.4:8788')).toBe(true)
+    expect(isValidLanCoordinatorUrl('http://127.0.0.1:8787')).toBe(true)
+    expect(isValidLanCoordinatorUrl('https://example.com:8787')).toBe(false)
+    expect(isValidLanCoordinatorUrl('http://example.com:8787')).toBe(false)
+    expect(isValidLanCoordinatorUrl('http://192.168.1.12:8787/path')).toBe(false)
+    expect(isValidLanCoordinatorUrl('http://user:pass@192.168.1.12:8787')).toBe(false)
+  })
 
   it('serves /healthz and /readyz', async () => {
     const res = await fetch(`${baseUrl}/healthz`)
