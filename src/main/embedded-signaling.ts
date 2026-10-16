@@ -343,7 +343,7 @@ export class EmbeddedSignalingBroker {
   }
 
   renameDevice(id: string, name: string): DeviceRecord | null {
-    if (typeof name !== 'string' || !name.trim() || Buffer.byteLength(name, 'utf8') > 80 || /[\\u0000-\\u001f\\u007f]/.test(name)) {
+    if (typeof name !== 'string' || !name.trim() || Buffer.byteLength(name, 'utf8') > 80 || /[\u0000-\u001f\u007f]/.test(name)) {
       throw new TypeError('The device name must contain 1 to 80 bytes without control characters.')
     }
     const record = this.devices.get(id)
@@ -839,7 +839,7 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
         return
       }
       if (manager) {
-        void manager.handleSessionDecision(session, deviceId, data.accepted, data.permissions || ['view'])
+        void manager.handleSessionDecision(session, deviceId, data.accepted, permissions || [])
       }
       res.writeHead(200)
       res.end(JSON.stringify(session))
@@ -869,7 +869,7 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     const closeMatch = path.match(/^\/api\/v1\/sessions\/([a-f0-9]{32})\/close$/)
     if (req.method === 'POST' && closeMatch) {
       const sessionId = closeMatch[1]
-      const data = bodyText ? parseAuthenticatedBody<{ reason?: string }>() : {}
+      const data: { reason?: string } | null = bodyText ? parseAuthenticatedBody<{ reason?: string }>() : {}
       if (!data || (data.reason !== undefined && (typeof data.reason !== 'string' || Buffer.byteLength(data.reason, 'utf8') > 120))) { badRequest('The session close reason is invalid.'); return }
       const reason = data.reason || 'user closed'
       const closed = broker.closeSession(sessionId, deviceId, reason)
