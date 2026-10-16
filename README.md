@@ -23,7 +23,7 @@ SHA-256 checksums for verifying download integrity are available at [**SHA256SUM
 
 | Feature | Status |
 |---|---|
-| Dashboard / accounts | Opens directly to Home with no user login, signup, or cloud account; no default server is configured |
+| Dashboard / accounts | Opens directly to Home with no user login, signup, or cloud account; zero-configuration LAN auto-discovery and embedded signaling enabled out-of-the-box |
 | Device identity and authenticated signaling | Implemented; Ed25519 key is encrypted with Electron safeStorage and Linux basic-text storage is refused; no device ID is shown as usable when the key is unavailable |
 | Consent and peer identity | Implemented; remote user approves each session, selects optional permissions independently (off by default), verifies first-use fingerprints out of band, and selects a display separately |
 | Screen sharing | Electron `getDisplayMedia` + WebRTC video path implemented; OS permission/source selection applies; real cross-device streaming is not verified |
@@ -32,7 +32,7 @@ SHA-256 checksums for verifying download integrity are available at [**SHA256SUM
 | Unattended access | **Unavailable**; no background access or hidden persistence is implemented |
 | File transfer | WebRTC data-channel protocol and main-process storage are implemented with bounded chunks, explicit destination choice, SHA-256 checks, and no-overwrite publication; tested with simulated channels, not real clients |
 | Clipboard | One-time text only; sender and receiver each confirm locally; continuous synchronization is unavailable |
-| Signaling | Configurable, self-hosted Go HTTP service with authenticated device requests, pairing/session approval, signed WebRTC setup messages, event polling, and optional ephemeral TURN credentials; no user accounts |
+| Signaling | Zero-configuration embedded coordinator & automatic LAN peer discovery out-of-the-box; optional custom self-hosted HTTPS origin; no user accounts |
 | Local devices / history | Devices come from real ID lookups in the current app run; presence expires rather than being persisted as online. Recent requests use real session events and show a connected time only after WebRTC actually connects. Legacy unverified browser caches are not imported. |
 | Metrics | Only browser WebRTC statistics and frame callbacks; absent values show **Unavailable**, never default numbers |
 | Installers | Unsigned Linux AppImage/DEB, Windows NSIS, and macOS DMG targets built in GitHub CI; installation/runtime validation and signed releases remain outstanding |
@@ -45,16 +45,14 @@ Requirements: Node.js 22.12 or later, npm, Go 1.22 or later, and a desktop envir
 
 ```sh
 npm ci
-(cd services/signaling && go run .)
-# In another terminal:
 npm run dev
 ```
 
-On first launch, the Home dashboard appears with **Signaling not configured**. For same-computer development, open **Settings → Signaling service** and enter `http://127.0.0.1:8787`; the local Go service listens there by default. Alternatively set `G1VIEWER_SIGNALING_URL=http://127.0.0.1:8787` (or `OPENDESK_SIGNALING_URL=http://127.0.0.1:8787`) in the desktop process environment before first launch. You do **not** need a user account. Unlock your OS credential store so the app can generate its actual device key/ID; if it cannot, it shows **Unavailable** and blocks connections instead of displaying a fake identifier. The same loopback address on two computers refers to two different services. See [local development](docs/development/local-development.md) and [the two-client checklist](docs/user/getting-started.md).
+On launch, the Home dashboard automatically initializes its embedded signaling coordinator and discovers peers on the local network (LAN) with zero manual configuration. For same-computer testing or LAN sharing, everything works immediately out-of-the-box. For external cloud deployments, you can optionally configure a custom HTTPS origin in **Settings → Signaling service** or set `G1VIEWER_SIGNALING_URL`. You do **not** need a user account. Unlock your OS credential store so the app can generate its actual device key/ID; if it cannot, it shows **Unavailable** and blocks connections instead of displaying a fake identifier. See [local development](docs/development/local-development.md) and [the two-client checklist](docs/user/getting-started.md).
 
 ## Self-hosting
 
-For a TLS-terminated signaling deployment and optional Coturn TURN relay, start with [the self-hosting guide](docs/self-hosting/signaling-and-turn.md). Set the **same reachable HTTPS origin** on both devices. On a LAN, peers can communicate directly via WebRTC host candidates when ICE allows it, but this build still needs a shared signaling service: it has **no automatic LAN discovery or no-server pairing**. The repository includes a Go service Dockerfile, a Caddy reverse-proxy Compose configuration, and a separate optional Coturn Compose overlay. Internet connections need appropriate STUN/TURN and firewall configuration; neither LAN nor Internet access requires a cloud account. Generate unique TURN credentials on the server; do not commit `.env` files or signing keys.
+G1Viewer includes zero-configuration LAN auto-discovery and an embedded coordinator for local network use without running external servers. For public internet deployments spanning separate networks, you can deploy a TLS-terminated signaling deployment and optional Coturn TURN relay: see [the self-hosting guide](docs/self-hosting/signaling-and-turn.md). The repository includes a Go service Dockerfile, a Caddy reverse-proxy Compose configuration, and a separate optional Coturn Compose overlay. Internet connections need appropriate STUN/TURN and firewall configuration; neither LAN nor Internet access requires a cloud account. Generate unique TURN credentials on the server; do not commit `.env` files or signing keys.
 
 The Go service is plain HTTP and defaults to loopback. Do not expose it directly to the public internet. The sample Compose stack sets the service behind Caddy and restricts forwarded-client-IP trust to Caddy's fixed container address.
 

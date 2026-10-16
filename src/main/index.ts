@@ -35,6 +35,7 @@ import type { InputSupport, NativeInputBackend } from './remote-input'
 import { formatDeviceId, isValidDeviceId } from '../shared/device-id'
 import { readBoundedResponse } from './http-response'
 import { IncomingFileStore } from './incoming-file-store'
+import { AutoSignalingManager } from './embedded-signaling'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const PROJECT_URL = 'https://github.com/urstrulyg1/G1Viewer'
@@ -76,6 +77,19 @@ class SignalingRequestError extends Error {
 let mainWindow: BrowserWindow | null = null
 let identityPromise: Promise<SecureIdentity> | null = null
 let settingsPromise: Promise<AppSettings> | null = null
+let autoSignalingManager: AutoSignalingManager | null = null
+let autoSignalingUrlPromise: Promise<string> | null = null
+
+async function getAutomaticSignalingUrl(): Promise<string> {
+  if (!autoSignalingManager) {
+    autoSignalingManager = new AutoSignalingManager()
+    autoSignalingUrlPromise = autoSignalingManager.start().catch(err => {
+      console.error('Failed to start automatic signaling manager:', err)
+      return 'http://127.0.0.1:8787'
+    })
+  }
+  return autoSignalingUrlPromise!
+}
 /** A screen capture is permitted only after the host approved the session and before the picker is used. */
 let captureArm: { sessionId: string; audio: boolean; until: number } | null = null
 /** The display the host actually picked for the current capture; remote input may only target this display. */
@@ -216,6 +230,20 @@ async function getDeviceInfo(): Promise<DeviceInfo> {
   }
 }
 
+function isLanOrLoopback(host: string): boolean {
+  if (host === 'localhost' || host === '::1' || host === '127.0.0.1' || /^127(?:\.\d{1,3}){3}$/.test(host)) return true
+  if (host.endsWith('.local')) return true
+  if (/^10(?:\.\d{1,3}){3}$/.test(host)) return true
+  const m172 = host.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/)
+  if (m172) {
+    const octet = parseInt(m172[1], 10)
+    if (octet >= 16 && octet <= 31) return true
+  }
+  if (/^192\.168(?:\.\d{1,3}){2}$/.test(host)) return true
+  if (/^169\.254(?:\.\d{1,3}){2}$/.test(host)) return true
+  return false
+}
+
 function validateSignalingURL(input: string): string {
   if (typeof input !== 'string' || input.length > 512) throw new TypeError('Enter a valid signaling server URL.')
   let parsed: URL
@@ -224,43 +252,48 @@ function validateSignalingURL(input: string): string {
     throw new TypeError('Use an HTTPS origin without a path, query string, or embedded credentials.')
   }
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
-  const loopback = host === 'localhost' || host === '::1' || host === '127.0.0.1' || /^127(?:\.\d{1,3}){3}$/.test(host)
-  if (parsed.protocol === 'http:' && !loopback) throw new TypeError('Remote signaling servers must use HTTPS. Plain HTTP is permitted only for localhost development.')
+  const lanOrLoopback = isLanOrLoopback(host)
+  if (parsed.protocol === 'http:' && !lanOrLoopback) {
+    throw new TypeError('Remote public signaling servers must use HTTPS. Plain HTTP is permitted for local network and loopback development.')
+  }
   return parsed.origin
 }
 
 async function loadSettings(): Promise<AppSettings> {
   if (settingsPromise) return settingsPromise
   settingsPromise = (async () => {
+    const defaultAutoUrl = await getAutomaticSignalingUrl()
     let contents: string
     try {
       contents = await readFile(settingsPath(), 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      // No cloud default. Development can opt in via G1VIEWER_SIGNALING_URL or OPENDESK_SIGNALING_URL or Settings.
       const configured = (process.env.G1VIEWER_SIGNALING_URL || process.env.OPENDESK_SIGNALING_URL)?.trim()
-      return { signalingUrl: configured ? validateSignalingURL(configured) : '' }
+      return { signalingUrl: configured ? validateSignalingURL(configured) : defaultAutoUrl }
     }
     try {
       const data: unknown = JSON.parse(contents)
-      if (!data || typeof data !== 'object' || typeof (data as AppSettings).signalingUrl !== 'string') throw new Error('missing signaling URL')
-      const { signalingUrl, deviceName } = data as AppSettings
+      if (!data || typeof data !== 'object') throw new Error('missing settings')
+      const { signalingUrl, deviceName } = data as Partial<AppSettings>
+      const configured = signalingUrl?.trim()
+      const effectiveUrl = configured ? validateSignalingURL(configured) : defaultAutoUrl
       if (deviceName !== undefined && (typeof deviceName !== 'string' || !deviceName.trim() || Buffer.byteLength(deviceName, 'utf8') > 80)) throw new Error('invalid device name')
-      return { signalingUrl: signalingUrl ? validateSignalingURL(signalingUrl) : '', ...(deviceName === undefined ? {} : { deviceName }) }
+      return { signalingUrl: effectiveUrl, ...(deviceName === undefined ? {} : { deviceName }) }
     } catch {
-      throw new Error('Local settings are invalid. Enter a signaling server URL in Settings to replace them.')
+      return { signalingUrl: defaultAutoUrl }
     }
   })()
   return settingsPromise
 }
 
 async function setSignalingURL(value: string): Promise<string> {
-  const signalingUrl = validateSignalingURL(value)
-  // The settings screen must be able to repair a corrupt settings file without erasing an identity.
-  const settings = await loadSettings().catch(() => ({ signalingUrl: '' }))
-  const updated = { ...settings, signalingUrl }
+  const trimmed = value.trim()
+  const autoUrl = await getAutomaticSignalingUrl()
+  const signalingUrl = trimmed ? validateSignalingURL(trimmed) : autoUrl
+  const settings = await loadSettings().catch(() => ({ signalingUrl: autoUrl }))
+  const updated = { ...settings, signalingUrl: trimmed ? signalingUrl : '' }
   await atomicWrite(settingsPath(), JSON.stringify(updated, null, 2) + '\n')
-  settingsPromise = Promise.resolve(updated)
+  settingsPromise = Promise.resolve({ ...settings, signalingUrl })
   return signalingUrl
 }
 
@@ -1126,6 +1159,10 @@ app.on('before-quit', event => {
   captureArm = null
   approvedSessions.clear()
   releaseRemoteInput()
+  if (autoSignalingManager) {
+    void autoSignalingManager.stop()
+    autoSignalingManager = null
+  }
   if (quitCleanupComplete) return
   event.preventDefault()
   if (quitCleanupPromise) return
