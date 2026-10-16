@@ -59,7 +59,7 @@ On launch, G1Viewer starts its local coordinator and fetches the current relay/S
 
 ## Self-hosting
 
-G1Viewer includes zero-configuration LAN auto-discovery and an embedded coordinator for local network use without running external servers. For public internet deployments spanning separate networks, you can deploy a TLS-terminated signaling deployment and optional Coturn TURN relay: see [the self-hosting guide](docs/self-hosting/signaling-and-turn.md). The repository includes a Go service Dockerfile, a Caddy reverse-proxy Compose configuration, and a separate optional Coturn Compose overlay. Internet connections need appropriate STUN/TURN and firewall configuration; neither LAN nor Internet access requires a cloud account. Generate unique TURN credentials on the server; do not commit `.env` files or signing keys.
+G1Viewer includes zero-configuration LAN auto-discovery, a public WAN signaling relay, and a dynamically fetched network bootstrap for normal device-ID-first use. For self-hosted deployments and the dynamic provider contract, see [the signaling/TURN guide](docs/self-hosting/signaling-and-turn.md) and [dynamic network bootstrap](docs/self-hosting/network-bootstrap.md). The repository includes a Go service Dockerfile, a Caddy reverse-proxy Compose configuration, and a separate optional Coturn Compose overlay. Internet connections need appropriate STUN/TURN and firewall configuration; neither LAN nor Internet access requires a cloud account. Generate unique TURN credentials on the server; do not commit `.env` files or signing keys.
 
 The Go service is plain HTTP and defaults to loopback. Do not expose it directly to the public internet. The sample Compose stack sets the service behind Caddy and restricts forwarded-client-IP trust to Caddy's fixed container address.
 
@@ -88,7 +88,7 @@ Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) triggers the 
 - A first-time peer key must be verified out of band. The app pins trusted peer fingerprints and blocks a changed key until the old pin is deliberately removed.
 - A session request is not access. The receiving user approves it in the app and a main-process native confirmation lists the exact grants; screen capture then needs a separate local source selection. Files and clipboard require separately granted session permissions.
 - Media and data channels use Chromium WebRTC (DTLS-SRTP). The signaling server carries setup metadata, not screen video. TURN relays encrypted WebRTC traffic but can observe connection metadata.
-- The signaling registry stores device public keys and display metadata. Session and event queues are in memory; presence is not persisted. No user-account system, login route, or administrator enrollment flow is included. No server URL is silently substituted if configuration is missing or invalid.
+- The signaling registry stores device public keys and display metadata. Session and event queues are in memory; presence is not persisted. No user-account system, login route, or administrator enrollment flow is included. The public relay/STUN bootstrap has safe built-in fallbacks; custom server URLs are never silently substituted.
 - Resetting identity explicitly revokes the registered device (when registered) and creates a new local key/ID. Trust records for other peers remain local.
 - No independent security audit, signed release, Windows/macOS package test, or real two-client desktop operation has been completed.
 
