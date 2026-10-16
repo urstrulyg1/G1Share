@@ -1110,7 +1110,7 @@ export class WanRelayBridge {
     try {
       const topic = deriveWanTopic(this.localDeviceId)
       const wsUrl = this.relayBaseUrl.replace(/^http/i, 'ws') + `/${topic}/ws`
-      this.ws = new WebSocket(wsUrl, { maxPayload: WAN_MAX_ENVELOPE_BYTES + 4096, perMessageDeflate: false })
+      this.ws = new WebSocket(wsUrl, [], { maxPayload: WAN_MAX_ENVELOPE_BYTES + 4096, perMessageDeflate: false })
       this.ws.onmessage = event => this.handleIncomingRawMessage(event.data)
       this.ws.onerror = () => { /* suppress unhandled WebSocket errors */ }
       this.ws.onclose = () => {
