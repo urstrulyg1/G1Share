@@ -93,6 +93,8 @@ export class RemoteSessionController {
   private closed = false
   private collectingStats = false
   private restartCount = 0
+  /** Prevent repeated disconnect notifications from starting overlapping ICE restarts. */
+  private recoveryInProgress = false
   private lastInbound: InboundVideoSample | null = null
   private lastOutbound: OutboundVideoSample | null = null
   private remoteControl: RemoteControlState = 'off'
@@ -310,6 +312,7 @@ export class RemoteSessionController {
       await this.bridge.stopRemoteInput(this.sessionId).catch(() => undefined)
     }
     this.remoteControl = 'off'
+    this.recoveryInProgress = false
     this.inputChannel?.close()
     this.inputChannel = null
     this.dataChannel?.close()
@@ -472,6 +475,7 @@ export class RemoteSessionController {
     this.reconnectTimer = null
     // A recovered connection earns a fresh budget of ICE restarts for future transient failures.
     this.restartCount = 0
+    this.recoveryInProgress = false
     this.callbacks.onState('connected')
     if (this.role === 'host') this.callbacks.onQualityProfile(this.effectiveProfile, this.qualityMode === 'auto' ? 'auto' : 'manual')
     if (!this.metricsTimer) this.metricsTimer = setInterval(() => { void this.collectMetrics() }, 2000)
@@ -493,10 +497,12 @@ export class RemoteSessionController {
 
   private async restartIce(): Promise<void> {
     const peer = this.peerConnection
+    if (this.recoveryInProgress) return
     if (!peer || this.closed || this.restartCount >= MAX_RECOVERY_RESTARTS) {
       this.callbacks.onState('failed')
       return
     }
+    this.recoveryInProgress = true
     this.restartCount += 1
     this.callbacks.onState('reconnecting')
     try {
@@ -504,9 +510,13 @@ export class RemoteSessionController {
       await this.createAndSendOffer(true)
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
       this.reconnectTimer = setTimeout(() => {
-        if (!this.closed && this.peerConnection?.connectionState !== 'connected') this.callbacks.onState('failed')
+        if (!this.closed && this.peerConnection?.connectionState !== 'connected') {
+          this.recoveryInProgress = false
+          this.callbacks.onState('failed')
+        }
       }, 20_000)
     } catch (error) {
+      this.recoveryInProgress = false
       this.callbacks.onError(usefulError(error))
       this.callbacks.onState('failed')
     }
