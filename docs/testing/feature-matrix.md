@@ -12,7 +12,7 @@ This matrix separates implemented source from exercised end-to-end behavior. **N
 | Authenticated signaling | Implemented | Go integration tests cover registration without accounts, pairing, per-session consent, signed WebRTC setup, replay/tampering, and close with independent keys; TypeScript client unit tests cover route/permission validation. |
 | Peer fingerprint trust | Implemented | Explicit local fingerprint pinning, changed-key refusal, revocation, malformed trust-store fail-closed behavior. Requires real UI/keyring validation. |
 | Go signaling broker | Implemented prototype | HTTP health/API, bounded requests, auth challenges, permission approval, long-poll events, rate limits, persistent public-key registry; Go race tests/coverage and vet passed in PR #4 CI; Go was unavailable locally. |
-| STUN/TURN configuration | Operator-provided ICE settings | Go emits configured STUN endpoints and expiring TURN REST credentials; Coturn/reverse-proxy/firewall interoperability not tested here. |
+| STUN/TURN configuration | Dynamic bootstrap and TURN credential issuance implemented; live TURN not deployed | Clients fetch ICE configuration dynamically and can consume short-lived credentials. Coturn deployment tooling and validation scripts are on `main`, but `config/network-bootstrap.json` intentionally leaves `turnCredentialsUrl` unset until a real VPS/public IPv4/DNS host is deployed. Coturn, firewall, reverse-proxy, separate-NAT, and restrictive-network interoperability remain unverified. |
 | Screen capture and WebRTC video | Implemented source path | Native source picker, `getDisplayMedia`, signed SDP, DTLS-SRTP; **no actual cross-device stream verified**. |
 | Remote keyboard/mouse | Implemented; hardware unverified | Shared protocol with strict validation and key allowlist; host-side controller tested with a fake native backend. Two-client browser E2E covers move/click/key delivery, revocation and disconnect releases, rejection while disabled. Native libnut injection and OS permission flows need real desktop testing. |
 | Audio capture/playback | Implemented for Windows hosts; hardware unverified | Loopback capture requested only when approved on a Windows host; missing OS audio tracks are reported. No real audio path tested. Viewer playback uses a real remote audio track. |
@@ -22,7 +22,7 @@ This matrix separates implemented source from exercised end-to-end behavior. **N
 | Clipboard | Implemented, one-time text only | Native confirm-before-read/replace code; no real cross-device clipboard test. |
 | Local devices and history | Implemented | Device rows come from this run's actual lookups; presence expires and server gaps show unknown. History records real requests, with connected time only after WebRTC connects; legacy unverified cache is discarded. Unit and UI tests cover both. |
 | Diagnostics | Implemented | Actual app/signaling/session capabilities and browser statistics; missing counters or inactive streams show unavailable rather than a made-up number or live state. |
-| Self-host deployment | Configured | Go Dockerfile, Caddy Compose, optional Coturn overlay and docs; Docker deployment not run in this sandbox. |
+| Self-host deployment | Deployable configuration and scripts committed | Go Dockerfile, Caddy Compose, optional Coturn overlay, `scripts/prepare-turn-deployment.sh`, and bootstrap activation docs are on `main`. No live production TURN host has been provisioned or verified. |
 | Linux/Windows/macOS installers | Built unsigned in PR #4 CI; runtime unverified | Linux AppImage/DEB, Windows NSIS, and macOS DMG targets built and uploaded successfully. Install/launch and platform runtime validation remain outstanding. No signed release. |
 
 ## Platform support statement
@@ -58,3 +58,8 @@ For this change, local `npm run typecheck`, `npm test` (16 files, 121 tests), `n
 2. Use two independent profiles/devices and a production-like HTTPS signaling+TURN deployment to verify fingerprint checks, consent/rejection, screen streaming, reconnect/disconnect, files/cleanup, and one-time clipboard consent.
 3. Verify TURN relay from distinct NATs and restrictive networks before claiming Internet interoperability.
 4. Review release signing/notarization, updater design, backup/restore, incident handling, and the threat model before calling the product production-ready.
+
+
+## Main-branch validation snapshot (2026-10-16)
+
+Commit `25e73f32bb02615c050423e0a8025217427daa3c` merged the TURN deployment and dynamic credential endpoint work. The core verification job and two-client browser E2E passed on the preceding PR run; macOS ARM64 and Linux AppImage packaging also passed. The post-merge CI run's end-to-end and platform packaging jobs were queued when this snapshot was recorded. Re-check the [main CI workflow](https://github.com/urstrulyg1/G1Viewer/actions) for final results. These automated checks do not count as physical-device or public TURN validation.
