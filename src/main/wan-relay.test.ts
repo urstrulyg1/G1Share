@@ -9,7 +9,7 @@ function signWanMessage(identity: ReturnType<typeof createTestIdentity>, payload
   const issuedAt = Date.now()
   const nonce = randomBytes(16).toString('hex')
   const digest = createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex')
-  const canonical = `g1viewer-wan-v1\\n${identity.deviceId}\\n${issuedAt}\\n${nonce}\\n${digest}`
+  const canonical = `g1viewer-wan-v1\n${identity.deviceId}\n${issuedAt}\n${nonce}\n${digest}`
   const signature = sign(null, Buffer.from(canonical, 'utf8'), identity.privateKey).toString('base64url')
   return {
     protocol: 'g1viewer-wan-v1',
