@@ -505,6 +505,17 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
     } catch (reason) { error(reason instanceof Error ? reason.message : 'Could not revoke and reset the device identity.') }
   }
 
+  async function uninstallApp() {
+    try {
+      if (typeof window.openDesk.uninstallApplication !== 'function') {
+        throw new Error('Uninstaller is unavailable in this runtime.')
+      }
+      await window.openDesk.uninstallApplication()
+    } catch (reason) {
+      error(reason instanceof Error ? reason.message : 'Could not complete application uninstall.')
+    }
+  }
+
   return <>
     <Heading eyebrow="PREFERENCES & SECURITY" title="Settings" description="Settings that affect the real app are connected to the main process and signaling service."/>
     <div className="settings-card"><div className="settings-head"><h2>Appearance</h2><p>Local interface preference.</p></div><div className="setting"><div className="setting-icon"><Sun size={16}/></div><div className="setting-copy"><strong>Color theme</strong><small>Choose a dark or light interface.</small></div><div className="segmented"><button className={theme === 'dark' ? 'selected' : ''} onClick={() => setTheme('dark')}><Moon size={13}/> Dark</button><button className={theme === 'light' ? 'selected' : ''} onClick={() => setTheme('light')}><Sun size={13}/> Light</button></div></div></div>
@@ -516,6 +527,8 @@ function SettingsPage({ state, theme, setTheme, error, success }: { state: Retur
     <div className="settings-card"><div className="settings-head"><h2>Privacy and session capabilities</h2><p>These controls reflect implemented behavior; unsupported features are not presented as active switches.</p></div><div className="setting"><div className="setting-icon"><Clipboard size={16}/></div><div className="setting-copy"><strong>Clipboard</strong><small>Manual, one-time text transfer only; requires session permission and local confirmation for each action.</small></div><span className="setting-status">Per-session consent</span></div><div className="setting"><div className="setting-icon"><Monitor size={16}/></div><div className="setting-copy"><strong>Screen capture</strong><small>Only after approval and a separate local display selection.</small></div>{state.device?.platform === 'darwin' ? <button className="subtle" onClick={() => void window.openDesk.openScreenCaptureSettings().catch(reason => error(reason instanceof Error ? reason.message : 'Could not open macOS Screen Recording settings.'))}><ExternalLink size={13}/> macOS permissions</button> : <span className="setting-status">Configure in OS settings</span>}</div><div className="setting"><div className="setting-icon"><ShieldAlert size={16}/></div><div className="setting-copy"><strong>Unattended access</strong><small>Not implemented. No background access or silent persistence is enabled.</small></div><span className="setting-status unavailable">Unavailable</span></div></div>
 
     <div className="settings-card"><div className="settings-head"><h2>Local identity</h2><p>Private Ed25519 identity key is encrypted with the operating-system credential store. Linux basic_text storage is refused.</p></div><div className="setting"><div className="setting-icon"><LockKeyhole size={16}/></div><div className="setting-copy"><strong>{state.device ? state.device.deviceId || 'Device ID unavailable' : 'Generating secure device identity…'}</strong><small>{state.device?.secureStorageBackend || 'Credential backend unavailable'} · {state.device?.identityReady ? 'Identity key available' : state.device?.identityMessage || 'Checking identity'}</small></div><span className={state.device?.identityReady ? 'good' : 'muted'}>{state.device?.identityReady ? '● Ready' : state.device ? '● Blocked' : '● Loading'}</span></div><div className="setting"><div className="setting-copy"><strong>Revoke and reset identity</strong><small>Closes active sessions, revokes this public key on the signaling service, and creates a new ID. Peers must verify the new fingerprint.</small></div><button className="danger-outline" onClick={() => void revokeIdentity()} disabled={!state.device?.identityReady || !!state.activeSession}>Revoke & reset</button></div></div>
+
+    <div className="settings-card"><div className="settings-head"><h2>Uninstall & Auto-Cleanup</h2><p>Completely remove G1Viewer, revoke identity, and wipe all local leftovers from this computer.</p></div><div className="setting"><div className="setting-icon"><Trash2 size={16}/></div><div className="setting-copy"><strong>Clean uninstall & wipe leftovers</strong><small>Revokes your identity on the network, deletes settings, logs, caches, trusted device pins, and removes the local application data directory.</small></div><button className="danger" onClick={() => void uninstallApp()} disabled={!!state.activeSession}><Trash2 size={13}/> Uninstall & clean leftovers</button></div></div>
 
     <div className="warning"><LockKeyhole size={17}/><div><strong>Remote input and audio are limited.</strong><p>Keyboard and mouse control works only after the approved session starts sharing and the host enables it. It needs an X11 Linux session, Windows, or macOS with Accessibility access; Wayland is not supported. System audio is Windows-only. Unattended access is not available.</p></div></div>
   </>

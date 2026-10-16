@@ -23,10 +23,11 @@ import {
   verify as verifySignature
 } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, rename, unlink, writeFile, mkdir, chmod } from 'node:fs/promises'
+import { readFile, rename, unlink, writeFile, mkdir, chmod, rm, readdir } from 'node:fs/promises'
 import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { hostname } from 'node:os'
+import { hostname, homedir } from 'node:os'
+import { spawn } from 'node:child_process'
 import type { DeviceInfo, DeviceSummary, DesktopCapabilities, EventBatch, IncomingFileHandle, IncomingFileRequest, OpenDeskBridge, PeerSignalVerification, RemoteSession, SessionDecisionRequest, SessionPermission, SignalingRequest, TrustedDevice } from '../shared/types'
 import { isSessionPermission, permissionLabel, SESSION_PERMISSIONS } from '../shared/permissions'
 import { parseRemoteInputMessage } from '../shared/remote-input'
@@ -707,6 +708,84 @@ async function resetDeviceIdentity(): Promise<DeviceInfo | null> {
   return getDeviceInfo()
 }
 
+async function uninstallApplication(): Promise<boolean> {
+  if (!mainWindow) return false
+  const answer = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: 'Uninstall G1Viewer & Clean Leftovers',
+    message: 'Completely uninstall G1Viewer and erase all local data?',
+    detail: 'This will revoke this device identity from the network, delete all settings, trusted peer keys, cached sessions, files, and credentials, and remove G1Viewer user data from this computer.',
+    buttons: ['Cancel', 'Uninstall & Wipe Everything'],
+    cancelId: 0,
+    defaultId: 0,
+    noLink: true
+  })
+  if (answer.response !== 1) return false
+
+  try {
+    await authenticatedSignalingRequest({ method: 'POST', path: '/api/v1/devices/revoke', body: {} }, true)
+  } catch { /* best effort */ }
+
+  if (autoSignalingManager) {
+    try { await autoSignalingManager.stop() } catch { /* ignore */ }
+    autoSignalingManager = null
+  }
+  approvedSessions.clear()
+  captureArm = null
+  releaseRemoteInput()
+  try { await incomingFileStore.closeAll() } catch { /* ignore */ }
+
+  try {
+    await session.defaultSession.clearStorageData()
+    await session.defaultSession.clearCache()
+  } catch { /* ignore */ }
+
+  const userData = app.getPath('userData')
+  try {
+    const entries = await readdir(userData).catch(() => [] as string[])
+    for (const entry of entries) {
+      try {
+        await rm(join(userData, entry), { recursive: true, force: true })
+      } catch { /* ignore locked active files */ }
+    }
+  } catch { /* ignore */ }
+
+  if (process.platform === 'win32') {
+    const uninstaller = join(dirname(process.execPath), 'Uninstall G1Viewer.exe')
+    if (existsSync(uninstaller)) {
+      spawn(uninstaller, [], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      spawn('cmd.exe', ['/c', 'timeout /t 1 /nobreak > nul & rd /s /q "' + userData + '"'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }).unref()
+    }
+  } else if (process.platform === 'darwin') {
+    spawn('sh', ['-c', `sleep 1 && rm -rf "${userData}" ~/Library/Caches/com.urstrulyg1.g1viewer ~/Library/Saved\\ Application\\ State/com.urstrulyg1.g1viewer.savedState ~/Library/Preferences/com.urstrulyg1.g1viewer.plist`], {
+      detached: true,
+      stdio: 'ignore'
+    }).unref()
+  } else {
+    const configDir = join(homedir(), '.config', 'G1Viewer')
+    const cacheDir = join(homedir(), '.cache', 'G1Viewer')
+    spawn('sh', ['-c', `sleep 1 && rm -rf "${userData}" "${configDir}" "${cacheDir}"`], {
+      detached: true,
+      stdio: 'ignore'
+    }).unref()
+  }
+
+  dialog.showMessageBoxSync({
+    type: 'info',
+    title: 'G1Viewer Uninstalled',
+    message: 'All local data, credentials, and settings have been cleaned up.',
+    detail: 'G1Viewer will now exit.'
+  })
+
+  app.exit(0)
+  return true
+}
+
 function safeIncomingFilename(value: string): string {
   const name = basename(value.replace(/[\\/]/g, '_')).replace(/[\u0000-\u001f\u007f<>:"|?*]/g, '_').trim()
   if (!name || name === '.' || name === '..') throw new TypeError('Incoming file name is invalid; the transfer was not accepted.')
@@ -896,6 +975,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle('identity:reset', async event => {
     assertTrustedIPC(event)
     return resetDeviceIdentity()
+  })
+  ipcMain.handle('app:uninstall', async event => {
+    assertTrustedIPC(event)
+    return uninstallApplication()
   })
   ipcMain.handle('system:copy-text', (event, value: unknown) => {
     assertTrustedIPC(event)

@@ -49,7 +49,8 @@ const bridge: OpenDeskBridge = {
   injectRemoteInput: (message: RemoteInputMessage) => ipcRenderer.invoke('input:inject', message) as Promise<void>,
   openScreenCaptureSettings: () => ipcRenderer.invoke('capture:open-settings') as Promise<void>,
   getCapabilities: () => ipcRenderer.invoke('system:get-capabilities') as Promise<DesktopCapabilities>,
-  openProjectPage: () => ipcRenderer.invoke('project:open') as Promise<void>
+  openProjectPage: () => ipcRenderer.invoke('project:open') as Promise<void>,
+  uninstallApplication: () => ipcRenderer.invoke('app:uninstall') as Promise<boolean>
 }
 
 contextBridge.exposeInMainWorld('openDesk', bridge)

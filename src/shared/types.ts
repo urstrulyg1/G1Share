@@ -158,4 +158,5 @@ export interface OpenDeskBridge {
   openScreenCaptureSettings: () => Promise<void>
   getCapabilities: () => Promise<DesktopCapabilities>
   openProjectPage: () => Promise<void>
+  uninstallApplication: () => Promise<boolean>
 }
