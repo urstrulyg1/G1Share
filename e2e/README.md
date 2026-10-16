@@ -2,9 +2,11 @@
 
 ## Local CI test
 
-The regular `Two-client end-to-end` job starts the real Go signaling broker and two isolated headless Chromium clients. It verifies device registration, a live WebRTC video stream, selected ICE candidate-pair diagnostics, the secure data channel, a 256 KiB file transfer with receiver-side hash verification, a browser-offline interruption followed by ICE restart and resumed video, and remote-input/file-permission enforcement.
+The regular `Two-client end-to-end` job starts the real Go signaling broker and two isolated headless Chromium clients. It verifies device registration, a live WebRTC video stream, selected ICE candidate-pair diagnostics, the secure data channel, a 256 KiB file transfer with receiver-side hash verification, an OS-level UDP interruption (using temporary iptables rules on a disposable Linux runner) followed by ICE restart and resumed video, and remote-input/file-permission enforcement.
 
 This is a real browser WebRTC test, but both clients run on the same GitHub-hosted runner. It does not by itself prove connectivity between physical devices on unrelated networks.
+
+The CI E2E job sets `E2E_NETWORK_INTERRUPTION_MODE=firewall` and temporarily drops UDP traffic using `sudo iptables`, restoring both firewall rules in a `finally` block. This deliberately affects all UDP on that ephemeral runner for about eight seconds; do not enable this mode on a production machine. Without that environment variable, the network-interruption check is skipped for local runs.
 
 ## Optional deployed-service smoke test
 
