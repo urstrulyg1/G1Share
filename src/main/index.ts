@@ -6,6 +6,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  nativeImage,
   safeStorage,
   screen,
   session,
@@ -1106,6 +1107,33 @@ function registerIpcHandlers(): void {
   })
 }
 
+function getAppIcon(): Electron.NativeImage | undefined {
+  const candidateDirs = [
+    join(currentDir, '../../build'),
+    join(app.getAppPath(), 'build'),
+    join(process.resourcesPath, 'build'),
+    process.resourcesPath
+  ]
+  const candidateFiles = process.platform === 'win32'
+    ? ['icon.ico', 'icon.png']
+    : process.platform === 'darwin'
+      ? ['icon.png', 'icon.icns']
+      : ['icon.png', 'icons/256x256.png', 'icons/128x128.png']
+
+  for (const dir of candidateDirs) {
+    for (const file of candidateFiles) {
+      const fullPath = join(dir, file)
+      if (existsSync(fullPath)) {
+        try {
+          const img = nativeImage.createFromPath(fullPath)
+          if (!img.isEmpty()) return img
+        } catch { /* Try next candidate */ }
+      }
+    }
+  }
+  return undefined
+}
+
 function getAppIconPath(): string | undefined {
   const buildDir = join(currentDir, '../../build')
   if (process.platform === 'darwin') {
@@ -1168,6 +1196,12 @@ function createWindow(): void {
   const { size } = screen.getPrimaryDisplay()
   const width = Math.min(1536, size.width)
   const height = Math.min(1024, size.height)
+  const appIcon = getAppIcon()
+  if (process.platform === 'darwin' && app.dock && appIcon) {
+    try {
+      app.dock.setIcon(appIcon)
+    } catch { /* Dock icon update is best-effort. */ }
+  }
   mainWindow = new BrowserWindow({
     width,
     height,
@@ -1180,7 +1214,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#09111d',
     title: 'G1Viewer',
-    icon: getAppIconPath(),
+    icon: appIcon ?? getAppIconPath(),
     webPreferences: {
       preload: join(currentDir, '../preload/index.cjs'),
       contextIsolation: true,
