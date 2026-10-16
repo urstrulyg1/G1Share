@@ -206,21 +206,19 @@ jobs:
 
       - name: Generate download summary for GitHub Actions
         run: |
-          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
-## 🚀 Direct Download Links (Uncompressed Installers)
-
-> [!IMPORTANT]
-> **Do NOT download from the Actions "Artifacts" table below.** GitHub's web interface packages all artifact downloads into `.zip` archives.
-> To download the **direct native application/installer without any `.zip` extraction**, click the official direct links below:
-
-| Platform | Architecture | Installer Format | Direct 1-Click Download |
-| :--- | :--- | :--- | :--- |
-| **Windows** | 64-bit (`x64`) | NSIS Setup (`.exe`) | [**g1viewer_x64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.exe) |
-| **Windows** | ARM64 | NSIS Setup (`.exe`) | [**g1viewer_arm64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.exe) |
-| **macOS** | Apple Silicon (`arm64`) | Disk Image (`.dmg`) | [**g1viewer_arm64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.dmg) |
-| **macOS** | Intel (`x64`) | Disk Image (`.dmg`) | [**g1viewer_x64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.dmg) |
-| **Linux** | 64-bit (`x64`) | Standalone AppImage (`.AppImage`) | [**g1viewer_x64.AppImage**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.AppImage) |
-| **Linux** | 64-bit (`x64`) | Debian / Ubuntu (`.deb`) | [**g1viewer_x64.deb**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.deb) |
-
-Checksums: [**SHA256SUMS.txt**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/SHA256SUMS.txt)
-EOF
+          echo "## 🚀 Direct Download Links (Uncompressed Installers)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> [!IMPORTANT]" >> $GITHUB_STEP_SUMMARY
+          echo "> **Do NOT download from the Actions \"Artifacts\" table below.** GitHub's web interface packages all artifact downloads into \`.zip\` archives." >> $GITHUB_STEP_SUMMARY
+          echo "> To download the **direct native application/installer without any \`.zip\` extraction**, click the official direct links below:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Architecture | Installer Format | Direct 1-Click Download |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Windows** | 64-bit (\`x64\`) | NSIS Setup (\`.exe\`) | [**g1viewer_x64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.exe) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Windows** | ARM64 | NSIS Setup (\`.exe\`) | [**g1viewer_arm64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.exe) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **macOS** | Apple Silicon (\`arm64\`) | Disk Image (\`.dmg\`) | [**g1viewer_arm64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.dmg) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **macOS** | Intel (\`x64\`) | Disk Image (\`.dmg\`) | [**g1viewer_x64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.dmg) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Linux** | 64-bit (\`x64\`) | Standalone AppImage (\`.AppImage\`) | [**g1viewer_x64.AppImage**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.AppImage) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Linux** | 64-bit (\`x64\`) | Debian / Ubuntu (\`.deb\`) | [**g1viewer_x64.deb**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.deb) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Checksums: [**SHA256SUMS.txt**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/SHA256SUMS.txt)" >> $GITHUB_STEP_SUMMARY
