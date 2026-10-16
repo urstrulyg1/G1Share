@@ -86,7 +86,7 @@ export async function startHarnessServer({ repoRoot, port, signalingPort, signal
       port,
       strictPort: true,
       fs: { allow: [repoRoot] },
-      proxy: { '/api': { target: signalingTarget, changeOrigin: false, secure: true } }
+      proxy: { '/api': { target: signalingTarget, changeOrigin: true, secure: true } }
     },
     resolve: { alias: [{ find: /^node:module$/, replacement: join(repoRoot, 'e2e/harness/node-module-stub.ts') }] }
   })
