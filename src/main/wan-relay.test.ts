@@ -1,10 +1,26 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
 import { createServer } from 'node:http'
-import { createHash, generateKeyPairSync } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { EmbeddedSignalingBroker, AutoSignalingManager, deriveWanTopic } from './embedded-signaling'
 
 describe('WAN Relay cross-network signaling integration', () => {
+function signedPeerSignal(
+  identity: ReturnType<typeof createTestIdentity>,
+  sessionId: string,
+  type: 'offer' | 'answer',
+  payload: Record<string, unknown>
+) {
+  const digest = createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex')
+  const canonical = `opendesk-peer-signal-v1\n${sessionId}\n${identity.deviceId}\n${type}\n${digest}`
+  return {
+    fromDeviceId: identity.deviceId,
+    type,
+    payload,
+    signature: sign(null, Buffer.from(canonical, 'utf8'), identity.privateKey).toString('base64url')
+  }
+}
+
 function createTestIdentity() {
   const pair = generateKeyPairSync('ed25519')
   const raw = pair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
@@ -133,25 +149,26 @@ function createTestIdentity() {
     expect(accEvent).toBeDefined()
     expect(accEvent.sessionId).toBe(sessionId)
 
-    // 6. Manager A sends a WebRTC signal offer
-    const offerPayload = { type: 'offer', sdp: 'v=0...' }
+    // 6. Manager A (viewer) sends a signed WebRTC answer to Manager B (host).
+    const answerPayload = { type: 'answer', sdp: 'v=0\\r\\n' }
+    const signalMessage = signedPeerSignal(identityA, sessionId, 'answer', answerPayload)
     const aSession = (managerA as any).broker.getSession(sessionId)
     expect(aSession.status).toBe('active')
     expect((managerB as any).broker.getSession(sessionId)?.status).toBe('active')
     const signalEnvelopeProbe = (managerA as any).wanRelay.createEnvelope(devBId, {
-      action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: offerPayload
+      action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: signalMessage
     })
     expect(signalEnvelopeProbe).not.toBeNull()
     expect((managerB as any).wanRelay.decryptEnvelopePayload(signalEnvelopeProbe)).toMatchObject({
-      action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: offerPayload
+      action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: signalMessage
     })
-    await managerA.forwardSignal(aSession, devAId, offerPayload)
+    await managerA.forwardSignal(aSession, devAId, signalMessage)
 
-    // 7. Manager B receives the signal
+    // 7. Manager B receives the signed signal.
     const bSigEvents = await (managerB as any).broker.pollEvents(devBId, bEvents.cursor, 10, 0)
     const sigEvent = bSigEvents.events.find((e: any) => e.type === 'signal')
     expect(sigEvent).toBeDefined()
-    expect(sigEvent.message).toEqual(offerPayload)
+    expect(sigEvent.message).toEqual(signalMessage)
 
     // 8. Close session
     await managerA.closeSession(aSession, devAId, 'done')
