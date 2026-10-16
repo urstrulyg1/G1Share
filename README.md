@@ -39,7 +39,7 @@ SHA-256 checksums for verifying download integrity are available at [**SHA256SUM
 | Unattended access | **Unavailable**; no background access or hidden persistence is implemented |
 | File transfer | WebRTC data-channel protocol and main-process storage are implemented with bounded chunks, explicit destination choice, SHA-256 checks, and no-overwrite publication; tested with simulated channels, not real clients |
 | Clipboard | One-time text only; sender and receiver each confirm locally; continuous synchronization is unavailable |
-| Signaling | Zero-configuration embedded coordinator & automatic LAN peer discovery out-of-the-box; optional custom self-hosted HTTPS origin; no user accounts |
+| Signaling | Embedded coordinator, LAN discovery, public WAN relay and dynamically fetched relay/STUN bootstrap; optional custom self-hosted origin; no user accounts. TURN credentials are dynamically supported but are not yet configured in the default bootstrap. |
 | Local devices / history | Devices come from real ID lookups in the current app run; presence expires rather than being persisted as online. Recent requests use real session events and show a connected time only after WebRTC actually connects. Legacy unverified browser caches are not imported. |
 | Metrics | Only browser WebRTC statistics and frame callbacks; absent values show **Unavailable**, never default numbers |
 | Installers | Unsigned Linux AppImage/DEB, Windows NSIS, and macOS DMG targets built in GitHub CI; installation/runtime validation and signed releases remain outstanding |
@@ -55,7 +55,7 @@ npm ci
 npm run dev
 ```
 
-On launch, the Home dashboard automatically initializes its embedded signaling coordinator and discovers peers on the local network (LAN) with zero manual configuration. For same-computer testing or LAN sharing, everything works immediately out-of-the-box. For external cloud deployments, you can optionally configure a custom HTTPS origin in **Settings → Signaling service** or set `G1VIEWER_SIGNALING_URL`. You do **not** need a user account. Unlock your OS credential store so the app can generate its actual device key/ID; if it cannot, it shows **Unavailable** and blocks connections instead of displaying a fake identifier. See [local development](docs/development/local-development.md) and [the two-client checklist](docs/user/getting-started.md).
+On launch, G1Viewer starts its local coordinator and fetches the current relay/STUN bootstrap from `https://raw.githubusercontent.com/urstrulyg1/G1Viewer/main/config/network-bootstrap.json`; normal users do not need to enter a signaling-server URL. Install G1Viewer on both devices, copy the host's device ID, enter it on the other device, verify the first-use fingerprint over a separate trusted channel, and approve the request on the host. The app refreshes the dynamic ICE configuration when creating a WebRTC connection and can fetch short-lived TURN credentials when a TURN credential endpoint is published in the bootstrap. **The checked-in default bootstrap currently has STUN only, so restrictive NATs/firewalls may still require deployment of a TURN service before connections work reliably across every network.** You do **not** need a user account. Unlock your OS credential store so the app can generate its actual device key/ID; if it cannot, it shows **Unavailable** and blocks connections instead of displaying a fake identifier. See [local development](docs/development/local-development.md) and [the two-client checklist](docs/user/getting-started.md).
 
 ## Self-hosting
 
