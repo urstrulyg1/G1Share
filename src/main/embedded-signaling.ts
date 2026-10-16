@@ -1823,7 +1823,9 @@ export class AutoSignalingManager {
     const normalizedTo = normalizeDeviceId(toDeviceId)
     const normalizedFrom = normalizeDeviceId(fromDeviceId)
 
-    let targetDevice = await this.findDeviceAcrossPeers(normalizedTo)
+    const permissions = normalizedPermissions(requestedPermissions)
+    if (!permissions || normalizedFrom === normalizedTo || !this.wanRelay) return null
+    const targetDevice = await this.findDeviceAcrossPeers(normalizedTo)
     if (!targetDevice) return null
 
     const fromDevice = this.broker.getDeviceSummary(normalizedFrom)
@@ -1832,12 +1834,11 @@ export class AutoSignalingManager {
     const sessionId = randomBytes(16).toString('hex')
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 90_000).toISOString()
-
     const session: SessionRecord = {
       id: sessionId,
       fromDeviceId: normalizedFrom,
       toDeviceId: normalizedTo,
-      requestedPermissions,
+      requestedPermissions: permissions,
       permissions: [],
       status: 'pending',
       createdAt: now.toISOString(),
@@ -1845,19 +1846,19 @@ export class AutoSignalingManager {
       route: 'wan'
     }
 
-    this.broker.injectSession(session)
-
-    if (this.wanRelay) {
-      await this.wanRelay.publishToDevice(normalizedTo, {
-        action: 'session_request',
-        sessionId,
-        fromDeviceId: normalizedFrom,
-        toDeviceId: normalizedTo,
-        session,
-        peer: fromDevice
-      })
+    if (!this.broker.injectSession(session)) return null
+    const published = await this.wanRelay.publishToDevice(normalizedTo, {
+      action: 'session_request',
+      sessionId,
+      fromDeviceId: normalizedFrom,
+      toDeviceId: normalizedTo,
+      session,
+      peer: fromDevice
+    })
+    if (!published) {
+      this.broker.closeSessionLocally(sessionId)
+      return null
     }
-
     return { session, peer: targetDevice }
   }
 
