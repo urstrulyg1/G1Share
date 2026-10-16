@@ -82,6 +82,14 @@ try {
   const receivedTransfer = await waitFor(host, state => state.transfers.some(record => record.direction === 'receiving' && record.name === 'benchmark.bin' && record.size === 256 * 1024 && record.status === 'complete'), 'host to verify a 256 KiB peer-to-peer data-channel file transfer', 30_000)
   check('data channel transfers and verifies a file end to end', transferResult.bytes === 256 * 1024 && transferResult.seconds > 0 && receivedTransfer.transfers.some(record => record.direction === 'receiving' && record.name === 'benchmark.bin' && record.size === 256 * 1024 && record.status === 'complete'), `${transferResult.bytes} bytes in ${transferResult.seconds.toFixed(3)}s`)
 
+  const hostStateOffset = (await host.evaluate(() => window.harness.snapshot())).connectionStates.length
+  const viewerStateOffset = (await viewer.evaluate(() => window.harness.snapshot())).connectionStates.length
+  await host.evaluate(() => window.harness.simulateIceDisconnect())
+  const recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
+  const recoveredViewer = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0 && state.connectionStates.slice(viewerStateOffset).includes('negotiating'), 'viewer to renegotiate and resume video after ICE restart', 35_000)
+  check('host ICE disconnect recovery returns to connected', recoveredHost.connection === 'connected', recoveredHost.connectionStates.slice(hostStateOffset).join(' -> '))
+  check('viewer renegotiates and continues receiving video after ICE restart', recoveredViewer.connection === 'connected' && recoveredViewer.video.width > 0, `${recoveredViewer.video.width}x${recoveredViewer.video.height}; ${recoveredViewer.connectionStates.slice(viewerStateOffset).join(' -> ')}`)
+
   const pending = await viewer.evaluate(() => window.harness.snapshot())
   check('input permission starts as pending until the host enables control', pending.remoteControl === 'pending', pending.remoteControl)
 
