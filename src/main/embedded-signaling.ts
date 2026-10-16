@@ -3,7 +3,7 @@ import dgram from 'node:dgram'
 import os from 'node:os'
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, sign, verify } from 'node:crypto'
 import { isValidDeviceId, normalizeDeviceId } from '../shared/device-id'
-import { FALLBACK_STUN_URLS, fetchDynamicTurnServers, loadNetworkBootstrapConfig } from './network-config'
+import { fetchDynamicTurnServers, loadNetworkBootstrapConfig } from './network-config'
 
 export interface ServerEvent {
   sequence: number
@@ -228,7 +228,6 @@ function decryptWanPayload(
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new TypeError('Invalid decrypted WAN payload.')
   return payload as WanRelayMessage
 }
-const DEFAULT_STUN_URLS = [...FALLBACK_STUN_URLS]
 
 export function deriveWanTopic(deviceId: string): string {
   const clean = normalizeDeviceId(deviceId).replace(/[^0-9A-Za-z]/g, '')
