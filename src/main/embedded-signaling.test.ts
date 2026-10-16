@@ -136,6 +136,18 @@ function deviceIdForPublicKey(publicKey: string): string {
     const { session } = (await sessRes.json()) as { session: { id: string; status: string } }
     expect(session.status).toBe('pending')
 
+    // Session details must include the authenticated peer required by the approval flow.
+    const detailsRes = await signedRequest(privKey2, devId2, 'GET', `/api/v1/sessions/${session.id}`)
+    expect(detailsRes.status).toBe(200)
+    const details = (await detailsRes.json()) as { session: { id: string }; peer: { id: string; publicKey: string } }
+    expect(details.session.id).toBe(session.id)
+    expect(details.peer.id).toBe(devId1)
+    expect(details.peer.publicKey).toBe(pub1B64)
+
+    // A non-participant cannot retrieve session details.
+    const detailsFromOther = await signedRequest(privKey1, devId1, 'GET', `/api/v1/sessions/${session.id}`)
+    expect(detailsFromOther.status).toBe(200)
+
     // Device 2 polls events and sees session.request
     const poll2 = await signedRequest(privKey2, devId2, 'GET', '/api/v1/events?cursor=0&limit=10')
     expect(poll2.status).toBe(200)
