@@ -117,10 +117,11 @@ jobs:
       - name: Validate deliverable format and integrity
         run: node scripts/validate-release-assets.mjs --target ${{ matrix.id }} --dir release
       - name: Upload standalone ${{ matrix.filename }} artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact_name }}
+          name: ${{ matrix.filename }}
           path: ${{ matrix.file }}
+          archive: false
           if-no-files-found: error
           retention-days: 7
 
@@ -145,9 +146,9 @@ jobs:
         run: mkdir -p release-assets
 
       - name: Download all platform artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          pattern: g1viewer-*
+          pattern: g1viewer_*
           path: release-assets
           merge-multiple: true
 
@@ -202,3 +203,24 @@ jobs:
               --title "G1Viewer $TAG" \
               --generate-notes
           fi
+
+      - name: Generate download summary for GitHub Actions
+        run: |
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+## 🚀 Direct Download Links (Uncompressed Installers)
+
+> [!IMPORTANT]
+> **Do NOT download from the Actions "Artifacts" table below.** GitHub's web interface packages all artifact downloads into `.zip` archives.
+> To download the **direct native application/installer without any `.zip` extraction**, click the official direct links below:
+
+| Platform | Architecture | Installer Format | Direct 1-Click Download |
+| :--- | :--- | :--- | :--- |
+| **Windows** | 64-bit (`x64`) | NSIS Setup (`.exe`) | [**g1viewer_x64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.exe) |
+| **Windows** | ARM64 | NSIS Setup (`.exe`) | [**g1viewer_arm64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.exe) |
+| **macOS** | Apple Silicon (`arm64`) | Disk Image (`.dmg`) | [**g1viewer_arm64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.dmg) |
+| **macOS** | Intel (`x64`) | Disk Image (`.dmg`) | [**g1viewer_x64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.dmg) |
+| **Linux** | 64-bit (`x64`) | Standalone AppImage (`.AppImage`) | [**g1viewer_x64.AppImage**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.AppImage) |
+| **Linux** | 64-bit (`x64`) | Debian / Ubuntu (`.deb`) | [**g1viewer_x64.deb**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.deb) |
+
+Checksums: [**SHA256SUMS.txt**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/SHA256SUMS.txt)
+EOF

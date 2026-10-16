@@ -6,16 +6,23 @@ G1Viewer is an account-free, consent-first desktop remote-viewing prototype buil
 
 ## Downloads
 
-**Download installers from [G1Viewer Releases](https://github.com/urstrulyg1/G1Viewer/releases/latest) — do not download them from Actions → Artifacts.** GitHub Actions artifacts are always delivered as ZIP archives, even when the artifact contains a single native installer. The ZIP artifact links on workflow-run pages are for CI inspection only. The public release page publishes each installer as an individual native file; the direct links below return the `.exe`, `.dmg`, `.deb`, or `.AppImage` package itself:
+Direct, uncompressed installers and application packages are published on [GitHub Releases](https://github.com/urstrulyg1/G1Viewer/releases/latest). These are single-file downloads that can be run or installed immediately—**no ZIP archives to extract and no account required**.
 
-| Operating System | Architecture | Package Format | Direct Download Link |
+**Download installers from [G1Viewer Releases](https://github.com/urstrulyg1/G1Viewer/releases/latest) or using the direct links below:**
+
+| Operating System | Architecture | Package Format | Direct 1-Click Download |
 | :--- | :--- | :--- | :--- |
 | **Windows** | 64-bit (`x64`) | NSIS Setup Installer (`.exe`) | [**g1viewer_x64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.exe) |
 | **Windows** | ARM64 | NSIS Setup Installer (`.exe`) | [**g1viewer_arm64.exe**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.exe) |
 | **macOS** | Apple Silicon (`arm64`) | Drag-and-Drop Disk Image (`.dmg`) | [**g1viewer_arm64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_arm64.dmg) |
 | **macOS** | Intel (`x64`) | Drag-and-Drop Disk Image (`.dmg`) | [**g1viewer_x64.dmg**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.dmg) |
-| **Linux** | 64-bit (`x64`) | Standalone AppImage (`.AppImage`) | [**g1viewer_x64.AppImage**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.AppImage) |
+| **Linux** | 64-bit (`x64`) | Standalone Executable (`.AppImage`) | [**g1viewer_x64.AppImage**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.AppImage) |
 | **Linux** | 64-bit (`x64`) | Debian / Ubuntu Package (`.deb`) | [**g1viewer_x64.deb**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/g1viewer_x64.deb) |
+
+> [!TIP]
+> **Getting the application directly:** Click the links above to download the raw `.exe`, `.dmg`, `.AppImage`, or `.deb` file directly.
+> - Do not click the green GitHub `<> Code` -> "Download ZIP" button (which downloads raw project source code).
+> - Do not download from the GitHub Actions "Artifacts" table (GitHub web UI forces artifacts into `.zip` archives). Use the direct release links above.
 
 SHA-256 checksums for verifying download integrity are available at [**SHA256SUMS.txt**](https://github.com/urstrulyg1/G1Viewer/releases/latest/download/SHA256SUMS.txt).
 
