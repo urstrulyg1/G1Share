@@ -46,6 +46,12 @@ if (!fs.existsSync(publicSvg)) {
   process.exit(1);
 }
 
+const missingAssets = requiredAssets.filter(asset => !fs.existsSync(asset) || fs.statSync(asset).size === 0);
+if (missingAssets.length === 0 && !process.argv.includes('--force')) {
+  console.log('✅ [G1Viewer] All required desktop branding and packaging visual assets are present in build/.');
+  process.exit(0);
+}
+
 // Clean temporary folder
 if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
 fs.mkdirSync(tmpDir, { recursive: true });
@@ -65,13 +71,12 @@ const chromeCandidates = [
 
 let chromePath = chromeCandidates.find(p => fs.existsSync(p));
 
-const missingAssets = requiredAssets.filter(asset => !fs.existsSync(asset));
-if (!chromePath) {
+if (!chromePath || process.platform !== 'darwin') {
   if (missingAssets.length > 0) {
-    console.error(`Chrome/Chromium is unavailable and required assets are missing: ${missingAssets.join(', ')}`);
+    console.error(`Packaging assets are missing and generator requires macOS with Chrome: ${missingAssets.join(', ')}`);
     process.exit(1);
   }
-  console.warn('Chrome runtime is unavailable; keeping checked-in packaging assets.');
+  console.log('✅ [G1Viewer] Keeping checked-in visual assets in build/.');
   fs.rmSync(tmpDir, { recursive: true, force: true });
   process.exit(0);
 }
