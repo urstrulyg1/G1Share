@@ -2,7 +2,7 @@ import http from 'node:http'
 import dgram from 'node:dgram'
 import os from 'node:os'
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, sign, verify } from 'node:crypto'
-import { normalizeDeviceId } from '../shared/device-id'
+import { isValidDeviceId, normalizeDeviceId } from '../shared/device-id'
 
 export interface ServerEvent {
   sequence: number
@@ -30,7 +30,7 @@ export interface SessionRecord {
   toDeviceId: string
   requestedPermissions: string[]
   permissions: string[]
-  status: 'pending' | 'active' | 'rejected' | 'closed'
+  status: 'pending' | 'active' | 'rejected' | 'closed' | 'expired'
   createdAt: string
   expiresAt: string
   route?: 'local' | 'lan' | 'wan'
