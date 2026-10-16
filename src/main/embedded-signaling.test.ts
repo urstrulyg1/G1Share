@@ -200,7 +200,7 @@ function deviceIdForPublicKey(publicKey: string): string {
     // Device 1 polls events and sees session.accepted
     const poll1 = await signedRequest(privKey1, devId1, 'GET', '/api/v1/events?cursor=0&limit=10')
     expect(poll1.status).toBe(200)
-    const batch1 = (await poll1.json()) as { events: Array<{ type: string; sessionId: string }> }
+    const batch1 = (await poll1.json()) as { events: Array<{ type: string; sessionId: string; sequence?: number }> }
     expect(batch1.events.some(e => e.type === 'session.accepted')).toBe(true)
 
     // The session host (Device 2) sends a signed WebRTC offer to the viewer (Device 1).
