@@ -1,6 +1,6 @@
 {
   "name": "g1viewer",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "A free-first, privacy-focused remote desktop platform",
