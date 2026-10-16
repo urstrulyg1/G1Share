@@ -71,3 +71,12 @@ func TestClientIPTrustsOnlyConfiguredProxies(t *testing.T) {
 		t.Fatalf("trusted forwarded address = %q, want the final proxy-provided client address", got)
 	}
 }
+
+func TestKnownAPIPathIncludesDeviceCollection(t *testing.T) {
+	if !knownAPIPath("/api/v1/devices") {
+		t.Fatal("device collection endpoint must be accepted by the signaling API")
+	}
+	if knownAPIPath("/api/v1/devices/") {
+		t.Fatal("empty device ID must not be accepted")
+	}
+}

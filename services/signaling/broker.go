@@ -399,6 +399,25 @@ func summaryFor(record *DeviceRecord, now time.Time) DeviceSummary {
 	}
 }
 
+// listDevices returns registered, non-revoked devices in stable ID order.
+func (broker *Broker) listDevices() []DeviceSummary {
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	now := time.Now()
+	ids := make([]string, 0, len(broker.devices))
+	for id, record := range broker.devices {
+		if !record.Revoked {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	devices := make([]DeviceSummary, 0, len(ids))
+	for _, id := range ids {
+		devices = append(devices, summaryFor(broker.devices[id], now))
+	}
+	return devices
+}
+
 func (broker *Broker) getDevice(id string) (DeviceSummary, *apiFault) {
 	broker.mu.Lock()
 	defer broker.mu.Unlock()

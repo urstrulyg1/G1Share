@@ -136,6 +136,8 @@ func handleAPI(broker *Broker) http.HandlerFunc {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]any{"ok": true, "serverTime": time.Now().UTC()})
+		case path == "/api/v1/devices" && request.Method == http.MethodGet:
+			writeJSON(w, http.StatusOK, map[string]any{"devices": broker.listDevices()})
 		case path == "/api/v1/devices/me" && request.Method == http.MethodGet:
 			device, fault := broker.getDevice(actor.ID)
 			if fault != nil {
@@ -199,7 +201,7 @@ func handleAPI(broker *Broker) http.HandlerFunc {
 
 func knownAPIPath(path string) bool {
 	switch path {
-	case "/api/v1/devices/register", "/api/v1/devices/heartbeat", "/api/v1/devices/me", "/api/v1/devices/rename", "/api/v1/devices/revoke", "/api/v1/sessions", "/api/v1/events", "/api/v1/ice":
+	case "/api/v1/devices", "/api/v1/devices/register", "/api/v1/devices/heartbeat", "/api/v1/devices/me", "/api/v1/devices/rename", "/api/v1/devices/revoke", "/api/v1/sessions", "/api/v1/events", "/api/v1/ice":
 		return true
 	}
 	if strings.HasPrefix(path, "/api/v1/devices/") {
