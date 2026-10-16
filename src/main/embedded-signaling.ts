@@ -177,6 +177,7 @@ function encryptWanPayload(
   const recipientKey = ed25519PublicToX25519(recipientPublicKey)
   const ephemeral = generateKeyPairSync('x25519')
   const sharedSecret = diffieHellman({ privateKey: ephemeral.privateKey, publicKey: recipientKey })
+  if (sharedSecret.every(byte => byte === 0)) throw new TypeError('Invalid recipient encryption key.')
   const salt = randomBytes(16)
   const key = Buffer.from(hkdfSync('sha256', sharedSecret, salt, Buffer.from('g1viewer-wan-e2e-v1'), 32))
   const iv = randomBytes(12)
@@ -215,6 +216,7 @@ function decryptWanPayload(
   }
   const ephemeralKey = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b656e032100', 'hex'), ephemeralRaw]), type: 'spki', format: 'der' })
   const sharedSecret = diffieHellman({ privateKey: ed25519PrivateToX25519(privateKey), publicKey: ephemeralKey })
+  if (sharedSecret.every(byte => byte === 0)) throw new TypeError('Invalid ephemeral encryption key.')
   const key = Buffer.from(hkdfSync('sha256', sharedSecret, salt, Buffer.from('g1viewer-wan-e2e-v1'), 32))
   const decipher = createDecipheriv('aes-256-gcm', key, iv)
   decipher.setAAD(wanAad(senderDeviceId, recipientDeviceId, issuedAt, nonce))
