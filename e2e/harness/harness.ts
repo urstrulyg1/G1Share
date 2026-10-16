@@ -548,11 +548,6 @@ const harness = {
     markerSamples.length = 0
     nativeLog.length = 0
   },
-  simulateIceDisconnect(): void {
-    if (!controller || controllerRole !== 'host') throw new Error('An active host session is required to test ICE recovery.')
-    // Exercise the controller's production disconnect-recovery path without making the runner's network flaky.
-    ;(controller as unknown as { scheduleRecovery: (state: 'disconnected') => void }).scheduleRecovery('disconnected')
-  },
   async transportSnapshot() {
     const active = peerConnections.filter(peer => peer.connectionState !== 'closed')
     return Promise.all(active.map(async peer => {
