@@ -46,6 +46,10 @@ const WAN_MAX_MESSAGE_BYTES = 64 * 1024
 const WAN_MAX_ENVELOPE_BYTES = Math.ceil(WAN_MAX_MESSAGE_BYTES * 4 / 3) + 4096
 const WAN_MAX_REPLAY_ENTRIES = 10_000
 const VALID_SESSION_PERMISSIONS = new Set(['view', 'files', 'clipboard', 'input', 'audio'])
+const MAX_REGISTERED_DEVICES = 10_000
+const MAX_SESSION_RECORDS = 10_000
+const ACTIVE_SESSION_TTL_MS = 2 * 60 * 60 * 1000
+const TERMINAL_SESSION_RETENTION_MS = 5 * 60 * 1000
 
 function normalizedPermissions(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > VALID_SESSION_PERMISSIONS.size) return null
@@ -301,6 +305,7 @@ export class EmbeddedSignalingBroker {
 
   registerDevice(id: string, publicKey: string, name: string, platform: string, appVersion: string): DeviceRecord {
     if (!deviceIdMatchesPublicKey(id, publicKey)) throw new TypeError('Device ID does not match its public key.')
+    if (!this.devices.has(id) && this.devices.size >= MAX_REGISTERED_DEVICES) throw new Error('The local device registry is full.')
     const now = new Date().toISOString()
     const existing = this.devices.get(id)
     if (existing) {
@@ -369,7 +374,26 @@ export class EmbeddedSignalingBroker {
     return true
   }
 
+  private cleanupSessions(): void {
+    const now = Date.now()
+    for (const [sessionId, session] of this.sessions) {
+      const expiresAt = Date.parse(session.expiresAt)
+      if ((session.status === 'pending' || session.status === 'active') && Number.isFinite(expiresAt) && expiresAt <= now) {
+        session.status = 'expired'
+        session.expiresAt = new Date(now).toISOString()
+        this.pushEvent(session.fromDeviceId, { type: 'session.expired', sessionId, session })
+        this.pushEvent(session.toDeviceId, { type: 'session.expired', sessionId, session })
+      }
+      if (['closed', 'rejected', 'expired'].includes(session.status) && Number.isFinite(Date.parse(session.expiresAt)) &&
+          now - Date.parse(session.expiresAt) > TERMINAL_SESSION_RETENTION_MS) {
+        this.sessions.delete(sessionId)
+      }
+    }
+  }
+
   createSession(fromDeviceId: string, toDeviceId: string, requestedPermissions: string[]): { session: SessionRecord; peer: DeviceRecord & { online: boolean } } | null {
+    this.cleanupSessions()
+    if (this.sessions.size >= MAX_SESSION_RECORDS) return null
     const validatedPermissions = normalizedPermissions(requestedPermissions)
     if (!validatedPermissions || fromDeviceId === toDeviceId) return null
     const toDevice = this.getDeviceSummary(toDeviceId)
@@ -404,10 +428,12 @@ export class EmbeddedSignalingBroker {
   }
 
   getSession(sessionId: string): SessionRecord | null {
+    this.cleanupSessions()
     return this.sessions.get(sessionId) || null
   }
 
   getSessionDetails(sessionId: string, actorDeviceId: string): { session: SessionRecord; peer: DeviceRecord & { online: boolean } } | null {
+    this.cleanupSessions()
     const session = this.sessions.get(sessionId)
     if (!session || (session.fromDeviceId !== actorDeviceId && session.toDeviceId !== actorDeviceId)) return null
     const peerId = session.fromDeviceId === actorDeviceId ? session.toDeviceId : session.fromDeviceId
@@ -416,6 +442,7 @@ export class EmbeddedSignalingBroker {
   }
 
   decideSession(sessionId: string, actorDeviceId: string, accepted: boolean, permissions: string[]): SessionRecord | null {
+    this.cleanupSessions()
     const session = this.sessions.get(sessionId)
     if (!session || session.toDeviceId !== actorDeviceId || session.status !== 'pending' || Date.parse(session.expiresAt) <= Date.now()) return null
 
@@ -424,6 +451,7 @@ export class EmbeddedSignalingBroker {
     const toDevice = this.getDeviceSummary(actorDeviceId)
     if (accepted) {
       session.status = 'active'
+      session.expiresAt = new Date(Date.parse(session.createdAt) + ACTIVE_SESSION_TTL_MS).toISOString()
       session.permissions = grantedPermissions!
       this.pushEvent(session.fromDeviceId, {
         type: 'session.accepted',
@@ -469,6 +497,7 @@ export class EmbeddedSignalingBroker {
   }
 
   forwardSignal(sessionId: string, fromDeviceId: string, message: unknown): boolean {
+    this.cleanupSessions()
     const session = this.sessions.get(sessionId)
     if (!session || session.status !== 'active' || Date.parse(session.expiresAt) <= Date.now() ||
         (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId) ||
@@ -482,6 +511,7 @@ export class EmbeddedSignalingBroker {
   }
 
   closeSession(sessionId: string, fromDeviceId: string, _reason: string): boolean {
+    this.cleanupSessions()
     const session = this.sessions.get(sessionId)
     if (!session || (session.status !== 'pending' && session.status !== 'active') ||
         (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId)) return false
@@ -499,8 +529,12 @@ export class EmbeddedSignalingBroker {
     }
   }
 
-  injectSession(session: SessionRecord): void {
+  injectSession(session: SessionRecord): boolean {
+    this.cleanupSessions()
+    if (this.sessions.has(session.id)) return false
+    if (this.sessions.size >= MAX_SESSION_RECORDS) return false
     this.sessions.set(session.id, session)
+    return true
   }
 
   registerRemoteDevice(record: DeviceRecord & { online: boolean }): void {
@@ -1229,7 +1263,7 @@ export class WanRelayBridge {
             route: 'wan'
           }
           this.broker.registerRemoteDevice({ ...(payload.peer as DeviceRecord), online: true })
-          this.broker.injectSession(session)
+          if (!this.broker.injectSession(session)) return
           this.broker.pushEvent(normalizedTo, {
             type: 'session.request',
             sessionId: payload.sessionId,
