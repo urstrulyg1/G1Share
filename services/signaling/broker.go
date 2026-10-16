@@ -668,6 +668,30 @@ func (broker *Broker) emitLocked(deviceID string, event ServerEvent) {
 	}
 }
 
+func (broker *Broker) issuePublicTURNCredentials(now time.Time) (ICEServer, time.Time, *apiFault) {
+	if len(broker.turn.TURNURLs) == 0 || broker.turn.SharedSecret == "" {
+		return ICEServer{}, time.Time{}, newFault(503, "turn_unavailable", "TURN is not configured on this server.")
+	}
+	ttl := broker.turn.CredentialTTL
+	if ttl < time.Minute || ttl > time.Hour {
+		ttl = 10 * time.Minute
+	}
+	randomSuffix := make([]byte, 16)
+	if _, err := rand.Read(randomSuffix); err != nil {
+		return ICEServer{}, time.Time{}, newFault(500, "internal_error", "Could not issue temporary TURN credentials.")
+	}
+	expiresAt := time.Unix(now.Add(ttl).Unix(), 0).UTC()
+	username := fmt.Sprintf("%d:%s", expiresAt.Unix(), hex.EncodeToString(randomSuffix))
+	mac := hmac.New(sha1.New, []byte(broker.turn.SharedSecret))
+	_, _ = mac.Write([]byte(username))
+	credential := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return ICEServer{
+		URLs: append([]string(nil), broker.turn.TURNURLs...),
+		Username: username,
+		Credential: credential,
+	}, expiresAt, nil
+}
+
 func (broker *Broker) iceConfiguration(deviceID string, now time.Time) ICEConfiguration {
 	configuration := ICEConfiguration{ICEServers: make([]ICEServer, 0, len(broker.turn.STUNURLs)+1)}
 	if len(broker.turn.STUNURLs) > 0 {
