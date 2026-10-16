@@ -85,7 +85,18 @@ try {
   const hostStateOffset = (await host.evaluate(() => window.harness.snapshot())).connectionStates.length
   const viewerStateOffset = (await viewer.evaluate(() => window.harness.snapshot())).connectionStates.length
   await host.evaluate(() => window.harness.simulateIceDisconnect())
-  const recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
+  let recoveredHost
+  try {
+    recoveredHost = await waitFor(host, state => state.connection === 'connected' && state.connectionStates.slice(hostStateOffset).includes('reconnecting'), 'host to recover through the ICE restart path', 35_000)
+  } catch (error) {
+    const diagnostics = {
+      host: await host.evaluate(() => window.harness.snapshot()),
+      viewer: await viewer.evaluate(() => window.harness.snapshot()),
+      hostTransport: await host.evaluate(() => window.harness.transportSnapshot()),
+      viewerTransport: await viewer.evaluate(() => window.harness.transportSnapshot())
+    }
+    throw new Error(`${error instanceof Error ? error.message : String(error)}; recovery diagnostics: ${JSON.stringify(diagnostics)}`)
+  }
   const recoveredViewer = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0 && state.connectionStates.slice(viewerStateOffset).includes('negotiating'), 'viewer to renegotiate and resume video after ICE restart', 35_000)
   check('host ICE disconnect recovery returns to connected', recoveredHost.connection === 'connected', recoveredHost.connectionStates.slice(hostStateOffset).join(' -> '))
   check('viewer renegotiates and continues receiving video after ICE restart', recoveredViewer.connection === 'connected' && recoveredViewer.video.width > 0, `${recoveredViewer.video.width}x${recoveredViewer.video.height}; ${recoveredViewer.connectionStates.slice(viewerStateOffset).join(' -> ')}`)
