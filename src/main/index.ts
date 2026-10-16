@@ -34,7 +34,7 @@ import { isSessionPermission, permissionLabel, SESSION_PERMISSIONS } from '../sh
 import { parseRemoteInputMessage } from '../shared/remote-input'
 import { loadLibnutBackend, RemoteInputController, remoteInputSupport } from './remote-input'
 import type { InputSupport, NativeInputBackend } from './remote-input'
-import { formatDeviceId, isValidDeviceId } from '../shared/device-id'
+import { formatDeviceId, isValidDeviceId, normalizeDeviceId } from '../shared/device-id'
 import { readBoundedResponse } from './http-response'
 import { IncomingFileStore } from './incoming-file-store'
 import { AutoSignalingManager } from './embedded-signaling'
@@ -126,8 +126,18 @@ function requireSecureStorage(): string {
 }
 
 function deriveDeviceId(publicKey: string): string {
-  const value = createHash('sha256').update(publicKey, 'utf8').digest().subarray(0, 16).toString('hex')
-  return formatDeviceId(value)
+  const hash = createHash('sha256').update(publicKey, 'utf8').digest()
+  const num = (hash.readBigUInt64BE(0) % 900_000_000n + 100_000_000n).toString()
+  return formatDeviceId(num)
+}
+
+function peerMatchesPublicKey(peerDeviceId: string, publicKey: string): boolean {
+  const normalized = normalizeDeviceId(peerDeviceId)
+  if (deriveDeviceId(publicKey) === normalized) return true
+  const hash = createHash('sha256').update(publicKey, 'utf8').digest().subarray(0, 16).toString('hex').toUpperCase()
+  if (hash.match(/.{8}/g)!.join('-') === normalized) return true
+  if (hash.slice(0, 12).match(/.{4}/g)!.join('-') === normalized) return true
+  return false
 }
 
 function rawEd25519PublicKey(privateKey: ReturnType<typeof createPrivateKey>): string {
@@ -177,8 +187,10 @@ async function loadSecureIdentity(): Promise<SecureIdentity> {
       if (privateKey.asymmetricKeyType !== 'ed25519' || rawEd25519PublicKey(privateKey) !== stored.publicKey) {
         throw new Error('The stored device identity does not match its public key. Reset the local identity before reconnecting.')
       }
-      if (stored.deviceId.length > 14 && deriveDeviceId(stored.publicKey) !== stored.deviceId) {
-        throw new Error('The stored device ID does not match its cryptographic identity. Reset the local identity before reconnecting.')
+      const currentExpectedId = deriveDeviceId(stored.publicKey)
+      if (stored.deviceId !== currentExpectedId) {
+        stored.deviceId = currentExpectedId
+        await atomicWrite(path, JSON.stringify(stored, null, 2) + '\n')
       }
       return { ...stored, privateKey }
     }
@@ -351,7 +363,7 @@ async function verifyPeerSignal(input: PeerSignalVerification): Promise<boolean>
   if (typeof input.signature !== 'string' || !/^[A-Za-z0-9_-]{86}$/.test(input.signature)) return false
   try {
     const fingerprint = trustedFingerprint(input.peerPublicKey)
-    if (deriveDeviceId(input.peerPublicKey) !== input.peerDeviceId) return false
+    if (!peerMatchesPublicKey(input.peerDeviceId, input.peerPublicKey)) return false
     const trusted = await loadTrustedDevices()
     if (!trusted.some(device => device.id === input.peerDeviceId && device.fingerprint === fingerprint)) return false
     const rawKey = Buffer.from(input.peerPublicKey, 'base64url')
@@ -487,7 +499,7 @@ async function trustPeer(peer: { id: string; name: string; publicKey: string }):
   if (!peer || !isValidDeviceId(peer.id)) throw new TypeError('Peer device ID is invalid.')
   const publicKey = assertString(peer.publicKey, 'Peer public key', 128)
   const fingerprint = trustedFingerprint(publicKey)
-  if (deriveDeviceId(publicKey) !== peer.id.toUpperCase()) throw new TypeError('Peer device ID does not match its public-key fingerprint.')
+  if (!peerMatchesPublicKey(peer.id, publicKey)) throw new TypeError('Peer device ID does not match its public-key fingerprint.')
   const trusted = await loadTrustedDevices()
   const existing = trusted.find(item => item.id === peer.id)
   if (existing && existing.fingerprint === fingerprint) return true

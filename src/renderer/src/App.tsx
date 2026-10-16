@@ -109,7 +109,7 @@ export default function App() {
   async function connect(deviceId = remoteId) {
     const normalized = normalizeDeviceId(deviceId)
     if (!isValidDeviceId(normalized)) {
-      setNotice({ kind: 'error', message: 'Enter a device ID in the format XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX (legacy IDs remain accepted).' })
+      setNotice({ kind: 'error', message: 'Enter a valid 9-digit device ID in the format 123-456-789 (legacy IDs remain accepted).' })
       return
     }
     if (openDesk.serviceState !== 'online') {

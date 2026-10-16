@@ -93,7 +93,7 @@ export function ConnectionCard({
         <Monitor size={16} aria-hidden="true"/>
         <input id="remote-id" value={remoteId} maxLength={35} autoComplete="off" spellCheck={false}
           onChange={event => setRemoteId(event.target.value)}
-          placeholder="Enter Device ID (e.g. A1B2C3D4-E5F60718-192A3B4C-5D6E7F80)"/>
+          placeholder="Enter 9-digit Device ID (e.g. 123-456-789)"/>
         <button className="paste-button" type="button" aria-label="Paste device ID from clipboard" title="Paste from clipboard" onClick={() => void pasteId()} disabled={pasteBusy}>
           {pasteBusy ? <span className="mini-spinner" aria-hidden="true"/> : <Clipboard size={16}/>}
         </button>
