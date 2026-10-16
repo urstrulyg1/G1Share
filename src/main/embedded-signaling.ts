@@ -149,7 +149,7 @@ function wanAad(fromDeviceId: string, toDeviceId: string, issuedAt: number, nonc
 
 function wanCanonical(envelope: Omit<SignedWanEnvelope, 'signature' | 'publicKey'>): Buffer {
   const encrypted = !!envelope.encryptedPayload
-  const body = encrypted ? JSON.stringify(envelope.encryptedPayload) : JSON.stringify(envelope.payload)
+  const body = (encrypted ? JSON.stringify(envelope.encryptedPayload) : JSON.stringify(envelope.payload)) ?? ''
   const digest = createHash('sha256').update(body, 'utf8').digest('hex')
   return Buffer.from(`${envelope.protocol}\n${envelope.fromDeviceId}\n${envelope.toDeviceId}\n${envelope.issuedAt}\n${envelope.nonce}\n${encrypted ? 'encrypted' : 'plain'}\n${digest}`, 'utf8')
 }
@@ -944,6 +944,32 @@ export class WanRelayBridge {
 
   setSigningKey(privateKey: ReturnType<typeof createPrivateKey> | null): void {
     this.localPrivateKey = privateKey
+  }
+
+  ensureConnected(): void {
+    if (this.stopped || !this.localDeviceId) return
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
+    try {
+      const topic = deriveWanTopic(this.localDeviceId)
+      const wsUrl = this.relayBaseUrl.replace(/^http/i, 'ws') + `/${topic}/ws`
+      this.ws = new WebSocket(wsUrl)
+      this.ws.onmessage = event => this.handleIncomingRawMessage(event.data)
+      this.ws.onerror = () => { /* suppress unhandled WebSocket errors */ }
+      this.ws.onclose = () => {
+        this.ws = null
+        if (!this.stopped) this.scheduleReconnect()
+      }
+    } catch {
+      this.scheduleReconnect()
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.stopped) return
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      this.ensureConnected()
+    }, 5000)
   }
 
   private verifyEnvelope(value: unknown): value is SignedWanEnvelope {
