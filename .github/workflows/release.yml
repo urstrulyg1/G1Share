@@ -82,7 +82,7 @@ jobs:
       - name: Normalize package filenames and clean blockmaps
         shell: bash
         run: |
-          rm -f release/*.blockmap* release/*.yml* release/*.yaml*
+          rm -f release/*.blockmap* release/*.yml* release/*.yaml* release/g1viewer.exe release/G1Viewer.exe
           if [ -f release/g1viewer_x86_64.AppImage ]; then
             mv release/g1viewer_x86_64.AppImage release/g1viewer_x64.AppImage
           fi
@@ -131,7 +131,7 @@ jobs:
 
       - name: Clean and verify standalone assets
         run: |
-          rm -f release-assets/*.blockmap* release-assets/*.yml* release-assets/*.yaml*
+          rm -f release-assets/*.blockmap* release-assets/*.yml* release-assets/*.yaml* release-assets/g1viewer.exe release-assets/G1Viewer.exe
           if [ -f release-assets/g1viewer_x86_64.AppImage ]; then
             mv release-assets/g1viewer_x86_64.AppImage release-assets/g1viewer_x64.AppImage
           fi
