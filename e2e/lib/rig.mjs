@@ -75,7 +75,8 @@ export async function startSignaling({ repoRoot, goCommand, port, workDir, verbo
 }
 
 /** Serves e2e/harness on 127.0.0.1:`port`, proxying /api to the broker. */
-export async function startHarnessServer({ repoRoot, port, signalingPort }) {
+export async function startHarnessServer({ repoRoot, port, signalingPort, signalingUrl }) {
+  const signalingTarget = signalingUrl || `http://127.0.0.1:${signalingPort}`;
   const vite = await createServer({
     root: join(repoRoot, 'e2e/harness'),
     configFile: false,
@@ -85,7 +86,7 @@ export async function startHarnessServer({ repoRoot, port, signalingPort }) {
       port,
       strictPort: true,
       fs: { allow: [repoRoot] },
-      proxy: { '/api': { target: `http://127.0.0.1:${signalingPort}`, changeOrigin: false } }
+      proxy: { '/api': { target: signalingTarget, changeOrigin: false, secure: true } }
     },
     resolve: { alias: [{ find: /^node:module$/, replacement: join(repoRoot, 'e2e/harness/node-module-stub.ts') }] }
   })
