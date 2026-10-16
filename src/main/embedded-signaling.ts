@@ -1141,7 +1141,7 @@ export class AutoSignalingManager {
 
   setLocalIdentity(deviceId: string, publicKey: string, name: string, platform: string, appVersion: string, privateKey?: ReturnType<typeof createPrivateKey>): void {
     if (!privateKey || !deviceIdMatchesPublicKey(deviceId, publicKey)) {
-      this.wanRelay?.setSigningKey(null as never)
+      this.wanRelay?.setSigningKey(null)
       return
     }
     const exported = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
