@@ -1308,6 +1308,9 @@ export class WanRelayBridge {
             (!payload.accepted || (permissions && permissions.every(p => session.requestedPermissions.includes(p))))) {
           const accepted = payload.accepted
           session.status = accepted ? 'active' : 'rejected'
+          session.expiresAt = accepted
+            ? new Date(Date.parse(session.createdAt) + ACTIVE_SESSION_TTL_MS).toISOString()
+            : new Date().toISOString()
           session.permissions = permissions || []
           this.broker.pushEvent(normalizedTo, {
             type: accepted ? 'session.accepted' : 'session.rejected',
