@@ -135,6 +135,15 @@ function createTestIdentity() {
     // 6. Manager A sends a WebRTC signal offer
     const offerPayload = { type: 'offer', sdp: 'v=0...' }
     const aSession = (managerA as any).broker.getSession(sessionId)
+    expect(aSession.status).toBe('active')
+    expect((managerB as any).broker.getSession(sessionId)?.status).toBe('active')
+    const signalEnvelopeProbe = (managerA as any).wanRelay.createEnvelope(devBId, {
+      action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: offerPayload
+    })
+    expect(signalEnvelopeProbe).not.toBeNull()
+    expect((managerB as any).wanRelay.decryptEnvelopePayload(signalEnvelopeProbe)).toMatchObject({
+      action: 'signal', sessionId, fromDeviceId: devAId, toDeviceId: devBId, message: offerPayload
+    })
     await managerA.forwardSignal(aSession, devAId, offerPayload)
 
     // 7. Manager B receives the signal
@@ -207,6 +216,7 @@ function createTestIdentity() {
           online: true
         }
       }
+      ;(senderManager as any).broker.injectSession({ ...session })
       const envelope = senderBridge.createEnvelope(receiver.deviceId, requestPayload)
       expect(envelope).not.toBeNull()
       expect(envelope.payload).toBeUndefined()
