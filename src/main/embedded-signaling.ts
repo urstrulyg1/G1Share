@@ -950,6 +950,9 @@ export class WanRelayBridge {
   private remoteDevicesCache = new Map<string, DeviceRecord & { online: boolean }>()
   private knownPublicKeys = new Map<string, string>()
   private seenNonces = new Map<string, number>()
+  private inboundRates = new Map<string, { windowStarted: number; count: number }>()
+  private inboundWindowStarted = Date.now()
+  private inboundCount = 0
   private relayBaseUrl = (process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh').replace(/\/+$/, '')
 
   constructor(
@@ -994,6 +997,28 @@ export class WanRelayBridge {
     }, 5000)
   }
 
+  private allowInboundMessage(deviceId: string): boolean {
+    const now = Date.now()
+    if (now - this.inboundWindowStarted >= 60_000) {
+      this.inboundWindowStarted = now
+      this.inboundCount = 0
+    }
+    if (this.inboundCount >= 600) return false
+    let rate = this.inboundRates.get(deviceId)
+    if (!rate || now - rate.windowStarted >= 60_000) rate = { windowStarted: now, count: 0 }
+    if (rate.count >= 120) return false
+    if (!this.inboundRates.has(deviceId) && this.inboundRates.size >= 5000) {
+      for (const [key, value] of this.inboundRates) {
+        if (now - value.windowStarted >= 60_000) this.inboundRates.delete(key)
+      }
+      if (this.inboundRates.size >= 5000) this.inboundRates.delete(this.inboundRates.keys().next().value!)
+    }
+    rate.count++
+    this.inboundRates.set(deviceId, rate)
+    this.inboundCount++
+    return true
+  }
+
   private verifyEnvelope(value: unknown): value is SignedWanEnvelope {
     if (!value || typeof value !== 'object') return false
     const envelope = value as Partial<SignedWanEnvelope>
@@ -1009,6 +1034,8 @@ export class WanRelayBridge {
         (hasEncrypted && (!envelope.encryptedPayload || typeof envelope.encryptedPayload !== 'object'))) return false
     const fromDeviceId = normalizeDeviceId(envelope.fromDeviceId)
     if (!fromDeviceId || !deviceIdMatchesPublicKey(fromDeviceId, envelope.publicKey)) return false
+    const previouslyKnownKey = this.knownPublicKeys.get(fromDeviceId)
+    if (previouslyKnownKey && previouslyKnownKey !== envelope.publicKey) return false
     if (hasPlain && envelope.payload?.action !== 'query') return false
     if (hasPlain && Buffer.byteLength(JSON.stringify(envelope.payload), 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
     if (hasEncrypted && Buffer.byteLength(JSON.stringify(envelope.encryptedPayload), 'utf8') > WAN_MAX_MESSAGE_BYTES + 1024) return false
@@ -1036,8 +1063,11 @@ export class WanRelayBridge {
       if (now - seenAt > WAN_REPLAY_WINDOW_MS) this.seenNonces.delete(key)
     }
     const replayKey = `${fromDeviceId}:${envelope.nonce}`
-    if (this.seenNonces.has(replayKey) || this.seenNonces.size >= WAN_MAX_REPLAY_ENTRIES) return false
+    if (this.seenNonces.has(replayKey) || this.seenNonces.size >= WAN_MAX_REPLAY_ENTRIES || !this.allowInboundMessage(fromDeviceId)) return false
     this.seenNonces.set(replayKey, now)
+    if (!this.knownPublicKeys.has(fromDeviceId) && this.knownPublicKeys.size >= 5000) {
+      this.knownPublicKeys.delete(this.knownPublicKeys.keys().next().value!)
+    }
     this.knownPublicKeys.set(fromDeviceId, envelope.publicKey)
     return true
   }
