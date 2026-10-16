@@ -1086,6 +1086,8 @@ export class WanRelayBridge {
   private inboundRates = new Map<string, { windowStarted: number; count: number }>()
   private inboundWindowStarted = Date.now()
   private inboundCount = 0
+  private rawWindowStarted = Date.now()
+  private rawMessageCount = 0
   private relayBaseUrl = safeRelayBaseUrl(process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh')
 
   constructor(
@@ -1216,6 +1218,13 @@ export class WanRelayBridge {
   }
 
   private handleIncomingRawMessage(rawData: unknown): void {
+    const now = Date.now()
+    if (now - this.rawWindowStarted >= 60_000) {
+      this.rawWindowStarted = now
+      this.rawMessageCount = 0
+    }
+    if (this.rawMessageCount >= 1200) return
+    this.rawMessageCount++
     try {
       const text = typeof rawData === 'string' ? rawData : String(rawData)
       if (Buffer.byteLength(text, 'utf8') > WAN_MAX_ENVELOPE_BYTES) return
