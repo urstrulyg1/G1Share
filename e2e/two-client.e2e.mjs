@@ -12,6 +12,14 @@ if (!chromePath) throw new Error('Set CHROME_PATH to a Chrome or Chromium execut
 const goCommand = process.env.GO_BIN || 'go'
 const signalingPort = Number(process.env.E2E_SIGNALING_PORT || 18787)
 const vitePort = Number(process.env.E2E_VITE_PORT || 5179)
+const externalSignalingUrl = process.env.G1VIEWER_WAN_SIGNALING_URL?.trim() || ''
+const iceTransportPolicy = process.env.E2E_ICE_TRANSPORT_POLICY === 'relay' ? 'relay' : 'all'
+if (externalSignalingUrl) {
+  const parsed = new URL(externalSignalingUrl)
+  if (parsed.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(parsed.hostname)) {
+    throw new Error('G1VIEWER_WAN_SIGNALING_URL must use HTTPS unless it points to localhost.')
+  }
+}
 const results = []
 
 function check(name, passed, detail = '') {
@@ -25,11 +33,15 @@ let vite = null
 let browser = null
 
 try {
-  server = await startSignaling({ repoRoot, goCommand, port: signalingPort, workDir, verbose: Boolean(process.env.E2E_VERBOSE) })
-  check('signaling broker starts and reports healthy', true, `127.0.0.1:${signalingPort}`)
+  if (!externalSignalingUrl) {
+    server = await startSignaling({ repoRoot, goCommand, port: signalingPort, workDir, verbose: Boolean(process.env.E2E_VERBOSE) })
+    check('local signaling broker starts and reports healthy', true, `127.0.0.1:${signalingPort}`)
+  } else {
+    check('using deployed signaling service for WAN smoke test', true, new URL(externalSignalingUrl).origin)
+  }
 
-  vite = await startHarnessServer({ repoRoot, port: vitePort, signalingPort })
-  const origin = `http://127.0.0.1:${vitePort}`
+  vite = await startHarnessServer({ repoRoot, port: vitePort, signalingPort, signalingUrl: externalSignalingUrl || undefined })
+  const origin = `http://127.0.0.1:${vitePort}/?iceTransportPolicy=${iceTransportPolicy}`
 
   browser = await launchBrowser(chromePath)
   const hostContext = await browser.createBrowserContext()
@@ -47,11 +59,28 @@ try {
   const viewerId = await viewer.evaluate(() => window.harness.start('E2E Viewer', false))
   check('both devices register with the real broker', /^[A-F0-9]{8}(-[A-F0-9]{8}){3}$/.test(hostId) && hostId !== viewerId, `${hostId} / ${viewerId}`)
 
-  await viewer.evaluate(target => window.harness.requestSession(target, ['input']), hostId)
+  await viewer.evaluate(target => window.harness.requestSession(target, ['input', 'files']), hostId)
   await waitFor(host, state => state.role === 'host', 'host controller to be created from the session request')
   await host.evaluate(() => window.harness.startShare())
   const connected = await waitFor(viewer, state => state.connection === 'connected' && state.video.width > 0, 'viewer to receive video', 90_000)
   check('viewer receives a live screen stream over WebRTC', connected.video.width > 0, `${connected.video.width}x${connected.video.height}`)
+
+  await waitFor(host, state => state.dataChannelReady, 'host secure data channel to open')
+  await waitFor(viewer, state => state.dataChannelReady, 'viewer secure data channel to open')
+  check('secure data channel opens on both peers', true)
+
+  const hostTransport = await host.evaluate(() => window.harness.transportSnapshot())
+  const viewerTransport = await viewer.evaluate(() => window.harness.transportSnapshot())
+  const hasSelectedPair = values => values.some(value => value.pairState === 'succeeded' && value.connectionState === 'connected')
+  check('both peers report a selected, successful ICE candidate pair', hasSelectedPair(hostTransport) && hasSelectedPair(viewerTransport), JSON.stringify({ host: hostTransport, viewer: viewerTransport }))
+  if (iceTransportPolicy === 'relay') {
+    const relayOnly = values => values.length > 0 && values.every(value => value.localCandidateType === 'relay' && value.remoteCandidateType === 'relay')
+    check('relay-only mode selected TURN relay candidates on both peers', relayOnly(hostTransport) && relayOnly(viewerTransport), JSON.stringify({ host: hostTransport, viewer: viewerTransport }))
+  }
+
+  const transferResult = await viewer.evaluate(() => window.harness.benchSendFile(256 * 1024))
+  const receivedTransfer = await waitFor(host, state => state.transfers.some(record => record.direction === 'receiving' && record.name === 'benchmark.bin' && record.size === 256 * 1024 && record.status === 'complete'), 'host to verify a 256 KiB peer-to-peer data-channel file transfer', 30_000)
+  check('data channel transfers and verifies a file end to end', transferResult.bytes === 256 * 1024 && transferResult.seconds > 0 && receivedTransfer.transfers.some(record => record.direction === 'receiving' && record.name === 'benchmark.bin' && record.size === 256 * 1024 && record.status === 'complete'), `${transferResult.bytes} bytes in ${transferResult.seconds.toFixed(3)}s`)
 
   const pending = await viewer.evaluate(() => window.harness.snapshot())
   check('input permission starts as pending until the host enables control', pending.remoteControl === 'pending', pending.remoteControl)
@@ -128,6 +157,11 @@ try {
   await new Promise(resolve => setTimeout(resolve, 300))
   const viewOnlyLog = (await host.evaluate(() => window.harness.snapshot())).nativeLog
   check('view-only session delivers no input to the host', viewOnlyLog.length === 0, JSON.stringify(viewOnlyLog))
+  const filePermissionResult = await viewer.evaluate(async () => {
+    try { await window.harness.benchSendFile(1024); return 'unexpected-success' }
+    catch (error) { return error instanceof Error ? error.message : String(error) }
+  })
+  check('view-only session cannot initiate file transfer without permission', filePermissionResult.includes('File transfer permission was not approved'), filePermissionResult)
   await viewer.evaluate(() => window.harness.closeLocal())
   await waitFor(host, state => state.role === null, 'host to close the view-only session')
 
