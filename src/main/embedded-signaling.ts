@@ -103,6 +103,11 @@ export class EmbeddedSignalingBroker {
   private eventWaiters = new Map<string, Set<(event: ServerEvent) => void>>()
 
   issueChallenge(deviceId: string): { nonce: string; protocolVersion: string; expiresAt: string } {
+    const now = Date.now()
+    for (const [nonce, challenge] of this.challenges) {
+      if (challenge.expiresAt < now) this.challenges.delete(nonce)
+    }
+    if (this.challenges.size >= 10_000) throw new Error('Authentication challenge capacity reached.')
     const nonce = randomBytes(32).toString('hex')
     const expiresAtMs = Date.now() + 60_000
     this.challenges.set(nonce, { deviceId, expiresAt: expiresAtMs })
@@ -153,9 +158,11 @@ export class EmbeddedSignalingBroker {
   }
 
   registerDevice(id: string, publicKey: string, name: string, platform: string, appVersion: string): DeviceRecord {
+    if (!deviceIdMatchesPublicKey(id, publicKey)) throw new TypeError('Device ID does not match its public key.')
     const now = new Date().toISOString()
     const existing = this.devices.get(id)
     if (existing) {
+      if (existing.publicKey !== publicKey) throw new Error('Device identity conflict.')
       existing.name = name || existing.name
       existing.platform = platform || existing.platform
       existing.appVersion = appVersion || existing.appVersion
@@ -205,6 +212,15 @@ export class EmbeddedSignalingBroker {
     const record = this.devices.get(id)
     if (!record) return false
     record.revoked = true
+    for (const [sessionId, session] of this.sessions) {
+      if ((session.fromDeviceId === id || session.toDeviceId === id) &&
+          (session.status === 'pending' || session.status === 'active')) {
+        session.status = 'closed'
+        session.expiresAt = new Date().toISOString()
+        const peerId = session.fromDeviceId === id ? session.toDeviceId : session.fromDeviceId
+        this.pushEvent(peerId, { type: 'session.closed', sessionId })
+      }
+    }
     return true
   }
 
@@ -282,8 +298,7 @@ export class EmbeddedSignalingBroker {
 
   forwardSignal(sessionId: string, fromDeviceId: string, message: unknown): boolean {
     const session = this.sessions.get(sessionId)
-    if (!session || (session.status !== 'pending' && session.status !== 'active') ||
-        Date.parse(session.expiresAt) <= Date.now() ||
+    if (!session || session.status !== 'active' || Date.parse(session.expiresAt) <= Date.now() ||
         (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId)) return false
     const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
     this.pushEvent(destDeviceId, { type: 'signal', sessionId, message })
@@ -304,6 +319,7 @@ export class EmbeddedSignalingBroker {
     const session = this.sessions.get(sessionId)
     if (session) {
       session.status = 'closed'
+      session.expiresAt = new Date().toISOString()
     }
   }
 
@@ -508,7 +524,14 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     // Handlers
     if (req.method === 'POST' && path === '/api/v1/devices/register') {
       const data = JSON.parse(bodyText) as { id: string; publicKey: string; name: string; platform: string; appVersion: string }
-      const device = broker.registerDevice(data.id, data.publicKey, data.name, data.platform, data.appVersion)
+      let device: DeviceRecord
+      try {
+        device = broker.registerDevice(data.id, data.publicKey, data.name, data.platform, data.appVersion)
+      } catch {
+        res.writeHead(409)
+        res.end(JSON.stringify({ error: { code: 'identity_conflict', message: 'Device identity does not match this public key or is already registered.' } }))
+        return
+      }
       if (manager) {
         manager.setLocalDevice(device)
       }
@@ -872,6 +895,7 @@ export class WanRelayBridge {
   private handleIncomingRawMessage(rawData: unknown): void {
     try {
       const text = typeof rawData === 'string' ? rawData : String(rawData)
+      if (Buffer.byteLength(text, 'utf8') > WAN_MAX_MESSAGE_BYTES + 2048) return
       const envelope = JSON.parse(text) as { event?: string; message?: string }
       if (envelope.event !== 'message' || !envelope.message) return
 
