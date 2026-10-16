@@ -1548,10 +1548,8 @@ export class AutoSignalingManager {
   }
 
   setLocalIdentity(deviceId: string, publicKey: string, name: string, platform: string, appVersion: string, privateKey?: ReturnType<typeof createPrivateKey>): void {
-    if (!privateKey || !deviceIdMatchesPublicKey(deviceId, publicKey)) {
-      this.wanRelay?.setSigningKey(null)
-      return
-    }
+    if (!privateKey) throw new TypeError('A private device key is required for authenticated WAN signaling.')
+    if (!deviceIdMatchesPublicKey(deviceId, publicKey)) throw new TypeError('Device ID does not match the local public identity.')
     const exported = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
     if (exported !== publicKey) throw new TypeError('WAN signing key does not match the local public identity.')
     const record = this.broker.registerDevice(deviceId, publicKey, name, platform, appVersion)
