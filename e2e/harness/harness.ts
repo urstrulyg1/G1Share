@@ -14,6 +14,7 @@ import { ViewerInputForwarder } from '../../src/renderer/src/services/remote-inp
 import { RemoteInputController } from '../../src/main/remote-input'
 import type { NativeInputBackend } from '../../src/main/remote-input'
 import { FileTransferManager } from '../../src/renderer/src/services/file-transfer'
+import type { TransferRecord } from '../../src/renderer/src/services/file-transfer'
 import { VideoFrameProbe } from '../../src/renderer/src/services/video-probe'
 import type { ProbeSnapshot } from '../../src/renderer/src/services/video-probe'
 import type { SessionMetrics } from '../../src/renderer/src/services/remote-session'
@@ -72,6 +73,8 @@ let viewerForwarder: ViewerInputForwarder | null = null
 const pendingSignals = new Map<string, SignalingEvent[]>()
 const loadWorkers: Worker[] = []
 const errors: string[] = []
+const transferRecords: TransferRecord[] = []
+let activePermissions: SessionPermission[] = []
 
 // Native input path: the real RemoteInputController records every operation the OS would receive.
 const nativeLog: Array<Array<string | number | boolean>> = []
@@ -284,11 +287,14 @@ function attachControllerCallbacks(role: 'host' | 'viewer') {
     onDataChannel: (channel: RTCDataChannel | null) => {
       fileTransfers?.close()
       fileTransfers = channel ? new FileTransferManager(channel, bridge as never, {
-        allowFiles: true,
-        allowClipboard: false,
-        onIncomingOffer: async (name: string, size: number) => bridge.prepareIncomingFile({ name, size }),
+        allowFiles: activePermissions.includes('files'),
+        allowClipboard: activePermissions.includes('clipboard'),
+        onIncomingOffer: async (name: string, size: number) => activePermissions.includes('files') ? bridge.prepareIncomingFile({ name, size }) : null,
         onClipboardText: async () => undefined,
-        onTransfer: () => undefined,
+        onTransfer: (record: TransferRecord) => {
+          transferRecords.push(record)
+          if (transferRecords.length > 1000) transferRecords.splice(0, transferRecords.length - 1000)
+        },
         onError: (message: string) => { errors.push(message) }
       }) : null
     },
@@ -331,6 +337,7 @@ async function startController(role: 'host' | 'viewer', sessionId: string, peer:
   // Reset before construction: the controller reports its initial remote-control state synchronously.
   remoteState = 'connecting'
   remoteControlState = 'off'
+  activePermissions = [...permissions]
   controller = new RemoteSessionController(sessionId, role, peer, localDevice, client, bridge, attachControllerCallbacks(role), permissions)
   controllerRole = role
   controllerSessionId = sessionId
@@ -534,6 +541,8 @@ const harness = {
       heldKeys: remoteInput.heldKeyCount,
       heldButtons: remoteInput.heldButtonCount,
       remoteInputActive: remoteInput.active,
+      dataChannelReady: !!fileTransfers,
+      transfers: transferRecords.slice(-50),
       errors: errors.slice(-20)
     }
   },
