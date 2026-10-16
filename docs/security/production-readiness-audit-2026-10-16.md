@@ -3,13 +3,12 @@ Date: 2026-10-16
 Repository: https://github.com/urstrulyg1/G1Viewer
 Baseline audited commit: 845953a4f49f672934ad68d411a4c0a7de0ff5d1
 Security-hardening merge: `cb987d960d76638a6c8794947a4584ed855421ab` (PR #7, merged to `main`)
-Dynamic-bootstrap work: PR #8, `feature/dynamic-zero-config-connect`
+Dynamic-bootstrap work: PR #8, `feature/dynamic-zero-config-connect` (merged to `main` before the TURN deployment work)
+TURN deployment and credential endpoint: `25e73f32bb02615c050423e0a8025217427daa3c` (PR #9, merged to `main`)
 
 ## Release verdict
 
-**Not yet approved for public production release.** The initial code-level security findings were addressed and merged to `main` with regression coverage. Dynamic network bootstrap is being added in PR #8. This does not substitute for green current-head CI, independent review of the cryptographic protocol, TURN infrastructure, or physical-device/network validation.
-
-The security-hardening changes are now on `main`. The dynamic-bootstrap change remains under review in PR #8.
+**Not yet approved for public production release.** Security hardening, dynamic network bootstrap, and deployable TURN credential/deployment tooling are merged to `main`. The active bootstrap intentionally keeps `turnCredentialsUrl` unset until a real TURN host has been provisioned, deployed, and verified. Passing CI does not substitute for independent cryptographic review, production infrastructure, or physical-device/network validation.
 
 ## Implemented remediation
 
@@ -35,7 +34,7 @@ Files: `src/main/embedded-signaling.ts`, `src/main/index.ts`
 - Accepted sessions receive an active-session expiry instead of retaining the short pending-request timeout. Expired/terminal sessions are cleaned up, and device/session registries are bounded.
 
 ### P1 — TURN and LAN discovery hardening
-File: `src/main/embedded-signaling.ts`
+Files: `src/main/embedded-signaling.ts`, `services/signaling/handlers.go`, `services/signaling/broker.go`, `docker-compose.turn.yml`, and `scripts/prepare-turn-deployment.sh`
 
 - Removed the static `g1viewer/g1viewer` TURN credential fallback. TURN entries are omitted unless explicit credentials are configured.
 - Automatic coordinator discovery only accepts HTTP origins on loopback/private/link-local LAN addresses or `.local` hosts, rejects paths/credentials/query strings, and refuses redirects.
@@ -114,3 +113,12 @@ CHROME_PATH=/path/to/chrome npm run test:e2e
 - `src/main/renderer-navigation.test.ts`
 
 PR #7 is merged into `main`; PR #8 remains separate until its latest CI and packaging jobs finish. The remaining release gates above still apply.
+
+
+## Current release blockers after the 2026-10-16 main-branch merge
+
+- **Live TURN is not deployed.** `config/network-bootstrap.json` still has `turnCredentialsUrl: null`; the deployment script requires a real public IPv4 address, DNS hostname, and reachable firewall ports. Do not replace this with a placeholder URL.
+- **Cross-network relay validation is outstanding.** Unit and two-client browser tests do not prove that TURN works through independent NATs or restrictive enterprise networks.
+- **Real desktop validation is outstanding.** Install and test signed/release packages on physical Windows and macOS devices, including capture, input permissions, reconnect, and cross-network media.
+- **Release trust is incomplete.** Complete independent cryptographic review, signing/notarization, update verification, and incident/abuse operations before claiming production readiness.
+- **CI status must be checked on the merged `main` SHA** `25e73f32bb02615c050423e0a8025217427daa3c`; packaging and end-to-end jobs were still queued at the time of this update.
