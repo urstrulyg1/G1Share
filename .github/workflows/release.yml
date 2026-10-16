@@ -75,6 +75,8 @@ jobs:
           cache: npm
       - name: Install desktop dependencies
         run: npm ci
+      - name: Generate desktop branding icons and packaging assets
+        run: npm run icons
       - name: Build ${{ matrix.platform }}
         run: ${{ matrix.build_cmd }}
       - name: Normalize package filenames and clean blockmaps

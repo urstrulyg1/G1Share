@@ -5,6 +5,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
+  Menu,
   safeStorage,
   screen,
   session,
@@ -21,6 +22,7 @@ import {
   sign as signMessage,
   verify as verifySignature
 } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { readFile, rename, unlink, writeFile, mkdir, chmod } from 'node:fs/promises'
 import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -988,6 +990,64 @@ function registerIpcHandlers(): void {
   })
 }
 
+function getAppIconPath(): string | undefined {
+  const buildDir = join(currentDir, '../../build')
+  if (process.platform === 'darwin') {
+    const icns = join(buildDir, 'icon.icns')
+    if (existsSync(icns)) return icns
+  }
+  if (process.platform === 'win32') {
+    const ico = join(buildDir, 'icon.ico')
+    if (existsSync(ico)) return ico
+  }
+  const png = join(buildDir, 'icon.png')
+  if (existsSync(png)) return png
+  return undefined
+}
+
+function setupApplicationMenu(): void {
+  if (process.platform === 'darwin') {
+    const template: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: 'G1Viewer',
+        submenu: [
+          { role: 'about', label: 'About G1Viewer' },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide', label: 'Hide G1Viewer' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          { role: 'quit', label: 'Quit G1Viewer' }
+        ]
+      },
+      {
+        label: 'Edit',
+        submenu: [
+          { role: 'undo' },
+          { role: 'redo' },
+          { type: 'separator' },
+          { role: 'cut' },
+          { role: 'copy' },
+          { role: 'paste' },
+          { role: 'selectAll' }
+        ]
+      },
+      {
+        label: 'Window',
+        submenu: [
+          { role: 'minimize' },
+          { role: 'zoom' },
+          { type: 'separator' },
+          { role: 'front' }
+        ]
+      }
+    ]
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  }
+}
+
 function createWindow(): void {
   const { size } = screen.getPrimaryDisplay()
   const width = Math.min(1536, size.width)
@@ -1004,6 +1064,7 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#09111d',
     title: 'G1Viewer',
+    icon: getAppIconPath(),
     webPreferences: {
       preload: join(currentDir, '../preload/index.cjs'),
       contextIsolation: true,
@@ -1047,7 +1108,13 @@ function createWindow(): void {
   })
 }
 
+app.setName('G1Viewer')
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.urstrulyg1.g1viewer')
+}
+
 app.whenReady().then(() => {
+  setupApplicationMenu()
   registerIpcHandlers()
   installPermissionPolicy()
   installDisplayCaptureHandler()
