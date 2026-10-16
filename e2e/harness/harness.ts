@@ -72,6 +72,16 @@ let remoteControlReason = ''
 let viewerForwarder: ViewerInputForwarder | null = null
 const pendingSignals = new Map<string, SignalingEvent[]>()
 const loadWorkers: Worker[] = []
+const peerConnections: RTCPeerConnection[] = []
+const NativeRTCPeerConnection = window.RTCPeerConnection
+const requestedIcePolicy = new URL(window.location.href).searchParams.get('iceTransportPolicy')
+// Test-only override: lets CI prove that the connection works when direct ICE candidates are forbidden.
+window.RTCPeerConnection = class extends NativeRTCPeerConnection {
+  constructor(configuration?: RTCConfiguration) {
+    super(requestedIcePolicy === 'relay' ? { ...configuration, iceTransportPolicy: 'relay' } : configuration)
+    peerConnections.push(this)
+  }
+} as typeof RTCPeerConnection
 const errors: string[] = []
 const transferRecords: TransferRecord[] = []
 let activePermissions: SessionPermission[] = []
@@ -526,6 +536,26 @@ const harness = {
     injectLog.length = 0
     markerSamples.length = 0
     nativeLog.length = 0
+  },
+  async transportSnapshot() {
+    const active = peerConnections.filter(peer => peer.connectionState !== 'closed')
+    return Promise.all(active.map(async peer => {
+      const stats = await peer.getStats()
+      const records = Array.from(stats.values()) as Array<Record<string, unknown>>
+      const transport = records.find(record => record.type === 'transport' && typeof record.selectedCandidatePairId === 'string')
+      const pairId = transport?.selectedCandidatePairId
+      const pair = records.find(record => record.type === 'candidate-pair' && (record.id === pairId || (pairId === undefined && record.state === 'succeeded' && record.nominated === true)))
+      const local = records.find(record => record.type === 'local-candidate' && record.id === pair?.localCandidateId)
+      const remote = records.find(record => record.type === 'remote-candidate' && record.id === pair?.remoteCandidateId)
+      return {
+        connectionState: peer.connectionState,
+        iceConnectionState: peer.iceConnectionState,
+        iceTransportPolicy: peer.getConfiguration().iceTransportPolicy ?? 'all',
+        pairState: pair?.state ?? null,
+        localCandidateType: local?.candidateType ?? null,
+        remoteCandidateType: remote?.candidateType ?? null
+      }
+    }))
   },
   snapshot() {
     const video = remoteVideo()
