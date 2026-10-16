@@ -461,6 +461,7 @@ export class EmbeddedSignalingBroker {
       })
     } else {
       session.status = 'rejected'
+      session.expiresAt = new Date().toISOString()
       this.pushEvent(session.fromDeviceId, {
         type: 'session.rejected',
         sessionId
@@ -516,6 +517,7 @@ export class EmbeddedSignalingBroker {
     if (!session || (session.status !== 'pending' && session.status !== 'active') ||
         (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId)) return false
     session.status = 'closed'
+    session.expiresAt = new Date().toISOString()
     const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
     this.pushEvent(destDeviceId, { type: 'session.closed', sessionId })
     return true
