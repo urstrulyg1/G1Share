@@ -118,7 +118,7 @@ export async function loadNetworkBootstrapConfig(
 
 function isTurnUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 512) return false
-  return /^turns?:[A-Za-z0-9.:[\]-]+(?::[0-9]{1,5})?(?:\\?transport=(?:udp|tcp))?$/.test(value)
+  return /^turns?:(?:\[[0-9a-fA-F:]+\]|[A-Za-z0-9.-]+)(?::[0-9]{1,5})?(?:\?transport=(?:udp|tcp))?$/i.test(value)
 }
 
 /** TURN credentials must be fetched over HTTPS and carry an explicit short expiry. */
