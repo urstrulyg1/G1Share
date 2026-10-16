@@ -50,6 +50,37 @@ type closeBody struct {
 	Reason string `json:"reason"`
 }
 
+type publicTURNCredentialsResponse struct {
+	ExpiresAt time.Time   `json:"expiresAt"`
+	ICEServers []ICEServer `json:"iceServers"`
+}
+
+// handlePublicTURNCredentials issues short-lived credentials for the configured
+// TURN service. This endpoint is intentionally unauthenticated so a fresh install
+// can connect by device ID alone; strict per-client-IP throttling and a short TTL
+// limit abuse. The shared TURN secret never leaves this service.
+func handlePublicTURNCredentials(broker *Broker) http.HandlerFunc {
+	return func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			writeAPIError(w, newFault(http.StatusMethodNotAllowed, "method_not_allowed", "Use GET for TURN credentials."))
+			return
+		}
+		if !broker.allowRate("turn-credentials:"+clientIP(request), 20, time.Minute) {
+			writeAPIError(w, newFault(http.StatusTooManyRequests, "rate_limited", "Too many TURN credential requests. Wait a minute and try again."))
+			return
+		}
+		server, expiresAt, fault := broker.issuePublicTURNCredentials(time.Now().UTC())
+		if fault != nil {
+			writeAPIError(w, fault)
+			return
+		}
+		writeJSON(w, http.StatusOK, publicTURNCredentialsResponse{
+			ExpiresAt: expiresAt,
+			ICEServers: []ICEServer{server},
+		})
+	}
+}
+
 func handleChallenge(broker *Broker) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {

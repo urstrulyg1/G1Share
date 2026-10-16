@@ -22,7 +22,7 @@ chmod 600 .env
 $EDITOR .env
 ```
 
-Set `G1VIEWER_DOMAIN` (or `OPENDESK_DOMAIN`) to the DNS name users will enter in the app. Leave the STUN/TURN values empty until you have configured a compatible service. Choose a non-overlapping private subnet if `172.30.10.0/24` is already in use, and update the fixed Caddy/signaling addresses and `G1VIEWER_TRUSTED_PROXIES` together in `docker-compose.yml`.
+Set `G1VIEWER_DOMAIN` (or `OPENDESK_DOMAIN`) to a real DNS name pointing at this server. For a full TURN deployment, prefer `scripts/prepare-turn-deployment.sh`, which validates the public DNS/IP, generates a unique secret, writes a private `.env`, and validates both Compose files. Do not commit `.env`. Choose a non-overlapping private subnet if `172.30.10.0/24` is already in use, and update the fixed Caddy/signaling/Coturn addresses and `G1VIEWER_TRUSTED_PROXIES` together.
 
 Prepare the persistent bind mount with the service's unprivileged UID/GID (10001):
 
@@ -46,7 +46,7 @@ The signaling service has no user account or administrator approval system. Anyo
 
 ## Optional Coturn deployment
 
-Generate a unique secret on the server (do not reuse the example value):
+To prepare a complete TURN deployment, run the validated deployment script described in [the dynamic network-bootstrap guide](network-bootstrap.md). If configuring manually, generate a unique secret on the server (never reuse a sample value):
 
 ```sh
 openssl rand -hex 32
@@ -68,7 +68,7 @@ Start the optional service:
 docker compose -f docker-compose.yml -f docker-compose.turn.yml --profile turn up -d --build
 ```
 
-The Go service issues Coturn REST credentials from the shared secret with a configurable expiry (`OPENDESK_TURN_CREDENTIAL_TTL`, default 10 minutes). Keep the secret identical in `.env` for the signaling and Coturn services. The secret appears in the container configuration to privileged Docker administrators; protect Docker access and the server account. It is not a client private key.
+The Go service exposes `GET /api/v1/turn-credentials`, issuing random-username Coturn REST credentials with a configurable expiry (`G1VIEWER_TURN_CREDENTIAL_TTL`, default 10 minutes). The public endpoint is rate-limited to 20 requests per client IP per minute and returns HTTP 503 until a real TURN service is configured. Keep the shared secret identical for the signaling and Coturn services; it never leaves the Go service. The secret is visible to privileged Docker administrators, so protect Docker access and the server account. It is not a client private key.
 
 ## Firewall and operations
 
@@ -81,7 +81,7 @@ The Go service issues Coturn REST credentials from the shared secret with a conf
 
 ## Connecting desktop clients
 
-On first launch G1Viewer has no configured server. In Settings, set **Signaling server** to `https://<your-domain>` on every client. Confirm the green signaling state before attempting a session. For LAN use, put the shared service behind a locally trusted HTTPS gateway and configure its hostname on both devices; direct ICE host candidates can then carry media, but a server is still needed to authenticate device requests and exchange setup messages. There is no automatic LAN discovery or account enrollment. For first-time peers, compare the displayed public-key fingerprint through a separate trusted channel. An HTTPS endpoint alone does not replace user approval or key verification.
+For normal G1Viewer use, clients fetch the project's public relay/STUN bootstrap automatically and users enter only the remote Device ID. You do not need to enter this Go service as the signaling server. Once the TURN VPS is healthy, update `config/network-bootstrap.json` on `main` so `turnCredentialsUrl` points to `https://<your-real-domain>/api/v1/turn-credentials` and the STUN list includes `stun:<your-real-domain>:3478`. The desktop clients pick up the change dynamically after the bootstrap cache expires; no new client release is needed. For first-time peers, compare the displayed public-key fingerprint through a separate trusted channel and require host approval.
 
 A STUN/TURN response only makes ICE endpoints available; it does not guarantee NAT traversal. Test from the actual networks you intend to support. Restrictive corporate firewalls may require TURN/TLS on port 443 and a relay configuration designed for that environment.
 

@@ -42,6 +42,7 @@ func newServerWithBroker(addr string, broker *Broker) *http.Server {
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readinessHandler(broker))
 	mux.HandleFunc("POST /api/v1/challenge", handleChallenge(broker))
+	mux.HandleFunc("GET /api/v1/turn-credentials", handlePublicTURNCredentials(broker))
 	mux.HandleFunc("/api/v1/", handleAPI(broker))
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		writeAPIError(w, newFault(http.StatusNotFound, "not_found", "Endpoint was not found."))
