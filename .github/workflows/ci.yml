@@ -71,6 +71,7 @@ jobs:
       - name: Run two-client end-to-end test
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          E2E_NETWORK_INTERRUPTION_MODE: firewall
         run: npm run test:e2e
 
   wan-smoke:
@@ -93,6 +94,7 @@ jobs:
       - name: Test deployed signaling, WebRTC video, ICE path, file transfer, and input permissions
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          E2E_NETWORK_INTERRUPTION_MODE: firewall
           G1VIEWER_WAN_SIGNALING_URL: ${{ vars.G1VIEWER_WAN_SIGNALING_URL }}
           E2E_ICE_TRANSPORT_POLICY: all
         run: npm run test:e2e
@@ -117,6 +119,7 @@ jobs:
       - name: Force relay-only ICE and verify selected TURN candidates
         env:
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          E2E_NETWORK_INTERRUPTION_MODE: firewall
           G1VIEWER_WAN_SIGNALING_URL: ${{ vars.G1VIEWER_WAN_SIGNALING_URL }}
           E2E_ICE_TRANSPORT_POLICY: relay
         run: npm run test:e2e
