@@ -1,7 +1,7 @@
 import http from 'node:http'
 import dgram from 'node:dgram'
 import os from 'node:os'
-import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto'
+import { createHash, createPrivateKey, createPublicKey, randomBytes, sign, verify } from 'node:crypto'
 import { normalizeDeviceId } from '../shared/device-id'
 
 export interface ServerEvent {
@@ -39,6 +39,46 @@ export interface SessionRecord {
 
 const PROTOCOL_VERSION = 'v1'
 const SERVICE_VERSION = '0.2.0'
+const WAN_PROTOCOL = 'g1viewer-wan-v1'
+const WAN_MAX_CLOCK_SKEW_MS = 2 * 60 * 1000
+const WAN_REPLAY_WINDOW_MS = 2 * 60 * 1000
+const WAN_MAX_MESSAGE_BYTES = 64 * 1024
+const WAN_MAX_REPLAY_ENTRIES = 10_000
+const VALID_SESSION_PERMISSIONS = new Set(['view', 'files', 'clipboard', 'input', 'audio'])
+
+function normalizedPermissions(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > VALID_SESSION_PERMISSIONS.size) return null
+  if (!value.every((permission): permission is string => typeof permission === 'string' && VALID_SESSION_PERMISSIONS.has(permission))) return null
+  const permissions = Array.from(new Set(value))
+  return permissions.includes('view') ? permissions : null
+}
+
+function deviceIdMatchesPublicKey(deviceId: string, publicKey: string): boolean {
+  const normalized = normalizeDeviceId(deviceId)
+  const hash = createHash('sha256').update(publicKey, 'utf8').digest()
+  const numeric = (hash.readBigUInt64BE(0) % 900_000_000n + 100_000_000n).toString()
+  const modern = `${numeric.slice(0, 3)}-${numeric.slice(3, 6)}-${numeric.slice(6, 9)}`
+  if (modern === normalized) return true
+  const legacy = hash.subarray(0, 16).toString('hex').toUpperCase()
+  if (legacy.match(/.{8}/g)!.join('-') === normalized) return true
+  return legacy.slice(0, 12).match(/.{4}/g)!.join('-') === normalized
+}
+
+interface SignedWanEnvelope {
+  protocol: string
+  fromDeviceId: string
+  publicKey: string
+  issuedAt: number
+  nonce: string
+  payload: WanRelayMessage
+  signature: string
+}
+
+function wanCanonical(envelope: Omit<SignedWanEnvelope, 'signature' | 'publicKey'>): Buffer {
+  const payload = JSON.stringify(envelope.payload)
+  const digest = createHash('sha256').update(payload, 'utf8').digest('hex')
+  return Buffer.from(`${envelope.protocol}\n${envelope.fromDeviceId}\n${envelope.issuedAt}\n${envelope.nonce}\n${digest}`, 'utf8')
+}
 const DEFAULT_STUN_URLS = [
   'stun:stun.l.google.com:19302',
   'stun:stun1.l.google.com:19302',
@@ -169,6 +209,8 @@ export class EmbeddedSignalingBroker {
   }
 
   createSession(fromDeviceId: string, toDeviceId: string, requestedPermissions: string[]): { session: SessionRecord; peer: DeviceRecord & { online: boolean } } | null {
+    const validatedPermissions = normalizedPermissions(requestedPermissions)
+    if (!validatedPermissions || fromDeviceId === toDeviceId) return null
     const toDevice = this.getDeviceSummary(toDeviceId)
     if (!toDevice || !toDevice.online) return null
     const fromDevice = this.getDeviceSummary(fromDeviceId)
@@ -182,7 +224,7 @@ export class EmbeddedSignalingBroker {
       id: sessionId,
       fromDeviceId,
       toDeviceId,
-      requestedPermissions,
+      requestedPermissions: validatedPermissions,
       permissions: [],
       status: 'pending',
       createdAt: now.toISOString(),
@@ -206,12 +248,14 @@ export class EmbeddedSignalingBroker {
 
   decideSession(sessionId: string, actorDeviceId: string, accepted: boolean, permissions: string[]): SessionRecord | null {
     const session = this.sessions.get(sessionId)
-    if (!session || session.toDeviceId !== actorDeviceId || session.status !== 'pending') return null
+    if (!session || session.toDeviceId !== actorDeviceId || session.status !== 'pending' || Date.parse(session.expiresAt) <= Date.now()) return null
 
+    const grantedPermissions = accepted ? normalizedPermissions(permissions) : []
+    if (accepted && (!grantedPermissions || grantedPermissions.some(permission => !session.requestedPermissions.includes(permission)))) return null
     const toDevice = this.getDeviceSummary(actorDeviceId)
     if (accepted) {
       session.status = 'active'
-      session.permissions = permissions
+      session.permissions = grantedPermissions!
       this.pushEvent(session.fromDeviceId, {
         type: 'session.accepted',
         sessionId,
@@ -230,25 +274,21 @@ export class EmbeddedSignalingBroker {
 
   forwardSignal(sessionId: string, fromDeviceId: string, message: unknown): boolean {
     const session = this.sessions.get(sessionId)
-    if (!session || (session.status !== 'pending' && session.status !== 'active')) return false
+    if (!session || (session.status !== 'pending' && session.status !== 'active') ||
+        Date.parse(session.expiresAt) <= Date.now() ||
+        (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId)) return false
     const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
-    this.pushEvent(destDeviceId, {
-      type: 'signal',
-      sessionId,
-      message
-    })
+    this.pushEvent(destDeviceId, { type: 'signal', sessionId, message })
     return true
   }
 
   closeSession(sessionId: string, fromDeviceId: string, _reason: string): boolean {
     const session = this.sessions.get(sessionId)
-    if (!session) return false
+    if (!session || (session.status !== 'pending' && session.status !== 'active') ||
+        (fromDeviceId !== session.fromDeviceId && fromDeviceId !== session.toDeviceId)) return false
     session.status = 'closed'
     const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
-    this.pushEvent(destDeviceId, {
-      type: 'session.closed',
-      sessionId
-    })
+    this.pushEvent(destDeviceId, { type: 'session.closed', sessionId })
     return true
   }
 
@@ -579,13 +619,13 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     if (req.method === 'POST' && signalMatch) {
       const sessionId = signalMatch[1]
       const data = JSON.parse(bodyText) as { message: unknown }
-      const session = broker.getSession(sessionId)
       const ok = broker.forwardSignal(sessionId, deviceId, data.message)
-      if (!ok && !session) {
+      if (!ok) {
         res.writeHead(404)
         res.end(JSON.stringify({ error: { code: 'invalid_session', message: 'Could not forward signal.' } }))
         return
       }
+      const session = broker.getSession(sessionId)!
       if (manager && session) {
         void manager.forwardSignal(session, deviceId, data.message)
       }
@@ -598,8 +638,13 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     if (req.method === 'POST' && closeMatch) {
       const sessionId = closeMatch[1]
       const data = bodyText ? JSON.parse(bodyText) as { reason?: string } : {}
+      const closed = broker.closeSession(sessionId, deviceId, data.reason || 'user closed')
+      if (!closed) {
+        res.writeHead(404)
+        res.end(JSON.stringify({ error: { code: 'invalid_session', message: 'Session not available to this device.' } }))
+        return
+      }
       const session = broker.getSession(sessionId)
-      broker.closeSession(sessionId, deviceId, data.reason || 'user closed')
       if (manager && session) {
         void manager.closeSession(session, deviceId, data.reason || 'user closed')
       }
@@ -632,9 +677,11 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       const envTurn = (process.env.G1VIEWER_TURN_URLS || process.env.OPENDESK_TURN_URLS)?.trim()
       if (envTurn) {
         const turnUrls = envTurn.split(',').map(s => s.trim()).filter(Boolean)
-        const username = process.env.G1VIEWER_TURN_USERNAME || process.env.OPENDESK_TURN_USERNAME || 'g1viewer'
-        const credential = process.env.G1VIEWER_TURN_CREDENTIAL || process.env.OPENDESK_TURN_CREDENTIAL || 'g1viewer'
-        if (turnUrls.length > 0) {
+        const username = (process.env.G1VIEWER_TURN_USERNAME || process.env.OPENDESK_TURN_USERNAME || '').trim()
+        const credential = (process.env.G1VIEWER_TURN_CREDENTIAL || process.env.OPENDESK_TURN_CREDENTIAL || '').trim()
+        // Never publish static/default TURN credentials. If credentials are missing, keep STUN
+        // available and omit TURN rather than silently shipping a shared public credential.
+        if (turnUrls.length > 0 && username && credential) {
           iceServers.push({ urls: turnUrls, username, credential })
         }
       }
@@ -708,11 +755,13 @@ export interface WanRelayMessage {
 export class WanRelayBridge {
   private localDeviceId: string | null = null
   private localSummary: (DeviceRecord & { online: boolean }) | null = null
+  private localPrivateKey: ReturnType<typeof createPrivateKey> | null = null
   private ws: WebSocket | null = null
   private stopped = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private pendingQueries = new Map<string, (device: (DeviceRecord & { online: boolean }) | null) => void>()
   private remoteDevicesCache = new Map<string, DeviceRecord & { online: boolean }>()
+  private seenNonces = new Map<string, number>()
   private relayBaseUrl = (process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh').replace(/\/+$/, '')
 
   constructor(
@@ -725,6 +774,53 @@ export class WanRelayBridge {
     this.localDeviceId = normalized
     this.localSummary = { ...device, id: normalized, online: true }
     this.ensureConnected()
+  }
+
+  setSigningKey(privateKey: ReturnType<typeof createPrivateKey> | null): void {
+    this.localPrivateKey = privateKey
+  }
+
+  private verifyEnvelope(value: unknown): value is SignedWanEnvelope {
+    if (!value || typeof value !== 'object') return false
+    const envelope = value as Partial<SignedWanEnvelope>
+    if (envelope.protocol !== WAN_PROTOCOL || typeof envelope.fromDeviceId !== 'string' ||
+        typeof envelope.publicKey !== 'string' || typeof envelope.issuedAt !== 'number' ||
+        !Number.isSafeInteger(envelope.issuedAt) || Math.abs(Date.now() - envelope.issuedAt) > WAN_MAX_CLOCK_SKEW_MS ||
+        typeof envelope.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(envelope.nonce) ||
+        typeof envelope.signature !== 'string' || !/^[A-Za-z0-9_-]{86}$/.test(envelope.signature) ||
+        !envelope.payload || typeof envelope.payload !== 'object' || Array.isArray(envelope.payload)) return false
+    const fromDeviceId = normalizeDeviceId(envelope.fromDeviceId)
+    if (!fromDeviceId || !deviceIdMatchesPublicKey(fromDeviceId, envelope.publicKey)) return false
+    if (envelope.payload.fromDeviceId && normalizeDeviceId(envelope.payload.fromDeviceId) !== fromDeviceId) return false
+    const payloadText = JSON.stringify(envelope.payload)
+    if (Buffer.byteLength(payloadText, 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
+    try {
+      const rawKey = Buffer.from(envelope.publicKey, 'base64url')
+      const signature = Buffer.from(envelope.signature, 'base64url')
+      if (rawKey.length !== 32 || rawKey.toString('base64url') !== envelope.publicKey ||
+          signature.length !== 64 || signature.toString('base64url') !== envelope.signature) return false
+      const key = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawKey]), type: 'spki', format: 'der' })
+      const canonical = wanCanonical({
+        protocol: envelope.protocol,
+        fromDeviceId,
+        issuedAt: envelope.issuedAt,
+        nonce: envelope.nonce,
+        payload: envelope.payload
+      })
+      if (!verify(null, canonical, key, signature)) return false
+    } catch {
+      return false
+    }
+
+    const now = Date.now()
+    for (const [key, seenAt] of this.seenNonces) {
+      if (now - seenAt > WAN_REPLAY_WINDOW_MS) this.seenNonces.delete(key)
+    }
+    const replayKey = `${fromDeviceId}:${envelope.nonce}`
+    if (this.seenNonces.has(replayKey)) return false
+    if (this.seenNonces.size >= WAN_MAX_REPLAY_ENTRIES) return false
+    this.seenNonces.set(replayKey, now)
+    return true
   }
 
   ensureConnected(): void {
@@ -771,8 +867,9 @@ export class WanRelayBridge {
       const envelope = JSON.parse(text) as { event?: string; message?: string }
       if (envelope.event !== 'message' || !envelope.message) return
 
-      const payload = JSON.parse(envelope.message) as WanRelayMessage
-      this.handleRelayMessage(payload)
+      const signed = JSON.parse(envelope.message) as unknown
+      if (!this.verifyEnvelope(signed)) return
+      this.handleRelayMessage(signed.payload)
     } catch {
       // ignore parse errors
     }
@@ -797,7 +894,10 @@ export class WanRelayBridge {
     }
 
     if (payload.action === 'device_info') {
-      if (payload.device && payload.device.id) {
+      if (payload.device && payload.device.id && payload.fromDeviceId &&
+          normalizeDeviceId(payload.device.id) === normalizeDeviceId(payload.fromDeviceId) &&
+          payload.device.publicKey && deviceIdMatchesPublicKey(payload.device.id, payload.device.publicKey) &&
+          payload.toDeviceId && normalizeDeviceId(payload.toDeviceId) === this.localDeviceId) {
         const dev = { ...payload.device, id: normalizeDeviceId(payload.device.id), online: true }
         this.remoteDevicesCache.set(dev.id, dev)
         this.broker.registerRemoteDevice(dev)
@@ -811,14 +911,24 @@ export class WanRelayBridge {
     }
 
     if (payload.action === 'session_request') {
-      if (payload.session && payload.sessionId && payload.fromDeviceId && payload.toDeviceId) {
+      if (payload.session && payload.sessionId && /^[a-f0-9]{32}$/.test(payload.sessionId) && payload.fromDeviceId && payload.toDeviceId) {
+        const normalizedFrom = normalizeDeviceId(payload.fromDeviceId)
         const normalizedTo = normalizeDeviceId(payload.toDeviceId)
-        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+        const permissions = normalizedPermissions(payload.session.requestedPermissions)
+        const expiresAt = Date.parse(payload.session.expiresAt)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId && normalizedFrom !== normalizedTo &&
+            payload.session.id === payload.sessionId && payload.session.fromDeviceId === normalizedFrom &&
+            payload.session.toDeviceId === normalizedTo && permissions && Number.isFinite(expiresAt) &&
+            expiresAt > Date.now() && expiresAt <= Date.now() + 90_000) {
+          const existing = this.broker.getSession(payload.sessionId)
+          if (existing) return
           const session: SessionRecord = {
             ...payload.session,
+            requestedPermissions: permissions,
             id: payload.sessionId,
-            fromDeviceId: normalizeDeviceId(payload.fromDeviceId),
+            fromDeviceId: normalizedFrom,
             toDeviceId: normalizedTo,
+            permissions: [],
             status: 'pending',
             route: 'wan'
           }
@@ -835,15 +945,18 @@ export class WanRelayBridge {
     }
 
     if (payload.action === 'session_decision') {
-      if (payload.sessionId && payload.toDeviceId) {
+      if (payload.sessionId && /^[a-f0-9]{32}$/.test(payload.sessionId) && payload.toDeviceId && payload.fromDeviceId && typeof payload.accepted === 'boolean') {
+        const normalizedFrom = normalizeDeviceId(payload.fromDeviceId)
         const normalizedTo = normalizeDeviceId(payload.toDeviceId)
-        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
-          const accepted = Boolean(payload.accepted)
-          const session = this.broker.getSession(payload.sessionId)
-          if (session) {
-            session.status = accepted ? 'active' : 'rejected'
-            session.permissions = payload.permissions || ['view']
-          }
+        const session = this.broker.getSession(payload.sessionId)
+        const permissions = payload.accepted ? normalizedPermissions(payload.permissions) : []
+        if (this.localDeviceId && normalizedTo === this.localDeviceId && session &&
+            session.fromDeviceId === normalizedTo && session.toDeviceId === normalizedFrom &&
+            session.status === 'pending' && Date.parse(session.expiresAt) > Date.now() &&
+            (!payload.accepted || (permissions && permissions.every(p => session.requestedPermissions.includes(p))))) {
+          const accepted = payload.accepted
+          session.status = accepted ? 'active' : 'rejected'
+          session.permissions = permissions || []
           this.broker.pushEvent(normalizedTo, {
             type: accepted ? 'session.accepted' : 'session.rejected',
             sessionId: payload.sessionId,
@@ -856,9 +969,15 @@ export class WanRelayBridge {
     }
 
     if (payload.action === 'signal') {
-      if (payload.sessionId && payload.toDeviceId && payload.message) {
+      if (payload.sessionId && /^[a-f0-9]{32}$/.test(payload.sessionId) && payload.toDeviceId && payload.fromDeviceId && payload.message) {
+        const normalizedFrom = normalizeDeviceId(payload.fromDeviceId)
         const normalizedTo = normalizeDeviceId(payload.toDeviceId)
-        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+        const session = this.broker.getSession(payload.sessionId)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId && session &&
+            (session.status === 'active' || session.status === 'pending') && Date.parse(session.expiresAt) > Date.now() &&
+            (session.fromDeviceId === normalizedFrom || session.toDeviceId === normalizedFrom) &&
+            (session.fromDeviceId === normalizedTo || session.toDeviceId === normalizedTo) &&
+            normalizedFrom !== normalizedTo) {
           this.broker.pushEvent(normalizedTo, {
             type: 'signal',
             sessionId: payload.sessionId,
@@ -870,9 +989,15 @@ export class WanRelayBridge {
     }
 
     if (payload.action === 'session_close') {
-      if (payload.sessionId && payload.toDeviceId) {
+      if (payload.sessionId && /^[a-f0-9]{32}$/.test(payload.sessionId) && payload.toDeviceId && payload.fromDeviceId) {
+        const normalizedFrom = normalizeDeviceId(payload.fromDeviceId)
         const normalizedTo = normalizeDeviceId(payload.toDeviceId)
-        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+        const session = this.broker.getSession(payload.sessionId)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId && session &&
+            (session.status === 'active' || session.status === 'pending') &&
+            (session.fromDeviceId === normalizedFrom || session.toDeviceId === normalizedFrom) &&
+            (session.fromDeviceId === normalizedTo || session.toDeviceId === normalizedTo) &&
+            normalizedFrom !== normalizedTo) {
           this.broker.closeSessionLocally(payload.sessionId)
           this.broker.pushEvent(normalizedTo, {
             type: 'session.closed',
@@ -886,18 +1011,38 @@ export class WanRelayBridge {
 
   async publishToDevice(targetDeviceId: string, payload: unknown): Promise<boolean> {
     const normalized = normalizeDeviceId(targetDeviceId)
-    const topic = deriveWanTopic(normalized)
+    const localId = this.localDeviceId
+    const publicKey = this.localSummary?.publicKey
+    const privateKey = this.localPrivateKey
+    if (!localId || !publicKey || !privateKey || !deviceIdMatchesPublicKey(localId, publicKey) ||
+        !payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+    const payloadText = JSON.stringify(payload)
+    if (Buffer.byteLength(payloadText, 'utf8') > WAN_MAX_MESSAGE_BYTES) return false
+    const issuedAt = Date.now()
+    const unsigned = {
+      protocol: WAN_PROTOCOL,
+      fromDeviceId: localId,
+      issuedAt,
+      nonce: randomBytes(16).toString('hex'),
+      payload: payload as WanRelayMessage
+    }
     try {
+      const signature = sign(null, wanCanonical(unsigned), privateKey).toString('base64url')
+      const envelope: SignedWanEnvelope = { ...unsigned, publicKey, signature }
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), 4000)
-      const res = await fetch(`${this.relayBaseUrl}/${topic}`, {
-        method: 'POST',
-        headers: { 'Title': 'G1V', 'Priority': 'high' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      })
-      clearTimeout(timer)
-      return res.ok
+      try {
+        const res = await fetch(`${this.relayBaseUrl}/${deriveWanTopic(normalized)}`, {
+          method: 'POST',
+          headers: { 'Title': 'G1V', 'Priority': 'high', 'Content-Type': 'application/json' },
+          body: JSON.stringify(envelope),
+          signal: controller.signal,
+          redirect: 'error'
+        })
+        return res.ok
+      } finally {
+        clearTimeout(timer)
+      }
     } catch {
       return false
     }
@@ -994,8 +1139,15 @@ export class AutoSignalingManager {
     this.wanRelay?.setLocalDevice(device)
   }
 
-  setLocalIdentity(deviceId: string, publicKey: string, name: string, platform: string, appVersion: string): void {
+  setLocalIdentity(deviceId: string, publicKey: string, name: string, platform: string, appVersion: string, privateKey?: ReturnType<typeof createPrivateKey>): void {
+    if (!privateKey || !deviceIdMatchesPublicKey(deviceId, publicKey)) {
+      this.wanRelay?.setSigningKey(null as never)
+      return
+    }
+    const exported = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
+    if (exported !== publicKey) throw new TypeError('WAN signing key does not match the local public identity.')
     const record = this.broker.registerDevice(deviceId, publicKey, name, platform, appVersion)
+    this.wanRelay?.setSigningKey(privateKey)
     this.setLocalDevice(record)
   }
 
