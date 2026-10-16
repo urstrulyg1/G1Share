@@ -1516,9 +1516,13 @@ export class AutoSignalingManager {
   private peerCoordinators = new Set<string>()
   private announceTimer: ReturnType<typeof setInterval> | null = null
   private wanRelay: WanRelayBridge | null = null
+  private localIdentityRecord: DeviceRecord | null = null
+  private localPrivateKey: ReturnType<typeof createPrivateKey> | null = null
 
   async start(): Promise<string> {
     this.wanRelay = new WanRelayBridge(this.broker, this)
+    if (this.localPrivateKey) this.wanRelay.setSigningKey(this.localPrivateKey)
+    if (this.localIdentityRecord) this.wanRelay.setLocalDevice(this.localIdentityRecord)
 
     // 1. Try to start local HTTP server on port 8787, or next available port if taken.
     await this.startHttpServer()
@@ -1544,6 +1548,7 @@ export class AutoSignalingManager {
   }
 
   setLocalDevice(device: DeviceRecord): void {
+    this.localIdentityRecord = device
     this.wanRelay?.setLocalDevice(device)
   }
 
@@ -1553,6 +1558,7 @@ export class AutoSignalingManager {
     const exported = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url')
     if (exported !== publicKey) throw new TypeError('WAN signing key does not match the local public identity.')
     const record = this.broker.registerDevice(deviceId, publicKey, name, platform, appVersion)
+    this.localPrivateKey = privateKey
     this.wanRelay?.setSigningKey(privateKey)
     this.setLocalDevice(record)
   }
