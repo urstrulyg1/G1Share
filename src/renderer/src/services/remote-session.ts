@@ -482,7 +482,7 @@ export class RemoteSessionController {
   }
 
   private scheduleRecovery(state: 'failed' | 'disconnected'): void {
-    if (this.closed || this.disconnectTimer) return
+    if (this.closed || this.disconnectTimer || this.recoveryInProgress) return
     this.callbacks.onState('degraded')
     this.disconnectTimer = setTimeout(() => {
       this.disconnectTimer = null
