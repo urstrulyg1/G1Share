@@ -867,7 +867,7 @@ export function isValidLanCoordinatorUrl(value: string): boolean {
         (parsed.pathname !== '/' && parsed.pathname !== '') || !parsed.port) return false
     const port = Number(parsed.port)
     if (!Number.isInteger(port) || port < 1 || port > 65535) return false
-    const host = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, '')
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '')
     if (host === 'localhost' || host === '::1' || host === '127.0.0.1') return true
     if (host.endsWith('.local')) return true
     const parts = host.split('.').map(Number)
