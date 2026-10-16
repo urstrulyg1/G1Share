@@ -873,7 +873,13 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
         return
       }
       if (manager) {
-        void manager.handleSessionDecision(session, deviceId, data.accepted, permissions || [])
+        const delivered = await manager.handleSessionDecision(session, deviceId, data.accepted, permissions || [])
+        if (!delivered) {
+          broker.closeSessionLocally(sessionId)
+          res.writeHead(502)
+          res.end(JSON.stringify({ error: { code: 'relay_unavailable', message: 'The session decision could not be delivered to the other device.' } }))
+          return
+        }
       }
       res.writeHead(200)
       res.end(JSON.stringify(session))
@@ -893,7 +899,12 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       }
       const session = broker.getSession(sessionId)!
       if (manager && session) {
-        void manager.forwardSignal(session, deviceId, data.message)
+        const delivered = await manager.forwardSignal(session, deviceId, data.message)
+        if (!delivered) {
+          res.writeHead(502)
+          res.end(JSON.stringify({ error: { code: 'relay_unavailable', message: 'The WebRTC signal could not be delivered to the other device.' } }))
+          return
+        }
       }
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ok' }))
@@ -914,7 +925,12 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
       }
       const session = broker.getSession(sessionId)
       if (manager && session) {
-        void manager.closeSession(session, deviceId, reason)
+        const delivered = await manager.closeSession(session, deviceId, reason)
+        if (!delivered) {
+          res.writeHead(502)
+          res.end(JSON.stringify({ error: { code: 'relay_unavailable', message: 'The session closure could not be delivered to the other device.' } }))
+          return
+        }
       }
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ok' }))
@@ -1867,53 +1883,54 @@ export class AutoSignalingManager {
     actorDeviceId: string,
     accepted: boolean,
     permissions: string[]
-  ): Promise<void> {
-    if (session.route === 'wan' && this.wanRelay) {
-      const mySummary = this.broker.getDeviceSummary(actorDeviceId)
-      await this.wanRelay.publishToDevice(session.fromDeviceId, {
-        action: 'session_decision',
-        sessionId: session.id,
-        fromDeviceId: actorDeviceId,
-        toDeviceId: session.fromDeviceId,
-        accepted,
-        permissions,
-        peer: mySummary
-      })
-    }
+  ): Promise<boolean> {
+    if (session.route !== 'wan') return true
+    if (!this.wanRelay) return false
+    const mySummary = this.broker.getDeviceSummary(actorDeviceId)
+    if (!mySummary) return false
+    return this.wanRelay.publishToDevice(session.fromDeviceId, {
+      action: 'session_decision',
+      sessionId: session.id,
+      fromDeviceId: actorDeviceId,
+      toDeviceId: session.fromDeviceId,
+      accepted,
+      permissions,
+      peer: mySummary
+    })
   }
 
   async forwardSignal(
     session: SessionRecord,
     fromDeviceId: string,
     message: unknown
-  ): Promise<void> {
-    if (session.route === 'wan' && this.wanRelay) {
-      const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
-      await this.wanRelay.publishToDevice(destDeviceId, {
-        action: 'signal',
-        sessionId: session.id,
-        fromDeviceId,
-        toDeviceId: destDeviceId,
-        message
-      })
-    }
+  ): Promise<boolean> {
+    if (session.route !== 'wan') return true
+    if (!this.wanRelay) return false
+    const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
+    return this.wanRelay.publishToDevice(destDeviceId, {
+      action: 'signal',
+      sessionId: session.id,
+      fromDeviceId,
+      toDeviceId: destDeviceId,
+      message
+    })
   }
 
   async closeSession(
     session: SessionRecord,
     fromDeviceId: string,
     reason: string
-  ): Promise<void> {
-    if (session.route === 'wan' && this.wanRelay) {
-      const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
-      await this.wanRelay.publishToDevice(destDeviceId, {
-        action: 'session_close',
-        sessionId: session.id,
-        fromDeviceId,
-        toDeviceId: destDeviceId,
-        reason
-      })
-    }
+  ): Promise<boolean> {
+    if (session.route !== 'wan') return true
+    if (!this.wanRelay) return false
+    const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
+    return this.wanRelay.publishToDevice(destDeviceId, {
+      action: 'session_close',
+      sessionId: session.id,
+      fromDeviceId,
+      toDeviceId: destDeviceId,
+      reason
+    })
   }
 
   async stop(): Promise<void> {
