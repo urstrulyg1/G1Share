@@ -2,6 +2,7 @@ import http from 'node:http'
 import dgram from 'node:dgram'
 import os from 'node:os'
 import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto'
+import { normalizeDeviceId } from '../shared/device-id'
 
 export interface ServerEvent {
   sequence: number
@@ -32,6 +33,8 @@ export interface SessionRecord {
   status: 'pending' | 'active' | 'rejected' | 'closed'
   createdAt: string
   expiresAt: string
+  route?: 'local' | 'lan' | 'wan'
+  lanPeerUrl?: string
 }
 
 const PROTOCOL_VERSION = 'v1'
@@ -39,8 +42,17 @@ const SERVICE_VERSION = '0.2.0'
 const DEFAULT_STUN_URLS = [
   'stun:stun.l.google.com:19302',
   'stun:stun1.l.google.com:19302',
-  'stun:stun2.l.google.com:19302'
+  'stun:stun2.l.google.com:19302',
+  'stun:stun3.l.google.com:19302',
+  'stun:stun4.l.google.com:19302',
+  'stun:stun.cloudflare.com:3478'
 ]
+
+export function deriveWanTopic(deviceId: string): string {
+  const clean = normalizeDeviceId(deviceId).replace(/[^0-9A-Za-z]/g, '')
+  const hash = createHash('sha256').update(`g1viewer-wan-v1:${clean}`).digest('hex').slice(0, 24)
+  return `g1v_wan_${hash}`
+}
 
 export class EmbeddedSignalingBroker {
   private devices = new Map<string, DeviceRecord>()
@@ -240,6 +252,37 @@ export class EmbeddedSignalingBroker {
     return true
   }
 
+  closeSessionLocally(sessionId: string): void {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.status = 'closed'
+    }
+  }
+
+  injectSession(session: SessionRecord): void {
+    this.sessions.set(session.id, session)
+  }
+
+  registerRemoteDevice(record: DeviceRecord & { online: boolean }): void {
+    const existing = this.devices.get(record.id)
+    if (existing) {
+      existing.name = record.name || existing.name
+      existing.platform = record.platform || existing.platform
+      existing.appVersion = record.appVersion || existing.appVersion
+      existing.lastSeenAt = new Date().toISOString()
+      return
+    }
+    this.devices.set(record.id, {
+      id: record.id,
+      publicKey: record.publicKey,
+      name: record.name,
+      platform: record.platform,
+      appVersion: record.appVersion,
+      registeredAt: record.registeredAt || new Date().toISOString(),
+      lastSeenAt: new Date().toISOString()
+    })
+  }
+
   pushEvent(targetDeviceId: string, eventData: Omit<ServerEvent, 'sequence'>): void {
     const seq = (this.sequences.get(targetDeviceId) || 0) + 1
     this.sequences.set(targetDeviceId, seq)
@@ -418,6 +461,9 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     if (req.method === 'POST' && path === '/api/v1/devices/register') {
       const data = JSON.parse(bodyText) as { id: string; publicKey: string; name: string; platform: string; appVersion: string }
       const device = broker.registerDevice(data.id, data.publicKey, data.name, data.platform, data.appVersion)
+      if (manager) {
+        manager.setLocalDevice(device)
+      }
       res.writeHead(200)
       res.end(JSON.stringify({ ...device, online: true }))
       return
@@ -467,6 +513,9 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     if (req.method === 'POST' && path === '/api/v1/devices/rename') {
       const data = JSON.parse(bodyText) as { name: string }
       const device = broker.renameDevice(deviceId, data.name)
+      if (manager && device) {
+        manager.setLocalDevice(device)
+      }
       res.writeHead(200)
       res.end(JSON.stringify(device))
       return
@@ -481,7 +530,10 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
 
     if (req.method === 'POST' && path === '/api/v1/sessions') {
       const data = JSON.parse(bodyText) as { toDeviceId: string; permissions: string[] }
-      const result = broker.createSession(deviceId, data.toDeviceId, data.permissions || ['view'])
+      let result = broker.createSession(deviceId, data.toDeviceId, data.permissions || ['view'])
+      if (!result && manager) {
+        result = await manager.createSessionAcrossNetwork(deviceId, data.toDeviceId, data.permissions || ['view'])
+      }
       if (!result) {
         res.writeHead(409)
         res.end(JSON.stringify({ error: { code: 'device_offline', message: 'The target device is offline.' } }))
@@ -515,6 +567,9 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
         res.end(JSON.stringify({ error: { code: 'invalid_session', message: 'Session not available.' } }))
         return
       }
+      if (manager) {
+        void manager.handleSessionDecision(session, deviceId, data.accepted, data.permissions || ['view'])
+      }
       res.writeHead(200)
       res.end(JSON.stringify(session))
       return
@@ -524,11 +579,15 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     if (req.method === 'POST' && signalMatch) {
       const sessionId = signalMatch[1]
       const data = JSON.parse(bodyText) as { message: unknown }
+      const session = broker.getSession(sessionId)
       const ok = broker.forwardSignal(sessionId, deviceId, data.message)
-      if (!ok) {
+      if (!ok && !session) {
         res.writeHead(404)
         res.end(JSON.stringify({ error: { code: 'invalid_session', message: 'Could not forward signal.' } }))
         return
+      }
+      if (manager && session) {
+        void manager.forwardSignal(session, deviceId, data.message)
       }
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ok' }))
@@ -539,7 +598,11 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     if (req.method === 'POST' && closeMatch) {
       const sessionId = closeMatch[1]
       const data = bodyText ? JSON.parse(bodyText) as { reason?: string } : {}
+      const session = broker.getSession(sessionId)
       broker.closeSession(sessionId, deviceId, data.reason || 'user closed')
+      if (manager && session) {
+        void manager.closeSession(session, deviceId, data.reason || 'user closed')
+      }
       res.writeHead(200)
       res.end(JSON.stringify({ status: 'ok' }))
       return
@@ -555,8 +618,28 @@ export function createSignalingHttpServer(broker: EmbeddedSignalingBroker, manag
     }
 
     if (req.method === 'GET' && path === '/api/v1/ice') {
+      const stunList = [...DEFAULT_STUN_URLS]
+      const envStun = (process.env.G1VIEWER_STUN_URLS || process.env.OPENDESK_STUN_URLS)?.trim()
+      if (envStun) {
+        for (const u of envStun.split(',')) {
+          const t = u.trim()
+          if (t && !stunList.includes(t)) stunList.push(t)
+        }
+      }
+      const iceServers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [
+        { urls: stunList }
+      ]
+      const envTurn = (process.env.G1VIEWER_TURN_URLS || process.env.OPENDESK_TURN_URLS)?.trim()
+      if (envTurn) {
+        const turnUrls = envTurn.split(',').map(s => s.trim()).filter(Boolean)
+        const username = process.env.G1VIEWER_TURN_USERNAME || process.env.OPENDESK_TURN_USERNAME || 'g1viewer'
+        const credential = process.env.G1VIEWER_TURN_CREDENTIAL || process.env.OPENDESK_TURN_CREDENTIAL || 'g1viewer'
+        if (turnUrls.length > 0) {
+          iceServers.push({ urls: turnUrls, username, credential })
+        }
+      }
       res.writeHead(200)
-      res.end(JSON.stringify({ iceServers: [{ urls: DEFAULT_STUN_URLS }] }))
+      res.end(JSON.stringify({ iceServers }))
       return
     }
 
@@ -607,6 +690,268 @@ export function getSubnetBroadcastAddresses(): string[] {
   return Array.from(new Set(broadcasts))
 }
 
+export interface WanRelayMessage {
+  action: 'query' | 'device_info' | 'session_request' | 'session_decision' | 'signal' | 'session_close'
+  fromDeviceId?: string
+  toDeviceId?: string
+  replyTopic?: string
+  device?: DeviceRecord & { online: boolean }
+  sessionId?: string
+  session?: SessionRecord
+  peer?: unknown
+  accepted?: boolean
+  permissions?: string[]
+  message?: unknown
+  reason?: string
+}
+
+export class WanRelayBridge {
+  private localDeviceId: string | null = null
+  private localSummary: (DeviceRecord & { online: boolean }) | null = null
+  private ws: WebSocket | null = null
+  private stopped = false
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private pendingQueries = new Map<string, (device: (DeviceRecord & { online: boolean }) | null) => void>()
+  private remoteDevicesCache = new Map<string, DeviceRecord & { online: boolean }>()
+  private relayBaseUrl = (process.env.G1VIEWER_RELAY_URL || process.env.OPENDESK_RELAY_URL || 'https://ntfy.sh').replace(/\/+$/, '')
+
+  constructor(
+    private readonly broker: EmbeddedSignalingBroker,
+    private readonly manager: AutoSignalingManager
+  ) {}
+
+  setLocalDevice(device: DeviceRecord): void {
+    const normalized = normalizeDeviceId(device.id)
+    this.localDeviceId = normalized
+    this.localSummary = { ...device, id: normalized, online: true }
+    this.ensureConnected()
+  }
+
+  ensureConnected(): void {
+    if (this.stopped || !this.localDeviceId) return
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
+    try {
+      const topic = deriveWanTopic(this.localDeviceId)
+      const wsUrl = this.relayBaseUrl.replace(/^http/i, 'ws') + `/${topic}/ws`
+      this.ws = new WebSocket(wsUrl)
+
+      this.ws.onmessage = (event) => {
+        this.handleIncomingRawMessage(event.data)
+      }
+
+      this.ws.onerror = () => {
+        // Suppress unhandled WebSocket error
+      }
+
+      this.ws.onclose = () => {
+        this.ws = null
+        if (!this.stopped) {
+          this.scheduleReconnect()
+        }
+      }
+    } catch {
+      this.scheduleReconnect()
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.stopped) return
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      this.ensureConnected()
+    }, 5000)
+  }
+
+  private handleIncomingRawMessage(rawData: unknown): void {
+    try {
+      const text = typeof rawData === 'string' ? rawData : String(rawData)
+      const envelope = JSON.parse(text) as { event?: string; message?: string }
+      if (envelope.event !== 'message' || !envelope.message) return
+
+      const payload = JSON.parse(envelope.message) as WanRelayMessage
+      this.handleRelayMessage(payload)
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  private handleRelayMessage(payload: WanRelayMessage): void {
+    if (!payload || typeof payload.action !== 'string') return
+
+    if (payload.action === 'query') {
+      if (this.localDeviceId && this.localSummary) {
+        const dest = payload.fromDeviceId ? normalizeDeviceId(payload.fromDeviceId) : null
+        if (dest) {
+          void this.publishToDevice(dest, {
+            action: 'device_info',
+            fromDeviceId: this.localDeviceId,
+            toDeviceId: dest,
+            device: this.localSummary
+          })
+        }
+      }
+      return
+    }
+
+    if (payload.action === 'device_info') {
+      if (payload.device && payload.device.id) {
+        const dev = { ...payload.device, id: normalizeDeviceId(payload.device.id), online: true }
+        this.remoteDevicesCache.set(dev.id, dev)
+        this.broker.registerRemoteDevice(dev)
+        const waiter = this.pendingQueries.get(dev.id)
+        if (waiter) {
+          this.pendingQueries.delete(dev.id)
+          waiter(dev)
+        }
+      }
+      return
+    }
+
+    if (payload.action === 'session_request') {
+      if (payload.session && payload.sessionId && payload.fromDeviceId && payload.toDeviceId) {
+        const normalizedTo = normalizeDeviceId(payload.toDeviceId)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+          const session: SessionRecord = {
+            ...payload.session,
+            id: payload.sessionId,
+            fromDeviceId: normalizeDeviceId(payload.fromDeviceId),
+            toDeviceId: normalizedTo,
+            status: 'pending',
+            route: 'wan'
+          }
+          this.broker.injectSession(session)
+          this.broker.pushEvent(normalizedTo, {
+            type: 'session.request',
+            sessionId: payload.sessionId,
+            session,
+            peer: payload.peer
+          })
+        }
+      }
+      return
+    }
+
+    if (payload.action === 'session_decision') {
+      if (payload.sessionId && payload.toDeviceId) {
+        const normalizedTo = normalizeDeviceId(payload.toDeviceId)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+          const accepted = Boolean(payload.accepted)
+          const session = this.broker.getSession(payload.sessionId)
+          if (session) {
+            session.status = accepted ? 'active' : 'rejected'
+            session.permissions = payload.permissions || ['view']
+          }
+          this.broker.pushEvent(normalizedTo, {
+            type: accepted ? 'session.accepted' : 'session.rejected',
+            sessionId: payload.sessionId,
+            session,
+            peer: payload.peer
+          })
+        }
+      }
+      return
+    }
+
+    if (payload.action === 'signal') {
+      if (payload.sessionId && payload.toDeviceId && payload.message) {
+        const normalizedTo = normalizeDeviceId(payload.toDeviceId)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+          this.broker.pushEvent(normalizedTo, {
+            type: 'signal',
+            sessionId: payload.sessionId,
+            message: payload.message
+          })
+        }
+      }
+      return
+    }
+
+    if (payload.action === 'session_close') {
+      if (payload.sessionId && payload.toDeviceId) {
+        const normalizedTo = normalizeDeviceId(payload.toDeviceId)
+        if (this.localDeviceId && normalizedTo === this.localDeviceId) {
+          this.broker.closeSessionLocally(payload.sessionId)
+          this.broker.pushEvent(normalizedTo, {
+            type: 'session.closed',
+            sessionId: payload.sessionId
+          })
+        }
+      }
+      return
+    }
+  }
+
+  async publishToDevice(targetDeviceId: string, payload: unknown): Promise<boolean> {
+    const normalized = normalizeDeviceId(targetDeviceId)
+    const topic = deriveWanTopic(normalized)
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 4000)
+      const res = await fetch(`${this.relayBaseUrl}/${topic}`, {
+        method: 'POST',
+        headers: { 'Title': 'G1V', 'Priority': 'high' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      })
+      clearTimeout(timer)
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  async queryDevice(targetDeviceId: string, timeoutMs = 2500): Promise<(DeviceRecord & { online: boolean }) | null> {
+    const normalized = normalizeDeviceId(targetDeviceId)
+    const cached = this.remoteDevicesCache.get(normalized)
+    if (cached && Date.now() - new Date(cached.lastSeenAt).getTime() < 30_000) {
+      return cached
+    }
+
+    return new Promise(resolve => {
+      let resolved = false
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          this.pendingQueries.delete(normalized)
+          resolve(null)
+        }
+      }, timeoutMs)
+
+      this.pendingQueries.set(normalized, (dev) => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timer)
+          this.pendingQueries.delete(normalized)
+          resolve(dev)
+        }
+      })
+
+      const myTopic = this.localDeviceId ? deriveWanTopic(this.localDeviceId) : undefined
+      void this.publishToDevice(normalized, {
+        action: 'query',
+        fromDeviceId: this.localDeviceId,
+        replyTopic: myTopic
+      })
+    })
+  }
+
+  stop(): void {
+    this.stopped = true
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    if (this.ws) {
+      try { this.ws.close() } catch { /* ignore */ }
+      this.ws = null
+    }
+    this.pendingQueries.clear()
+  }
+}
+
 export class AutoSignalingManager {
   private broker = new EmbeddedSignalingBroker()
   private server: http.Server | null = null
@@ -617,8 +962,11 @@ export class AutoSignalingManager {
   private stopped = false
   private peerCoordinators = new Set<string>()
   private announceTimer: ReturnType<typeof setInterval> | null = null
+  private wanRelay: WanRelayBridge | null = null
 
   async start(): Promise<string> {
+    this.wanRelay = new WanRelayBridge(this.broker, this)
+
     // 1. Try to start local HTTP server on port 8787, or next available port if taken.
     await this.startHttpServer()
 
@@ -640,6 +988,15 @@ export class AutoSignalingManager {
     this.startBackgroundTasks()
 
     return this.activeUrl
+  }
+
+  setLocalDevice(device: DeviceRecord): void {
+    this.wanRelay?.setLocalDevice(device)
+  }
+
+  setLocalIdentity(deviceId: string, publicKey: string, name: string, platform: string, appVersion: string): void {
+    const record = this.broker.registerDevice(deviceId, publicKey, name, platform, appVersion)
+    this.setLocalDevice(record)
   }
 
   getActiveUrl(): string {
@@ -690,13 +1047,11 @@ export class AutoSignalingManager {
   }
 
   private async discoverCoordinator(timeoutMs: number): Promise<string | null> {
-    // If local port 8787 was taken (e.g. running multiple instances locally), check port 8787
     if (this.serverPort !== 8787) {
       const isLocalCoordinator = await this.checkHttpCoordinator('http://127.0.0.1:8787')
       if (isLocalCoordinator) return 'http://127.0.0.1:8787'
     }
 
-    // Probe LAN via UDP broadcast
     const udpFound = await this.probeLanCoordinator(timeoutMs)
     if (udpFound) return udpFound
 
@@ -911,6 +1266,10 @@ export class AutoSignalingManager {
   }
 
   async findDeviceAcrossPeers(targetId: string): Promise<(DeviceRecord & { online: boolean }) | null> {
+    const normalized = normalizeDeviceId(targetId)
+    const local = this.broker.getDeviceSummary(normalized)
+    if (local && local.online) return local
+
     if (this.peerCoordinators.size === 0) {
       await this.scanSubnetForCoordinators()
     }
@@ -918,18 +1277,130 @@ export class AutoSignalingManager {
       try {
         const controller = new AbortController()
         const timer = setTimeout(() => controller.abort(), 1000)
-        const res = await fetch(`${peerUrl}/api/v1/devices/${targetId}`, {
+        const res = await fetch(`${peerUrl}/api/v1/devices/${normalized}`, {
           headers: { Accept: 'application/json' },
           signal: controller.signal
         })
         clearTimeout(timer)
         if (res.ok) {
           const device = (await res.json()) as DeviceRecord & { online: boolean }
-          if (device && device.id === targetId) return device
+          if (device && normalizeDeviceId(device.id) === normalized) {
+            this.broker.registerRemoteDevice(device)
+            return device
+          }
         }
       } catch { /* ignore */ }
     }
+
+    if (this.wanRelay) {
+      const wanDevice = await this.wanRelay.queryDevice(normalized)
+      if (wanDevice) {
+        this.broker.registerRemoteDevice(wanDevice)
+        return wanDevice
+      }
+    }
+
     return null
+  }
+
+  async createSessionAcrossNetwork(
+    fromDeviceId: string,
+    toDeviceId: string,
+    requestedPermissions: string[]
+  ): Promise<{ session: SessionRecord; peer: DeviceRecord & { online: boolean } } | null> {
+    const normalizedTo = normalizeDeviceId(toDeviceId)
+    const normalizedFrom = normalizeDeviceId(fromDeviceId)
+
+    let targetDevice = await this.findDeviceAcrossPeers(normalizedTo)
+    if (!targetDevice) return null
+
+    const fromDevice = this.broker.getDeviceSummary(normalizedFrom)
+    if (!fromDevice) return null
+
+    const sessionId = randomBytes(16).toString('hex')
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 90_000).toISOString()
+
+    const session: SessionRecord = {
+      id: sessionId,
+      fromDeviceId: normalizedFrom,
+      toDeviceId: normalizedTo,
+      requestedPermissions,
+      permissions: [],
+      status: 'pending',
+      createdAt: now.toISOString(),
+      expiresAt,
+      route: 'wan'
+    }
+
+    this.broker.injectSession(session)
+
+    if (this.wanRelay) {
+      await this.wanRelay.publishToDevice(normalizedTo, {
+        action: 'session_request',
+        sessionId,
+        fromDeviceId: normalizedFrom,
+        toDeviceId: normalizedTo,
+        session,
+        peer: fromDevice
+      })
+    }
+
+    return { session, peer: targetDevice }
+  }
+
+  async handleSessionDecision(
+    session: SessionRecord,
+    actorDeviceId: string,
+    accepted: boolean,
+    permissions: string[]
+  ): Promise<void> {
+    if (session.route === 'wan' && this.wanRelay) {
+      const mySummary = this.broker.getDeviceSummary(actorDeviceId)
+      await this.wanRelay.publishToDevice(session.fromDeviceId, {
+        action: 'session_decision',
+        sessionId: session.id,
+        fromDeviceId: actorDeviceId,
+        toDeviceId: session.fromDeviceId,
+        accepted,
+        permissions,
+        peer: mySummary
+      })
+    }
+  }
+
+  async forwardSignal(
+    session: SessionRecord,
+    fromDeviceId: string,
+    message: unknown
+  ): Promise<void> {
+    if (session.route === 'wan' && this.wanRelay) {
+      const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
+      await this.wanRelay.publishToDevice(destDeviceId, {
+        action: 'signal',
+        sessionId: session.id,
+        fromDeviceId,
+        toDeviceId: destDeviceId,
+        message
+      })
+    }
+  }
+
+  async closeSession(
+    session: SessionRecord,
+    fromDeviceId: string,
+    reason: string
+  ): Promise<void> {
+    if (session.route === 'wan' && this.wanRelay) {
+      const destDeviceId = session.fromDeviceId === fromDeviceId ? session.toDeviceId : session.fromDeviceId
+      await this.wanRelay.publishToDevice(destDeviceId, {
+        action: 'session_close',
+        sessionId: session.id,
+        fromDeviceId,
+        toDeviceId: destDeviceId,
+        reason
+      })
+    }
   }
 
   async stop(): Promise<void> {
@@ -937,6 +1408,10 @@ export class AutoSignalingManager {
     if (this.announceTimer) {
       clearInterval(this.announceTimer)
       this.announceTimer = null
+    }
+    if (this.wanRelay) {
+      this.wanRelay.stop()
+      this.wanRelay = null
     }
     try { this.udpSocket?.close() } catch { /* ignore */ }
     if (this.server) {
@@ -946,3 +1421,4 @@ export class AutoSignalingManager {
     }
   }
 }
+

@@ -208,6 +208,15 @@ export function useOpenDesk() {
         if (stopped || !Array.isArray(list)) return
         const checkedAt = new Date().toISOString()
         const onlineDevices = list.filter(d => d.id !== device.deviceId)
+        const knownList = stateRef.current.knownDevices
+        for (const kd of knownList) {
+          if (!onlineDevices.some(d => d.id === kd.id)) {
+            try {
+              const probe = await client.lookupDevice(kd.id)
+              if (probe && probe.online) onlineDevices.push(probe)
+            } catch { /* device offline */ }
+          }
+        }
         if (onlineDevices.length > 0) {
           setState(current => {
             const map = new Map(current.knownDevices.map(d => [d.id, d]))

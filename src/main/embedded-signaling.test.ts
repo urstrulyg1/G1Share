@@ -174,4 +174,28 @@ describe('EmbeddedSignalingBroker and HTTP Server', () => {
     expect(manager.getActiveUrl()).toBe(url)
     await manager.stop()
   })
+
+  it('serves rich ICE configuration with Google and Cloudflare STUN servers', async () => {
+    const res = await signedRequest(privKey1, devId1, 'GET', '/api/v1/ice')
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { iceServers: Array<{ urls: string[] }> }
+    expect(Array.isArray(json.iceServers)).toBe(true)
+    const allUrls = json.iceServers.flatMap(s => s.urls)
+    expect(allUrls.some(u => u.includes('google.com'))).toBe(true)
+    expect(allUrls.some(u => u.includes('cloudflare.com'))).toBe(true)
+  })
+
+  it('derives deterministic WAN relay topics across formatting variations', async () => {
+    const { deriveWanTopic } = await import('./embedded-signaling')
+    const topic1 = deriveWanTopic('123-456-789')
+    const topic2 = deriveWanTopic('123456789')
+    const topic3 = deriveWanTopic('123 456 789')
+    const topicOther = deriveWanTopic('987-654-321')
+
+    expect(topic1).toMatch(/^g1v_wan_[0-9a-f]{24}$/)
+    expect(topic1).toBe(topic2)
+    expect(topic2).toBe(topic3)
+    expect(topic1).not.toBe(topicOther)
+  })
 })
+

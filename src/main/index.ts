@@ -219,6 +219,15 @@ async function getDeviceInfo(): Promise<DeviceInfo> {
   const name = cleanDeviceName((await loadSettings().catch(() => null))?.deviceName ?? hostname())
   try {
     const identity = await loadSecureIdentity()
+    if (autoSignalingManager && identity.deviceId) {
+      autoSignalingManager.setLocalIdentity(
+        identity.deviceId,
+        identity.publicKey,
+        name,
+        process.platform,
+        app.getVersion()
+      )
+    }
     return {
       deviceId: identity.deviceId,
       deviceName: name,
@@ -319,6 +328,15 @@ async function renameLocalDevice(value: string): Promise<DeviceSummary> {
   const updated = { ...settings, deviceName: name }
   await atomicWrite(settingsPath(), JSON.stringify(updated, null, 2) + '\n')
   settingsPromise = Promise.resolve(updated)
+  if (autoSignalingManager && identity.deviceId) {
+    autoSignalingManager.setLocalIdentity(
+      identity.deviceId,
+      identity.publicKey,
+      name,
+      process.platform,
+      app.getVersion()
+    )
+  }
   return summary
 }
 
