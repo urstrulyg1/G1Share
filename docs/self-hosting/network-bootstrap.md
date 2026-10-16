@@ -59,4 +59,23 @@ If the credential endpoint is unavailable, G1Viewer falls back to STUN/direct ca
 
 ## Release gate
 
-The checked-in default bootstrap currently has `turnCredentialsUrl: null`. Therefore the app is device-ID-first and does not require manual signaling-server setup, but it is **not yet guaranteed to connect across every NAT/firewall**. Before advertising universal one-step internet connectivity, deploy and operate TURN plus the HTTPS credential endpoint, update the bootstrap, and validate real devices across restrictive networks.
+The checked-in default bootstrap intentionally keeps `turnCredentialsUrl: null` until a real TURN host is deployed and validated; we do not publish fake hostnames or pretend an unconfigured endpoint works. The repository now includes a rate-limited `GET /api/v1/turn-credentials` endpoint that issues Coturn-compatible, short-lived credentials only when TURN is configured on the signaling service.
+
+## Activate the production TURN service
+
+1. Provision a Linux VPS with a public IPv4 address and a DNS hostname you control. Point its DNS A record at that public IP. The TURN relay needs UDP and TCP port access; serverless web-only hosting is not sufficient.
+2. On the VPS, clone this repository and run the deployment preparation script with the real host details:
+
+   ```sh
+   G1VIEWER_DOMAIN=turn.your-real-domain.tld \\
+   G1VIEWER_TURN_EXTERNAL_IP=YOUR_PUBLIC_IPV4 \\
+   G1VIEWER_DEPLOY=1 \\
+   bash scripts/prepare-turn-deployment.sh
+   ```
+
+   The script validates DNS and public IPv4, generates a random 256-bit shared secret if not supplied, writes a mode-0600 `.env`, validates the Compose configuration, and optionally starts Caddy, signaling, and Coturn. It never commits or prints the shared secret.
+3. Open inbound TCP 80/443, TCP+UDP 3478, and TCP+UDP 49160–49200 in both the VPS provider firewall and host firewall. Verify `https://turn.your-real-domain.tld/healthz` and test `https://turn.your-real-domain.tld/api/v1/turn-credentials`; the latter must return short-lived credentials and must not be reachable until the service has TURN configured.
+4. Only after those checks pass, update `config/network-bootstrap.json` with `turnCredentialsUrl: "https://turn.your-real-domain.tld/api/v1/turn-credentials"` and add `stun:turn.your-real-domain.tld:3478` to `stunUrls`. Commit and merge that real configuration to `main`; the desktop clients will fetch it dynamically without a new client release.
+5. Test two real devices on different networks, including one restrictive/mobile or corporate network. Verify ICE selected a relay candidate and test a file transfer/screen session, reconnect, and expired credential refresh.
+
+The example hostname above is instructional only: replace it with a real DNS name before running the script. Do not change the checked-in production bootstrap to a placeholder. Even with TURN deployed, no single public service can guarantee connectivity through every firewall policy; TURN/TLS on an allowed port may be needed for strict networks and requires a separately designed, tested listener/certificate setup.
