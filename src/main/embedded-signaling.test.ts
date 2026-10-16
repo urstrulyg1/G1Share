@@ -211,6 +211,7 @@ function deviceIdForPublicKey(publicKey: string): string {
     expect(isolated.closeSession(sessionId, devId3, 'unauthorized')).toBe(false)
     expect(isolated.getSession(sessionId)?.status).toBe('pending')
 
+    expect(isolated.decideSession(sessionId, devId2, true, ['view'])).not.toBeNull()
     expect(isolated.forwardSignal(sessionId, devId1, { type: 'offer' })).toBe(true)
     expect(isolated.closeSession(sessionId, devId2, 'approved participant')).toBe(true)
     expect(isolated.getSession(sessionId)?.status).toBe('closed')
