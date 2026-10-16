@@ -43,7 +43,7 @@ function parseHttpsEndpoint(value: unknown, allowPath: boolean): string | null {
     const parsed = new URL(value)
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) return null
     if (!parsed.hostname || (!allowPath && parsed.pathname !== '/' && parsed.pathname !== '')) return null
-    return allowPath ? `${parsed.origin}${parsed.pathname.replace(/\\/+$/, '')}` : parsed.origin
+    return allowPath ? `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}` : parsed.origin
   } catch {
     return null
   }
